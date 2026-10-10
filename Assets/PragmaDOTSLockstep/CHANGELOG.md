@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `LockstepSpatialIndex`: the points of a tick sorted into square cells (a counting sort over their bounding box, the
+  cells growing so that there are never more than a given number) for "what lies near here" queries, which visit the
+  cells a square around a point touches in the same order on every client.
+
 - Turning on the spot (`Pragma.Lockstep.Navigation`): `LockstepNavAgent.turnInPlaceAngle` (*Turn In Place Angle* of
   `LockstepNavAgentAuthoring`, degrees). An agent that faces further than that from where its path leads stands and turns
   at its angular speed, and walks on once it faces within it, as a tracked vehicle does; with avoidance it picks no

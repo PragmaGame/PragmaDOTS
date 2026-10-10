@@ -15,6 +15,7 @@ camelCase; settings and options are PascalCase properties.
 - Navigation
 - Vision
 - Stats
+- Spatial index
 - Bytes helpers
 - Presentation-side access
 - Authoring components
@@ -205,6 +206,14 @@ Attributes, over own modifiers and received grants:
 percentage factors stop at 0, the flat part may go below. Resources: the tick's changes are summed, then the amount is
 kept within 0 and the cap; `KeepRatio` keeps the share when the cap changes, `Clamp` keeps the amount. A modifier or
 grant ending on tick T + D was applied on ticks T to T + D - 1 when added on tick T before `LockstepStatSystem`.
+
+## Spatial index
+
+| API | Notes |
+|---|---|
+| `new LockstepSpatialIndex(NativeArray<FixedVector2> positions, FixedPoint cellSize, int maxCells, AllocatorManager.AllocatorHandle allocator)` | Counting sort of the points into cells over their bounding box; the cells double while there would be more than `maxCells`. `IDisposable` |
+| `Query(FixedVector2 center, FixedPoint radius)` | `Enumerator` (usable in `foreach`) of the point indices in the cells the square of half side `radius` touches: a superset of the points within `radius`. Cells row by row along X, points of a cell by index; a negative radius finds nothing, `FixedPoint.MaxValue` everything |
+| `Layout`, `Count`, `IsCreated` | The cells (`FixedGrid`), the number of points |
 
 ## Bytes helpers
 

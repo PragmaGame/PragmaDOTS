@@ -75,6 +75,8 @@ It is a poor fit for:
   ground in `FixedPoint`, planning again when obstacles change. Large bodies keep to cells with room for them, an order
   that moves an army costs one search, and with avoidance agents steer around each other, go around idle crowds and
   pass each other in narrow passages.
+- **Spatial index.** `LockstepSpatialIndex` sorts the points of a tick into cells for "what lies near here" queries
+  (nearest enemy, targets of a blast) that visit the same points in the same order on every client.
 - **Vision.** What every player slot sees, stamped on a grid from vision sources on every tick: state of the simulation,
   the same on every client, for the fog of war and for rules that need a visible target.
 - **Stats.** Attributes with flat, additive and multiplicative modifiers (timed or lasting until their source removes
@@ -578,6 +580,29 @@ integer tick counters (`cooldownTicks = tickRate / 2`), which are exact; the sam
 - Avoid anything whose result depends on thread timing: shared accumulators, `Interlocked`, appending to a
   `NativeList.ParallelWriter` and then using the order, parallel hash map writes followed by iteration.
 - Every scheduled job is completed at the end of the tick, before the state is hashed or presented.
+
+### Spatial queries
+
+`LockstepSpatialIndex` answers "what lies near here" without visiting every entity: build it from the positions of a
+tick (an array of `FixedVector2`, the index of a point is its place in the array) and query it as often as needed.
+
+```csharp
+using (var index = new LockstepSpatialIndex(positions, cellSize: 8, maxCells: 1 << 14, Allocator.Temp))
+{
+    foreach (var i in index.Query(from.Xz, reach + largestRadius))
+    {
+        // Every point within the radius comes up, and some further ones: check the distance, pick the nearest and
+        // break ties by i, so that the answer does not depend on the cell size.
+    }
+}
+```
+
+- The cells cover the bounding box of the points; when the points are far apart, the cells grow so that there are never
+  more than `maxCells`. Building is a counting sort, O(points + cells).
+- A query walks the cells a square around the point touches, row by row along X, and the points of a cell by index:
+  the same order on every client. Bodies with a size are indexed by a point: widen the query by the largest distance
+  from a point to its edge.
+- Burst-compatible; dispose it or allocate it with `Allocator.Temp` or the world update allocator.
 
 ### What the simulation must not touch
 
@@ -1735,6 +1760,7 @@ that form and relays the bytes without decoding them.
 | `Runtime/Core` | Protocol, `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays and `LockstepReplayHost`, loopback network |
 | `Runtime/Simulation` | `LockstepSimulation`, the system group, command buffer systems, frame application, checksums, entity ids |
 | `Runtime/Simulation/Components` | The simulation components and singletons (`LockstepTime`, `LockstepPlayer`, `LockstepCommand`...) |
+| `Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries |
 | `Runtime/Transforms` | `LockstepTransform`, `LockstepTransformPrevious`, transform history |
 | `Runtime/Client` | Local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem` |
 | `Runtime/Navigation` | `Pragma.Lockstep.Navigation`: the grid, obstacles, agents, `LockstepPathfinder`, the navigation systems |

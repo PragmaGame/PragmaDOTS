@@ -21,6 +21,7 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 | `Assets/PragmaDOTSLockstep/Runtime/Simulation/Components` | Simulation components and singletons |
 | `Assets/PragmaDOTSLockstep/Runtime/Transforms` | `LockstepTransform`, history and interpolation |
 | `Assets/PragmaDOTSLockstep/Runtime/Client` | Local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem` |
+| `Assets/PragmaDOTSLockstep/Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries (core assembly) |
 | `Assets/PragmaDOTSLockstep/Runtime/Navigation` | `Pragma.Lockstep.Navigation`: grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math) and the navigation systems |
 | `Assets/PragmaDOTSLockstep/Runtime/Vision` | `Pragma.Lockstep.Vision`: the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem` and the `LockstepVision` queries |
 | `Assets/PragmaDOTSLockstep/Runtime/Stats` | `Pragma.Lockstep.Stats`: attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
@@ -128,7 +129,7 @@ to a drive letter with `subst`.
 ## Tests
 
 - `Assets/Tests/Editor` is the EditMode suite: math accuracy and Burst equality, golden results, serialization,
-  checksums, simulation rules, navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
+  checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session), stats (formula,
   non-stacking modifiers, sources, timed modifiers, resources and caps, changes, grants, enum ids in Burst, change
   versions, a session with a late joiner), sessions

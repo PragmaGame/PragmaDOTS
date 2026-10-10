@@ -255,6 +255,9 @@ foreach (var (player, commands, commandData) in
 - **Cooldowns:** `int cooldownTicks`, decremented every tick; seconds become ticks with `seconds * time.tickRate`.
 - **Distance checks:** compare `FixedMath.DistanceSquared(a, b) < radius * radius` for small coordinates; `LengthSquared` overflows
   above about 46 000 per component, use `FixedMath.Length`/`Distance` for large worlds.
+- **Nearest of many (targets, neighbours):** build a `LockstepSpatialIndex` from the positions of the tick once and
+  query it (`Query(center, radius)`: the points in the cells around, in the same order everywhere); check the distance,
+  widen the radius by the largest body, and break ties by the point's index.
 - **Spawning many entities from a query:** collect the spawn data in a `NativeList` (as the sample's `Shot` struct)
   and create them after the loop, or use the end-of-tick command buffer.
 - **Per-entity random streams:** `FixedRandom.CreateFromIndex(info.seed, lockstepEntityId.value)` stored in a component,
