@@ -31,6 +31,8 @@ namespace Pragma.Lockstep.Navigation
     /// into each other both turn right and pass. Collisions after the agent would reach the end of its path do not
     /// count, and neither do agents standing at its end: the walker shoulders them aside, as without avoidance
     /// (<see cref="LockstepNavSeparationSystem"/>).</para>
+    /// <para>An agent that has to turn on the spot first (<see cref="LockstepNavAgent.turnInPlaceAngle"/>) picks no
+    /// velocity: it stands on this tick.</para>
     /// <para>Every agent reads the positions and last velocities of all agents as they were before any of them picked,
     /// and writes only its own velocity, so agents pick in parallel and get the same result on any number of threads.
     /// Neighbours come from a spatial hash with cells of the neighbour distance, sorted by cell and query index.</para>
@@ -181,6 +183,7 @@ namespace Pragma.Lockstep.Navigation
                 velocity.desired = FixedVector2.Zero;
                 var speed = agent.WalkSpeed;
                 if (agent.status != LockstepNavStatus.Moving || speed.rawValue <= 0 ||
+                    LockstepNavMoveSystem.TryGetTurnInPlace(agent, transform.rotation, waypoints, transform.position.Xz, out _) ||
                     !TryGetPreferred(transform.position.Xz, agent, speed, waypoints, out var preferred, out var goal, out var remaining))
                 {
                     return;

@@ -278,7 +278,8 @@ Units that walk around obstacles use `Pragma.Lockstep.Navigation` (assembly refe
 - **Obstacles.** `LockstepNavObstacleAuthoring`: on a prefab next to `LockstepTransformAuthoring` the rectangle follows
   the entity (buildings); on a static map object next to `LockstepSceneEntityAuthoring` the pose is baked. Cells are
   blocked while the entity exists; destroying it releases them on the next tick. Keep renderers off scene obstacles.
-- **Agents.** `LockstepNavAgentAuthoring` (speed, angular speed in degrees, stopping distance, body radius). Gameplay calls
+- **Agents.** `LockstepNavAgentAuthoring` (speed, angular speed in degrees, the angle beyond which it turns on the spot
+  before it walks — a tracked vehicle, stopping distance, body radius). Gameplay calls
   `agent.ValueRW.SetDestination(target)` from a system with `[UpdateBefore(typeof(LockstepNavSystemGroup))]` and reads
   `status` (`Requested`, `Moving`, `Arrived`) and `isPathPartial`. Never write `LockstepTransform` of a walking agent
   yourself; call `Stop()` first.

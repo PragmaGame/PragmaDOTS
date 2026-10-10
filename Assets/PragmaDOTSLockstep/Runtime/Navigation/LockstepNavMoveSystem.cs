@@ -10,7 +10,8 @@ namespace Pragma.Lockstep.Navigation
     /// where they walk, and marks them arrived at the end of the path. Distance left over at a corner carries on along the
     /// next segment, so agents keep their speed through corners. With local avoidance (<see cref="LockstepNavAvoidance"/>),
     /// an agent with a <see cref="LockstepNavVelocity"/> and a radius walks the velocity avoidance picked instead, and
-    /// passes a corner when its body covers it.
+    /// passes a corner when its body covers it. An agent with a <see cref="LockstepNavAgent.turnInPlaceAngle"/> that faces
+    /// further than that from where its path leads only turns on the spot on this tick.
     /// </summary>
     /// <remarks>
     /// Agents walk on the XZ plane, at their speed over it: the Y of a walking agent is the ground under it
@@ -31,6 +32,39 @@ namespace Pragma.Lockstep.Navigation
         /// to it ends its walk on it.
         /// </summary>
         internal const long ARRIVAL_RAW = FixedPoint.ONE_RAW / 256;
+
+        // Shorter offsets give a coarse direction in fixed point, so the last bit of a segment never turns the agent.
+        private const long MIN_TURN_DISTANCE_RAW = FixedPoint.ONE_RAW / 64;
+
+        /// <summary>
+        /// Where an agent facing as <paramref name="rotation"/> turns it has to turn on the spot before it walks on
+        /// (<see cref="LockstepNavAgent.turnInPlaceAngle"/>): towards the first of its waypoints further than a coarse step.
+        /// False when it may walk, and when it arrives within its stopping distance.
+        /// </summary>
+        internal static bool TryGetTurnInPlace(in LockstepNavAgent agent, FixedQuaternion rotation, in DynamicBuffer<LockstepNavWaypoint> waypoints,
+                                               FixedVector2 position, out FixedVector2 heading)
+        {
+            heading = FixedVector2.Zero;
+            if (agent.turnInPlaceAngle.rawValue <= 0)
+            {
+                return false;
+            }
+            for (var i = agent.waypointIndex; i < waypoints.Length; i++)
+            {
+                var offset = waypoints[i].position.Xz - position;
+                var distance = FixedMath.Length(offset);
+                if (i == waypoints.Length - 1 && distance <= agent.stoppingDistance)
+                {
+                    return false;
+                }
+                if (distance.rawValue > MIN_TURN_DISTANCE_RAW)
+                {
+                    heading = offset;
+                    return agent.MustTurnInPlace(rotation, offset);
+                }
+            }
+            return false;
+        }
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -109,10 +143,6 @@ namespace Pragma.Lockstep.Navigation
 
         private struct Walker
         {
-            // Shorter offsets give a coarse direction in fixed point, so the last bit of a segment never turns the
-            // agent.
-            private const long MIN_TURN_DISTANCE_RAW = FixedPoint.ONE_RAW / 64;
-
             public FixedPoint deltaTime;
             public LockstepNavGrid grid;
             [ReadOnly] public NativeArray<LockstepNavHeight> heights;
@@ -129,6 +159,10 @@ namespace Pragma.Lockstep.Navigation
                 }
 
                 var position = transform.position.Xz;
+                if (TryTurnInPlace(ref transform, agent, waypoints, position))
+                {
+                    return;
+                }
                 var budget = agent.WalkSpeed * deltaTime;
                 var heading = FixedVector2.Zero;
                 while (agent.waypointIndex < waypoints.Length)
@@ -164,7 +198,7 @@ namespace Pragma.Lockstep.Navigation
             public void WalkVelocity(ref LockstepTransform transform, ref LockstepNavAgent agent, in DynamicBuffer<LockstepNavWaypoint> waypoints,
                                      FixedVector2 velocity)
             {
-                if (agent.status != LockstepNavStatus.Moving)
+                if (agent.status != LockstepNavStatus.Moving || TryTurnInPlace(ref transform, agent, waypoints, transform.position.Xz))
                 {
                     return;
                 }
@@ -214,6 +248,18 @@ namespace Pragma.Lockstep.Navigation
                 }
             }
 
+            // An agent that faces too far from where its path leads turns towards it on the spot instead of walking.
+            private bool TryTurnInPlace(ref LockstepTransform transform, in LockstepNavAgent agent, in DynamicBuffer<LockstepNavWaypoint> waypoints,
+                                        FixedVector2 position)
+            {
+                if (!TryGetTurnInPlace(agent, transform.rotation, waypoints, position, out var heading))
+                {
+                    return false;
+                }
+                Turn(ref transform, agent, heading);
+                return true;
+            }
+
             // Puts the agent on the ground at its new position, marks it arrived at the end of its path and turns it to
             // face its heading.
             private void Place(ref LockstepTransform transform, ref LockstepNavAgent agent, in DynamicBuffer<LockstepNavWaypoint> waypoints,
@@ -229,6 +275,11 @@ namespace Pragma.Lockstep.Navigation
                 {
                     return;
                 }
+                Turn(ref transform, agent, heading);
+            }
+
+            private void Turn(ref LockstepTransform transform, in LockstepNavAgent agent, FixedVector2 heading)
+            {
                 var facing = FixedQuaternion.LookRotation(new FixedVector3(heading.x, FixedPoint.Zero, heading.y), FixedVector3.Up);
                 transform.rotation = agent.angularSpeed.rawValue > 0
                     ? FixedMath.RotateTowards(transform.rotation, facing, agent.angularSpeed * deltaTime)

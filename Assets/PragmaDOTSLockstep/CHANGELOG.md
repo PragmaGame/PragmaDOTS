@@ -8,6 +8,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Turning on the spot (`Pragma.Lockstep.Navigation`): `LockstepNavAgent.turnInPlaceAngle` (*Turn In Place Angle* of
+  `LockstepNavAgentAuthoring`, degrees). An agent that faces further than that from where its path leads stands and turns
+  at its angular speed, and walks on once it faces within it, as a tracked vehicle does; with avoidance it picks no
+  velocity while it turns. `LockstepNavAgent.MustTurnInPlace`.
+
 - Watching replays through clients: `LockstepReplayHost` plays a `LockstepReplay` to ordinary `LockstepClient`s in the
   server's place — each connection joins as the slot it watches (`Watch`), recorded frames are released on a playback
   clock (`Speed`, `IsPaused`, `Position`), the session ends after the last frame, client input is ignored and client

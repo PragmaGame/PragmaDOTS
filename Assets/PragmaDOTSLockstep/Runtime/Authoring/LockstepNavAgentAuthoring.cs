@@ -21,6 +21,9 @@ namespace Pragma.Lockstep.Authoring
         [SerializeField, Min(0f), Tooltip("Degrees per second the agent turns to face where it walks; 0 turns at once.")]
         private float _angularSpeed;
 
+        [SerializeField, Range(0f, 180f), Tooltip("Degrees: an agent facing further than this from where its path leads stops and turns on the spot before it walks on, as a tracked vehicle does. 0 walks while it turns; needs an angular speed.")]
+        private float _turnInPlaceAngle;
+
         [SerializeField, Min(0f), Tooltip("The agent stops this close to the end of its path.")]
         private float _stoppingDistance;
 
@@ -36,6 +39,7 @@ namespace Pragma.Lockstep.Authoring
                 {
                     speed = (FixedPoint)authoring._speed,
                     angularSpeed = FixedMath.ToRadians((FixedPoint)authoring._angularSpeed),
+                    turnInPlaceAngle = FixedMath.ToRadians((FixedPoint)authoring._turnInPlaceAngle),
                     stoppingDistance = (FixedPoint)authoring._stoppingDistance,
                     radius = (FixedPoint)authoring._radius,
                 });

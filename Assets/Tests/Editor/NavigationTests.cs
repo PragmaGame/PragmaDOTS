@@ -1289,6 +1289,71 @@ namespace Pragma.Lockstep.Tests
         }
 
         [Test]
+        public void Agent_TurningInPlace_FacesItsWayBeforeItWalks()
+        {
+            AssertTurnsInPlace(false);
+        }
+
+        [Test]
+        public void AvoidingAgent_TurningInPlace_FacesItsWayBeforeItWalks()
+        {
+            AssertTurnsInPlace(true);
+        }
+
+        // An agent facing +Z is sent along -X, at a quarter turn a second: it stands and turns until it faces within 10
+        // degrees of its way (80 degrees, 27 ticks), then walks it, turning the rest of the way as it goes. An agent without
+        // the angle walks on the first tick.
+        private static void AssertTurnsInPlace(bool isAvoiding)
+        {
+            using (var simulation = new LockstepSimulation(TestUtility.Config(), TestUtility.Options(NavigationSystems)))
+            {
+                var entityManager = simulation.World.EntityManager;
+                CreateGrid(entityManager);
+                if (isAvoiding)
+                {
+                    CreateAvoidance(entityManager);
+                }
+                var start = Point(6, -4);
+                var turning = CreateAgent(entityManager, start, 3, Point(-6, -4), FixedPoint.FromFraction(2, 5));
+                var walking = CreateAgent(entityManager, Point(6, 4), 3, Point(-6, 4), FixedPoint.FromFraction(2, 5));
+                foreach (var agent in new[] { turning, walking })
+                {
+                    if (isAvoiding)
+                    {
+                        WithVelocity(entityManager, agent);
+                    }
+                    var state = entityManager.GetComponentData<LockstepNavAgent>(agent);
+                    state.angularSpeed = FixedMath.Pi / 2;
+                    state.turnInPlaceAngle = agent == turning ? FixedMath.ToRadians(10) : FixedPoint.Zero;
+                    entityManager.SetComponentData(agent, state);
+                }
+
+                TestUtility.Step(simulation);
+                Assert.Less((double)Position(entityManager, walking).x, 6.0, "without the angle the agent walks while it turns");
+
+                var standingTicks = 1;
+                while (Position(entityManager, turning) == start)
+                {
+                    var facing = FixedMath.Forward(entityManager.GetComponentData<LockstepTransform>(turning).rotation);
+                    Assert.Less((double)FixedMath.Angle(facing, new FixedVector3(-1, 0, 0)), 90.5 * Math.PI / 180, "it turns towards its way");
+                    TestUtility.Step(simulation);
+                    standingTicks++;
+                    Assert.Less(standingTicks, 60, "the agent never set off");
+                }
+                Assert.AreEqual(28, standingTicks, "it stood while it turned 80 degrees, and walked on the tick it faced its way");
+                var setOff = FixedMath.Forward(entityManager.GetComponentData<LockstepTransform>(turning).rotation);
+                Assert.Less((double)FixedMath.Angle(setOff, new FixedVector3(-1, 0, 0)), 10.5 * Math.PI / 180, "it set off facing its way");
+
+                for (var tick = 0; tick < 150 && !HasArrived(entityManager, turning); tick++)
+                {
+                    TestUtility.Step(simulation);
+                }
+                Assert.IsTrue(HasArrived(entityManager, turning));
+                Assert.Less((double)FixedMath.Distance(Position(entityManager, turning), Point(-6, -4)), 0.15);
+            }
+        }
+
+        [Test]
         public void Session_AgentsWalkTheSamePathsOnEveryClient()
         {
             RunSession(false);

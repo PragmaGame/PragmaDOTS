@@ -27,6 +27,12 @@ namespace Pragma.Lockstep.Navigation
         public FixedPoint pace;
         /// <summary>Radians per second the agent turns to face where it walks; zero turns at once.</summary>
         public FixedPoint angularSpeed;
+        /// <summary>
+        /// Radians: an agent that faces further than this from where its path leads stops and turns on the spot at its
+        /// <see cref="angularSpeed"/>, and walks on once it faces within it, as a tracked vehicle does. Zero walks while it
+        /// turns; so does an agent that turns at once.
+        /// </summary>
+        public FixedPoint turnInPlaceAngle;
         /// <summary>The agent stops when it is this close to the end of its path.</summary>
         public FixedPoint stoppingDistance;
         /// <summary>
@@ -55,6 +61,21 @@ namespace Pragma.Lockstep.Navigation
 
         /// <summary>The speed it walks at: its <see cref="speed"/>, or the <see cref="pace"/> when that is slower.</summary>
         public FixedPoint WalkSpeed => pace.rawValue > 0 ? FixedMath.Min(speed, pace) : speed;
+
+        /// <summary>
+        /// The agent, facing as <paramref name="rotation"/> turns it, has to turn on the spot before it walks along
+        /// <paramref name="heading"/> (<see cref="turnInPlaceAngle"/>).
+        /// </summary>
+        public bool MustTurnInPlace(FixedQuaternion rotation, FixedVector2 heading)
+        {
+            if (turnInPlaceAngle.rawValue <= 0 || angularSpeed.rawValue <= 0 || heading.x.rawValue == 0 && heading.y.rawValue == 0)
+            {
+                return false;
+            }
+            var facing = FixedMath.Forward(rotation).Xz;
+            var cross = facing.x * heading.y - facing.y * heading.x;
+            return FixedMath.Atan2(FixedMath.Abs(cross), FixedMath.Dot(facing, heading)) > turnInPlaceAngle;
+        }
 
         /// <summary>Walks to <paramref name="destination"/> alone; the path is planned in the next navigation update.</summary>
         public void SetDestination(FixedVector3 destination)

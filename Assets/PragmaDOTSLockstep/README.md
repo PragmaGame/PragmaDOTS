@@ -737,7 +737,7 @@ drive gameplay in lockstep: it works in floats, is built per platform and answer
 | `LockstepNavGrid` | Singleton: origin, cell size, width, height, agent radius, the steepest walkable slope (`maxSlope`, rise over run) and a version that changes with the cells. The cells are the `LockstepNavCell` buffer of the same entity: the number of obstacles over each cell and its clearance, how many rings of free cells surround it |
 | `LockstepNavHeight` | Optional buffer on the grid entity: world Y of the ground at every cell corner (`CornerCount`, row by row along X). Agents walk on it, and cells steeper than `maxSlope` are blocked for good |
 | `LockstepNavObstacle` | A rectangle (center, size) in the space of the entity's `LockstepTransform` (yaw and uniform scale apply), or in world space without one. It blocks every cell whose centre is within the agent radius of it |
-| `LockstepNavAgent` | Speed, pace, angular speed, stopping distance and body radius of a unit that walks, its destination, the goal of the group it was sent with (`groupGoal`) and status (`Idle`, `Requested`, `Moving`, `Arrived`). The path is its `LockstepNavWaypoint` buffer |
+| `LockstepNavAgent` | Speed, pace, angular speed, the angle beyond which it turns on the spot, stopping distance and body radius of a unit that walks, its destination, the goal of the group it was sent with (`groupGoal`) and status (`Idle`, `Requested`, `Moving`, `Arrived`). The path is its `LockstepNavWaypoint` buffer |
 | `LockstepNavVelocity` | What an agent walked on its last step (`value`) and what avoidance picked for this one (`desired`), in units per second on X and Z. An agent with it and a radius takes part in avoidance |
 | `LockstepNavAvoidance` | Singleton that turns avoidance on: how many seconds ahead agents look (`timeHorizon`), how far (`neighbourDistance`) and how many neighbours they avoid (`maxNeighbours`), what a standing agent costs a path (`crowdCost`); `Default`. Without it agents plan and walk their paths as if they were alone |
 | `LockstepNavSystemGroup` | Inside `LockstepSimulationSystemGroup`: `LockstepNavObstacleSystem` stamps obstacles and keeps the clearance of the cells, `LockstepNavPathSystem` plans and checks paths in parallel, `LockstepNavAvoidanceSystem` picks the velocities of avoiding agents in parallel, `LockstepNavMoveSystem` walks agents, `LockstepNavSeparationSystem` pushes overlapping agents apart |
@@ -822,7 +822,9 @@ walkable. Footprints that are not in the grid yet (two buildings placed on one t
   destination may have opened up.
 - **Walking.** Agents walk on the XZ plane at `speed`, or at their `pace` when that is slower, keep it through
   corners, turn to face where they walk (`angularSpeed` radians per second; zero turns at once), stop
-  `stoppingDistance` before the end of the path and become `Arrived`. With ground heights, the Y of a walking or pushed
+  `stoppingDistance` before the end of the path and become `Arrived`. An agent with a `turnInPlaceAngle` (a tracked
+  vehicle) that faces further than that from where its path leads stands and turns on the spot, and walks on once it
+  faces within it: sent behind itself, it turns round first; avoidance picks no velocity for it while it turns. With ground heights, the Y of a walking or pushed
   agent is the ground under it (bilinear inside a cell); without them it stays as it is: the Y of the destination is
   never walked to. Without a grid agents walk straight to the destination.
 - **Ground.** `LockstepNavigation.GetHeight` is the height of the ground at any X and Z (the edge of the grid beyond
