@@ -1,7 +1,7 @@
 {
   "name": "com.pragma.dots",
   "displayName": "Pragma DOTS",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "unity": "6000.6",
   "description": "Building blocks for multiplayer games on Unity DOTS: fixed-point math, actors (game objects described in assets of parts, spawned by key, placed on maps, baked or built at run time) and utilities, with opt-in modules. Lockstep: deterministic lockstep with an isolated simulation world, a server that orders inputs, adaptive input timing, desync detection with state hashes, late join, replays, an offline mode that runs the same code path and a Netcode for Entities transport. Navigation, vision, stats and pooled GameObject views build on it; state machines whose states tick in parallel jobs need only the core.",
   "keywords": [
