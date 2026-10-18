@@ -2,10 +2,12 @@
     "name": "Pragma.Dots.Tests.Editor",
     "rootNamespace": "Pragma.Dots.Tests",
     "references": [
+        "Pragma.Dots.Actors",
         "Pragma.Dots.Mathematics",
         "Pragma.Dots.Utils",
         "Pragma.Dots.Utils.Editor",
         "Pragma.Dots.Utils.Physics",
+        "Unity.Entities",
         "Unity.Collections",
         "Unity.Burst",
         "Unity.Mathematics",

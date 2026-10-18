@@ -56,7 +56,7 @@ yourself): `WorldName`, `AutoDiscoverSystems` (default true), `AdditionalSystems
 | `LockstepEntityIdCounter` | `uint last` |
 | `LockstepEntityIdMap` | `NativeHashMap<uint, Entity> map`, `TryGetEntity(uint, out Entity)`, `TryGetEntity(LockstepEntityId, out Entity)`; ignored by the checksum |
 | `LockstepFrameData` (buffer) | `byte value`: the raw frame of the current tick (rarely needed) |
-| `LockstepActorRegistry` + `LockstepActorType`, `LockstepActorTagName` (buffers) | The actor registry, copied from the presentation world when the simulation is created; empty when it had none yet. Read it with `LockstepActors` |
+| `ActorRegistry` + `ActorType`, `ActorTagName` (buffers) | The actor registry, copied from the presentation world when the simulation is created; empty when it had none yet. Read it with `ActorLookup` |
 
 ## Player entities
 
@@ -120,22 +120,26 @@ moves to later ticks), `MAX_JOIN_DATA_SIZE` 62, `MAX_START_DATA_SIZE` 126.
 
 ## Actors
 
+Namespace and assembly `Pragma.Dots.Actors` (the core), bakers in `Pragma.Dots.Actors.Authoring`; the parts of a module
+are in its namespace.
+
 | Type | Notes |
 |---|---|
 | `ActorDefinition` (ScriptableObject) | `Key` (1 to 29 bytes of UTF-8, unique in a catalog), `Parent`, `OwnTags`, `OwnParts`; `GetTags(list)` and `GetParts(list)` with the inherited ones (an own part replaces the parent's part of its type), `GetLineage`, `TryGetKey`, `TryCreateName` |
-| `ActorPart` | `[Serializable]` base of the parts: `Build(IActorBuilder)`, `DrawGizmos(in ActorGizmoContext)`. `[ActorPartMenu("Group/Name")]` places it in the part menu. One part of each type per actor |
+| `ActorPart` | `[Serializable]` base of the parts: `Build(IActorBuilder)`, `DrawGizmos(in ActorGizmoContext)`. `[ActorPartMenu("Group/Name")]` places it in the part menu, `[DefaultActorPart]` in every new definition. One part of each type per actor |
 | `ActorComponentPart<T>`, `ActorBufferPart<T>` | Add one component / one buffer with values from the inspector; offered for types with `[ActorComponent("Group/Name")]` (which must be `[Serializable]`) |
-| `IActorBuilder` | `Key`, `IsPlaced`, `Placement` (`LockstepTransform`), `PlacementScale`, `HasPart<T>()`, `AddComponent`, `AddBuffer` (fill before adding anything else), `SetComponentEnabled`, `DependsOn` |
+| `IActorBuilder` | `Key`, `IsPlaced`, `Placement` (`FixedPose`), `PlacementScale` (X is the uniform scale of the Transform part), `HasPart<T>()`, `AddComponent`, `AddBuffer` (fill before adding anything else), `SetComponentEnabled`, `DependsOn` |
 | `ActorParts.Override(parts, overrides)` | The merge rule, for placement data of your own |
 | `ActorCatalog` (ScriptableObject) | `Actors` by type index (append only once shipped), `IndexOf(key)`, `GetTags(list)` (the tag table, ordinal), `Validate(errors)`; at most 128 tags |
-| `LockstepActor { FixedString32Bytes key; int type }` | On every actor's root entity; `type` -1 for a key the registry lacks |
-| `LockstepActorRegistry` + `LockstepActorType { key, Entity prefab, LockstepActorTagSet tags }` + `LockstepActorTagName { name }` (buffers) | The registry, copied into every simulation world under the same indices |
-| `LockstepActors` | `Get(ref SystemState)`, `TryGet(EntityManager, out)`, `TypeCount`, `TryGetType(key, out type)`, `GetKey`, `GetPrefab`, `GetTags`, `TryGetTag(name, out LockstepActorTag)`, `GetTagName`, `HasTag(type or LockstepActor, tag)`, `Instantiate(EntityManager / EntityCommandBuffer / ParallelWriter, type)`. Reads the buffers in place: get it again after a structural change |
-| `LockstepActorTagSet` | `Contains`, `Overlaps`, `ContainsAll`, `Add` |
-| `LockstepActorUtility` | `CreateRegistry(EntityManager, catalog)`, `CreatePlaced(EntityManager, definition, placement, scale, overrides, order)` / `CreatePlaced(EntityManager, ActorAuthoring, order)` (run-time content, no subscene), `Build`, `HasRegistry`, `CopyRegistry`, `CopySceneEntities` |
-| `LockstepSceneEntity { ulong order }` | On placed actors: copied into every simulation world before tick 0 in this order; references to anything outside the scene entities (actor prefabs included) become `Entity.Null` |
+| `Actor { FixedString32Bytes key; int type }` | On every actor's root entity; `type` -1 for a key the registry lacks |
+| `ActorRegistry` + `ActorType { key, Entity prefab, ActorTagSet tags }` + `ActorTagName { name }` (buffers) | The registry, copied into every simulation world under the same indices |
+| `ActorLookup` | `Get(ref SystemState)`, `TryGet(EntityManager, out)`, `TypeCount`, `TryGetType(key, out type)`, `GetKey`, `GetPrefab`, `GetTags`, `TryGetTag(name, out ActorTag)`, `GetTagName`, `HasTag(type or Actor, tag)`, `Instantiate(EntityManager / EntityCommandBuffer / ParallelWriter, type)`. Reads the buffers in place: get it again after a structural change |
+| `ActorTagSet` | `Contains`, `Overlaps`, `ContainsAll`, `Add` |
+| `ActorUtility` | `CreateRegistry(EntityManager, catalog)`, `CreatePlaced(EntityManager, definition, FixedPose placement, FixedVector3 scale, overrides, order)` / `CreatePlaced(EntityManager, ActorAuthoring, order)` (run-time content, no subscene), `Build`, `HasRegistry`, `ResolveTypes(EntityManager)` (the types of placed actors by key, without lockstep) |
+| `LockstepActorUtility` (`Pragma.Dots.Lockstep`) | `CopyRegistry`, `CopyPlacedActors`: what `LockstepClientWorldUtility.CreateSimulationOptions` does before tick 0 |
+| `PlacedActor { ulong order }` | On placed actors: copied into every simulation world before tick 0 in this order; references to anything outside the placed actors (actor prefabs included) become `Entity.Null` |
 
-Spawning: `var actors = LockstepActors.Get(ref state); if (actors.TryGetType("rifleman", out var type)) { var e =
+Spawning: `var actors = ActorLookup.Get(ref state); if (actors.TryGetType("rifleman", out var type)) { var e =
 actors.Instantiate(state.EntityManager, type); }`, then set its `LockstepTransform`. The registry always exists in
 simulation worlds made by the built-in systems; it is empty when a baking subscene had not loaded, so start the session
 with `waitForActorRegistry`.
@@ -237,9 +241,9 @@ grant ending on tick T + D was applied on ticks T to T + D - 1 when added on tic
 
 Parts, by menu path (module in brackets):
 
-- *Transform* (`TransformPart`) - `LockstepTransform` from the placement (identity on a type's prefab); *Interpolate*
-  adds `LockstepTransformPrevious`.
-- *Entity Id* (`EntityIdPart`) - `LockstepEntityId`.
+- *Transform* (`TransformPart`, Lockstep) - `LockstepTransform` from the placement and the X of its scale (identity on
+  a type's prefab); *Interpolate* adds `LockstepTransformPrevious`.
+- *Entity Id* (`EntityIdPart`, Lockstep) - `LockstepEntityId`.
 - *Navigation/Grid* (`NavGridPart`, Navigation) - the navigation grid of a map (size centred on the placement, cell size,
   agent radius) and its ground: a `TerrainData` covering the grid exactly, its world Y and the steepest walkable slope in
   degrees, sampled in fixed point. Selecting the placed actor previews the cells obstacles and steep ground block.
@@ -256,11 +260,11 @@ Parts, by menu path (module in brackets):
 - *View* (`ViewPart`, Views) - `EntityViewKey`: the actor's key unless the part names another; the editor previews the
   placed actor with that view.
 
-MonoBehaviours, namespace `Pragma.Dots.Lockstep` unless noted:
+MonoBehaviours, namespace `Pragma.Dots.Actors` unless noted:
 
-- `ActorAuthoring` - a placed actor: definition plus overriding parts at the GameObject's pose; bakes into a scene
-  entity. `GetParts`, `GetPlacement`, `GetPlacementScale`.
-- `Pragma.Dots.Lockstep.Authoring.ActorCatalogAuthoring` - bakes an `ActorCatalog` into the registry; put it in a subscene of
+- `ActorAuthoring` - a placed actor: definition plus overriding parts at the GameObject's pose; bakes into a
+  `PlacedActor`. `GetParts`, `GetPlacement`, `GetPlacementScale`.
+- `Pragma.Dots.Actors.Authoring.ActorCatalogAuthoring` - bakes an `ActorCatalog` into the registry; put it in a subscene of
   the client/local world.
 - `Pragma.Dots.Views.Authoring.EntityViewConfigAuthoring` (Views) - bakes an `EntityViewConfig` catalog into the
   presentation world (not for servers).

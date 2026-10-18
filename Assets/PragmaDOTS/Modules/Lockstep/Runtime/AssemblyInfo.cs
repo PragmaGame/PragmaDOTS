@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Pragma.Dots.Lockstep.Authoring")]
 [assembly: InternalsVisibleTo("Pragma.Dots.Lockstep.Editor")]
 [assembly: InternalsVisibleTo("Pragma.Dots.Lockstep.Netcode")]
 [assembly: InternalsVisibleTo("Pragma.Dots.Lockstep.Tests.Editor")]

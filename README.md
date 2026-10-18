@@ -1,8 +1,8 @@
 # PragmaDOTSLokstep
 
 Development project of **Pragma DOTS** (`com.pragma.dots`): building blocks for multiplayer games on Unity DOTS
-(Entities). Fixed-point math and the utilities are always there; deterministic lockstep, navigation, vision, stats and
-GameObject views are modules a game turns on.
+(Entities). Fixed-point math, actors and the utilities are always there; deterministic lockstep, navigation, vision,
+stats and GameObject views are modules a game turns on.
 
 With the lockstep module every client runs the same simulation in its own isolated Entities world. Only player input
 travels over the network: a server orders it into confirmed frames, and every client steps its simulation with exactly
@@ -31,10 +31,11 @@ entities.
 - GameObject views adapted from ECV: pooled view prefabs per entity key, per-component parts fed when their component
   changes, interpolated transforms, a pool each project can replace.
 - Actors: units, buildings and map objects described in assets (a key, tags, a parent, parts), spawned by key from a
-  catalog, placed on maps with overrides, previewed in the editor with their views, baked or built at run time.
+  catalog, placed on maps with overrides, previewed in the editor with their views, baked or built at run time, in any
+  Entities world and in the lockstep simulation.
 - Modules: lockstep, navigation, vision, stats and views compile only when their scripting define is on
-  (*Project Settings > Pragma > DOTS*); navigation, vision, stats and views build on lockstep. Fixed-point math and the
-  utilities (`FixedDictionary4096Bytes`, `OptionalValue`, fixed list and string inspectors) are always there.
+  (*Project Settings > Pragma > DOTS*); navigation, vision, stats and views build on lockstep. Fixed-point math, actors
+  and the utilities (`FixedDictionary4096Bytes`, `OptionalValue`, fixed list and string inspectors) are always there.
 
 ## Installation
 
@@ -51,10 +52,10 @@ Only `Assets/PragmaDOTS` ships; everything else is the development project.
 
 | Path | Contents |
 |---|---|
-| `Assets/PragmaDOTS` | The package: `Core` (math, utilities), `Modules` (lockstep, navigation, vision, stats, views), Claude Code skills (`Skills~`) |
+| `Assets/PragmaDOTS` | The package: `Core` (math, actors, utilities), `Modules` (lockstep, navigation, vision, stats, views), Claude Code skills (`Skills~`) |
 | `Assets/Examples` | *Lockstep Arena*, a playable sample: offline, host and join ([README](Assets/Examples/README.md)) |
-| `Assets/Tests/Core/Editor` | EditMode tests of the core: math and utilities |
-| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, actors, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
+| `Assets/Tests/Core/Editor` | EditMode tests of the core: math, utilities and actors |
+| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, actors in the simulation, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
 | [`documentation.md`](documentation.md) | Design notes: architecture, decisions, what was taken from ME.BECS, Photon Quantum and ECV, and why |
 | [`mebecs_research.md`](mebecs_research.md) | How ME.BECS implements determinism and networking |
 | [`photon_research.md`](photon_research.md) | How Photon Quantum implements determinism and prediction/rollback |

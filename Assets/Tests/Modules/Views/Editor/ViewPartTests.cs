@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using NUnit.Framework;
-using Pragma.Dots.Lockstep;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Mathematics;
 using Pragma.Dots.Views;
 using Unity.Collections;
@@ -33,7 +33,7 @@ namespace Pragma.Dots.Tests
 
         private static EntityViewKey Build(EntityManager entityManager, ActorDefinition definition)
         {
-            var entity = LockstepActorUtility.CreatePlaced(entityManager, definition, LockstepTransform.Identity, new FixedVector3(1, 1, 1), null, 1);
+            var entity = ActorUtility.CreatePlaced(entityManager, definition, FixedPose.Identity, new FixedVector3(1, 1, 1), null, 1);
             return entityManager.GetComponentData<EntityViewKey>(entity);
         }
 

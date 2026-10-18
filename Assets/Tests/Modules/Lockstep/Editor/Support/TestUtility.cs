@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -40,15 +41,15 @@ namespace Pragma.Dots.Tests
         /// <summary>An actor registry of <paramref name="prefabs"/>, types "test0", "test1"..., as a catalog would build it.</summary>
         public static Entity CreateRegistry(EntityManager entityManager, params Entity[] prefabs)
         {
-            var types = new LockstepActorType[prefabs.Length];
+            var types = new ActorType[prefabs.Length];
             for (var i = 0; i < prefabs.Length; i++)
             {
                 var key = new FixedString32Bytes($"test{i}");
-                entityManager.AddComponentData(prefabs[i], new LockstepActor { key = key, type = i });
-                types[i] = new LockstepActorType { key = key, prefab = prefabs[i] };
+                entityManager.AddComponentData(prefabs[i], new Actor { key = key, type = i });
+                types[i] = new ActorType { key = key, prefab = prefabs[i] };
             }
-            var registry = entityManager.CreateEntity(typeof(LockstepActorRegistry), typeof(LockstepActorType), typeof(LockstepActorTagName));
-            var buffer = entityManager.GetBuffer<LockstepActorType>(registry);
+            var registry = entityManager.CreateEntity(typeof(ActorRegistry), typeof(ActorType), typeof(ActorTagName));
+            var buffer = entityManager.GetBuffer<ActorType>(registry);
             foreach (var type in types)
             {
                 buffer.Add(type);

@@ -1,3 +1,4 @@
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using Unity.Collections;
@@ -15,7 +16,7 @@ namespace Pragma.Dots.Tests
         public void OnUpdate(ref SystemState state)
         {
             var tick = SystemAPI.GetSingleton<LockstepTime>().tick;
-            var actors = LockstepActors.Get(ref state);
+            var actors = ActorLookup.Get(ref state);
             if (tick == 5 || tick == 6)
             {
                 var key = new FixedString32Bytes(tick == 5 ? "rifleman" : "tank");
@@ -23,7 +24,7 @@ namespace Pragma.Dots.Tests
                 {
                     var spawned = actors.Instantiate(state.EntityManager, type);
                     state.EntityManager.SetComponentData(spawned, LockstepTransform.FromPosition(new FixedVector3(tick, 0, 0)));
-                    actors = LockstepActors.Get(ref state);
+                    actors = ActorLookup.Get(ref state);
                 }
             }
 
@@ -31,7 +32,7 @@ namespace Pragma.Dots.Tests
             {
                 return;
             }
-            foreach (var (actor, transform) in SystemAPI.Query<RefRO<LockstepActor>, RefRW<LockstepTransform>>())
+            foreach (var (actor, transform) in SystemAPI.Query<RefRO<Actor>, RefRW<LockstepTransform>>())
             {
                 if (actors.HasTag(actor.ValueRO, player))
                 {

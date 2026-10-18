@@ -1,3 +1,4 @@
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using Unity.Entities;
@@ -13,7 +14,7 @@ namespace Pragma.Dots.Tests
             var tick = SystemAPI.GetSingleton<LockstepTime>().tick;
             if (tick == 3)
             {
-                var prefab = SystemAPI.GetSingletonBuffer<LockstepActorType>(true)[0].prefab;
+                var prefab = SystemAPI.GetSingletonBuffer<ActorType>(true)[0].prefab;
                 var spawned = state.EntityManager.Instantiate(prefab);
                 state.EntityManager.AddComponent<TestSpawnedTag>(spawned);
                 state.EntityManager.SetComponentData(spawned, LockstepTransform.FromPosition(new FixedVector3(10, 0, 0)));

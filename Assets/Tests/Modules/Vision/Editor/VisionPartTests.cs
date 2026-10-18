@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using Pragma.Dots.Vision;
@@ -18,7 +19,7 @@ namespace Pragma.Dots.Tests
             using (var world = new World("Parts"))
             {
                 var entityManager = world.EntityManager;
-                var entity = LockstepActorUtility.CreatePlaced(entityManager, definition, LockstepTransform.FromPosition(new FixedVector3(2, 0, 4)), new FixedVector3(1, 1, 1), null, 1);
+                var entity = ActorUtility.CreatePlaced(entityManager, definition, new FixedPose(new FixedVector3(2, 0, 4), FixedQuaternion.Identity), new FixedVector3(1, 1, 1), null, 1);
 
                 var grid = entityManager.GetComponentData<LockstepVisionGrid>(entity);
                 Assert.AreEqual(5, grid.width);

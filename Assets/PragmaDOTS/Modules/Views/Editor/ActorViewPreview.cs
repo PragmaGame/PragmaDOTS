@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Pragma.Dots.Lockstep;
+using Pragma.Dots.Actors;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEditor;
@@ -208,7 +208,7 @@ namespace Pragma.Dots.Views.Editor
             Entity entity;
             try
             {
-                entity = LockstepActorUtility.CreatePlaced(entityManager, authoring, 0);
+                entity = ActorUtility.CreatePlaced(entityManager, authoring, 0);
             }
             catch (Exception)
             {

@@ -8,20 +8,22 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Actors: game objects of the simulation described in assets. An `ActorDefinition` has a key (`FixedString32Bytes`), a
-  set of tags, a parent it inherits tags and parts from, and parts (`ActorPart`, serialized by reference) that add the
-  components when the actor is built; an own part replaces the parent's part of its type. An `ActorCatalog` lists the
-  types, baked by `ActorCatalogAuthoring` into the actor registry (`LockstepActorRegistry` with `LockstepActorType` and
-  `LockstepActorTagName` buffers: a prefab entity per type and the tag table, up to 128 tags as `LockstepActorTagSet`
-  bits) that is copied into every simulation world. `LockstepActors` finds types by key, instantiates them and checks
-  tags; `LockstepActor { key, type }` is on every actor. `ActorAuthoring` places an actor on a map with overriding parts:
-  it bakes into a scene entity whose type is found by key when it is copied in. `LockstepActorUtility.CreateRegistry`
-  and `CreatePlaced` build the same content at run time, without subscenes, through the same parts. Parts:
-  `TransformPart`, `EntityIdPart`, `ActorComponentPart<T>` and `ActorBufferPart<T>` for any type with
-  `[ActorComponent]`, and in the modules `NavAgentPart`, `NavObstaclePart`, `NavAvoidancePart`, `NavGridPart`,
-  `VisionSourcePart`, `VisionGridPart`, `ViewPart`. Inspectors show inherited parts with *Override*, a part menu and the
-  project's tags; the catalog inspector lists what would break the registry. With the Views module, placed actors are
-  previewed with their views in the scene and in prefab mode (*Tools > Pragma > DOTS > Actor View Previews*).
+- Actors (`Pragma.Dots.Actors`, in the core): game objects described in assets. An `ActorDefinition` has a key
+  (`FixedString32Bytes`), a set of tags, a parent it inherits tags and parts from, and parts (`ActorPart`, serialized by
+  reference) that add the components when the actor is built; an own part replaces the parent's part of its type. An
+  `ActorCatalog` lists the types, baked by `ActorCatalogAuthoring` into the actor registry (`ActorRegistry` with
+  `ActorType` and `ActorTagName` buffers: a prefab entity per type and the tag table, up to 128 tags as `ActorTagSet`
+  bits), which the lockstep module copies into every simulation world. `ActorLookup` finds types by key, instantiates
+  them and checks tags; `Actor { key, type }` is on every actor. `ActorAuthoring` places an actor on a map with
+  overriding parts: it bakes into a `PlacedActor` (placed at a `FixedPose` with a scale) whose type is found by key when
+  it is copied in, or by `ActorUtility.ResolveTypes`. `ActorUtility.CreateRegistry` and `CreatePlaced` build the same
+  content at run time, without subscenes, through the same parts. Parts: `ActorComponentPart<T>` and
+  `ActorBufferPart<T>` for any type with `[ActorComponent]`, and in the modules `TransformPart` and `EntityIdPart`
+  (Lockstep, the default parts of new definitions through `[DefaultActorPart]`), `NavAgentPart`, `NavObstaclePart`,
+  `NavAvoidancePart`, `NavGridPart`, `VisionSourcePart`, `VisionGridPart`, `ViewPart`. Inspectors show inherited parts
+  with *Override*, a part menu and the project's tags; the catalog inspector lists what would break the registry. With
+  the Views module, placed actors are previewed with their views in the scene and in prefab mode
+  (*Tools > Pragma > DOTS > Actor View Previews*).
 
 - Modules: lockstep, navigation, vision, stats and GameObject views compile only with their scripting define symbol
   (`PRAGMA_DOTS_LOCKSTEP`, `PRAGMA_DOTS_NAVIGATION`, `PRAGMA_DOTS_VISION`, `PRAGMA_DOTS_STATS`, `PRAGMA_DOTS_VIEWS`),
@@ -90,6 +92,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the slot it sees for) at their transforms; a cell is visible when a circle of sight reaches into it.
   `LockstepVision` answers `IsVisible` (a point, or a body seen by its edge), `IsCellVisible` and `GetPlane` (to draw a
   slot's fog of war). `VisionGridPart` and `VisionSourcePart` add them.
+- `FixedPose` (`Pragma.Dots.Mathematics`): a position and a rotation, the placement of actors.
 - `FixedGrid` (`Pragma.Dots.Mathematics`): the cell math of a rectangle of square cells on the XZ plane (which cell
   holds a position, cell corners and centres, indices), shared by the navigation and the vision grids;
   `LockstepNavGrid.Layout` and `LockstepVisionGrid.Layout` return it.
@@ -118,11 +121,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LockstepTransformExtensions.TryGetInterpolated`: reads and interpolates the transform of a simulation entity with the
   rule both view systems use.
 - The sample shows its avatars and projectiles with GameObject views.
-- Scene entities: the actors placed on a map (`ActorAuthoring`), which every simulation world starts with
+- Placed actors: the actors placed on a map (`ActorAuthoring`), which every simulation world starts with
   (buildings, resource nodes, spawn markers). `LockstepClientWorldUtility.CreateSimulationOptions` copies them, with
   their linked entities, after the actor registry and before tick 0, in an order baked from the objects' identities
-  (`LockstepSceneEntity.order`), so the result does not depend on the order subscenes loaded in.
-  `LockstepActorUtility.CopySceneEntities` does the copy for custom flows.
+  (`PlacedActor.order`), so the result does not depend on the order subscenes loaded in.
+  `LockstepActorUtility.CopyPlacedActors` does the copy for custom flows.
 - Navigation (`Pragma.Dots.Navigation`): a walkability grid (`LockstepNavGrid` with its `LockstepNavCell`
   buffer), obstacles (`LockstepNavObstacle`) that block cells while their entity exists, A* with string pulling in
   integer math (`LockstepPathfinder`, queries in `LockstepNavigation`) and agents (`LockstepNavAgent`,
@@ -160,20 +163,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The package is Pragma DOTS: `com.pragma.dots` in `Assets/PragmaDOTS` (was `com.pragma.dotslockstep` in
   `Assets/PragmaDOTSLockstep`), building blocks for DOTS games with lockstep as one of its modules. Layout: `Core`
-  (`Mathematics`, `Utils`, the modules page in `Editor`) and `Modules` (`Lockstep` with `Runtime`, `Authoring`,
-  `Editor` and `Netcode`; `Navigation`, `Vision`, `Stats`, `Views`). Assemblies and namespaces are `Pragma.Dots.*`:
-  `Pragma.Lockstep` is `Pragma.Dots.Lockstep` (also `.Authoring`, `.Editor`, `.Netcode`), `Pragma.Lockstep.Mathematics`
+  (`Mathematics`, `Actors`, `Utils`, the modules page in `Editor`) and `Modules` (`Lockstep` with `Runtime`, `Editor`
+  and `Netcode`; `Navigation`, `Vision`, `Stats`, `Views`). Assemblies and namespaces are `Pragma.Dots.*`:
+  `Pragma.Lockstep` is `Pragma.Dots.Lockstep` (also `.Editor`, `.Netcode`), `Pragma.Lockstep.Mathematics`
   is `Pragma.Dots.Mathematics`, and the utilities and modules follow (`Pragma.Dots.Utils`, `Pragma.Dots.Navigation`...);
   `EntityViewConfigAuthoring` is in `Pragma.Dots.Views.Authoring`. Menus are under *Pragma > DOTS*.
 - Netcode for Entities is no longer a dependency of the package: `Pragma.Dots.Lockstep.Netcode` compiles when the
   project has `com.unity.netcode`, and so does the server check of `EntityViewConfigAuthoring`.
 - Authoring is done with actors: the authoring components of the core and of the modules became parts, and
-  `Pragma.Dots.Lockstep.Authoring` holds `ActorCatalogAuthoring` and the actor bakers. `Pragma.Dots.Views.Authoring`
+  `Pragma.Dots.Actors.Authoring` holds `ActorCatalogAuthoring` and the actor bakers. `Pragma.Dots.Views.Authoring`
   keeps `EntityViewConfigAuthoring`.
-- The prefab registry is the actor registry: `waitForPrefabRegistry` is `waitForActorRegistry`
-  (`LockstepOfflineConfig`, `LockstepClientConfig`, `LockstepNetcode.JoinSession`,
-  `LockstepClientWorldUtility.CreateSimulationOptions`), `LockstepPrefabUtility` is `LockstepActorUtility`, and
-  `LockstepViewSystem` mirrors actors by `LockstepActor.type`.
+- The prefab registry is the actor registry: `waitForPrefabRegistry` is `waitForActorRegistry` (`LockstepOfflineConfig`,
+  `LockstepClientConfig`, `LockstepNetcode.JoinSession`, `LockstepClientWorldUtility.CreateSimulationOptions`),
+  `LockstepPrefabUtility` is `ActorUtility` (building content) and `LockstepActorUtility` (copying it into a
+  simulation), and `LockstepViewSystem` mirrors actors by `Actor.type`.
 - Navigation grids sample terrains in fixed point (bilinear over the raw heightmap) and take the slope limit through
   `FixedMath.Tan`, so a grid built at run time is the same on every machine; heights differ slightly from the float
   sampling before.
@@ -199,7 +202,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tag on the world time entity. The signature now lists only the types the checksum hashes (unmanaged components,
   buffers, tags): shared, managed and chunk components, `[LockstepChecksumIgnore]` types and the editor-only tags of
   Entities count nowhere. Changes every hash and invalidates the checksums stored in replays.
-- The prefab registry and the scene entities are copied into archetypes created in their order first: the copy alone
+- The prefab registry and the placed actors are copied into archetypes created in their order first: the copy alone
   created them in an order that followed the memory of the presentation world, so two clients could start with their
   archetypes in a different order and report a desync on tick 0.
 

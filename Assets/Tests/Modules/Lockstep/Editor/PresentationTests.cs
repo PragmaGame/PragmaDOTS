@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -71,7 +72,7 @@ namespace Pragma.Dots.Tests
                         }
                     }
                     Assert.IsTrue(sawView);
-                    Assert.AreEqual(1, TestUtility.Count<LockstepActorRegistry>(client.Simulation.World.EntityManager), "the registry was copied into the simulation");
+                    Assert.AreEqual(1, TestUtility.Count<ActorRegistry>(client.Simulation.World.EntityManager), "the registry was copied into the simulation");
                 }
                 finally
                 {

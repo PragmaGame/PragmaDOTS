@@ -5,10 +5,10 @@ Guidance for AI agents (and humans) working in this repository.
 ## What this is
 
 The development project of the Unity package `com.pragma.dots` (Pragma DOTS): building blocks for multiplayer games on
-Entities. The core (fixed-point math, utilities) is always compiled; deterministic lockstep (with a Netcode for Entities
-transport), navigation, vision, stats and GameObject views are opt-in modules. The package is `Assets/PragmaDOTS` and is
-consumed through a git URL with `?path=Assets/PragmaDOTS`; everything else in the project (tests, the sample, research
-notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 6000.6, Entities 6.6, Netcode for Entities 6.6).
+Entities. The core (fixed-point math, actors, utilities) is always compiled; deterministic lockstep (with a Netcode for
+Entities transport), navigation, vision, stats and GameObject views are opt-in modules. The package is
+`Assets/PragmaDOTS` and is consumed through a git URL with `?path=Assets/PragmaDOTS`; everything else in the project
+(tests, the sample, research notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 6000.6, Entities 6.6, Netcode for Entities 6.6).
 
 The package is unreleased: backward compatibility is not required yet, prefer clean renames over compatibility shims.
 
@@ -18,17 +18,17 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 |------|----------|
 | `Assets/PragmaDOTS/Core/Mathematics` | `Pragma.Dots.Mathematics` (`Runtime`): `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid`. No Entities dependency. `Pragma.Dots.Mathematics.Editor` (`Editor`): fixed-point drawers |
 | `Assets/PragmaDOTS/Core/Utils` | `Pragma.Dots.Utils` (`Runtime`): `FixedDictionary4096Bytes`, `OptionalValue`. `Pragma.Dots.Utils.Editor` (`Editor`): fixed list and fixed string drawers. `Pragma.Dots.Utils.Physics` (`Physics`, only with `com.unity.physics`): `CollisionMatrixToFilter` |
+| `Assets/PragmaDOTS/Core/Actors` | `Pragma.Dots.Actors` (`Runtime`): `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, the builders, `ActorLookup`, `ActorUtility` (registry and placed actors at run time), components in `Components`. `Pragma.Dots.Actors.Authoring` (`Authoring`): `ActorCatalogAuthoring` and the actor bakers (catalog into registry, `ActorAuthoring` into placed actor). `Pragma.Dots.Actors.Editor` (`Editor`): the actor inspectors |
 | `Assets/PragmaDOTS/Core/Editor` | `Pragma.Dots.Editor`: *Project Settings > Pragma > DOTS* (module defines) |
-| `Assets/PragmaDOTS/Modules/Lockstep/Runtime` | `PRAGMA_DOTS_LOCKSTEP`. `Pragma.Dots.Lockstep`, the lockstep assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components`. `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`. `Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the core parts (`Parts`), `ActorAuthoring`, the builders, `LockstepActors`, `LockstepActorUtility` (registry building and copying), components in `Actors/Components`. `Spatial`: `LockstepSpatialIndex` |
-| `Assets/PragmaDOTS/Modules/Lockstep/Authoring` | `Pragma.Dots.Lockstep.Authoring`: `ActorCatalogAuthoring` and the actor bakers (catalog into registry, `ActorAuthoring` into scene entity) |
-| `Assets/PragmaDOTS/Modules/Lockstep/Editor` | `Pragma.Dots.Lockstep.Editor`: the actor inspectors (`Actors`), *Window > Pragma > Lockstep Sessions* |
+| `Assets/PragmaDOTS/Modules/Lockstep/Runtime` | `PRAGMA_DOTS_LOCKSTEP`. `Pragma.Dots.Lockstep`, the lockstep assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components`. `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`, `LockstepActorUtility` (the registry and placed actors copied into the simulation). `Parts`: the Transform and Entity Id actor parts. `Spatial`: `LockstepSpatialIndex` |
+| `Assets/PragmaDOTS/Modules/Lockstep/Editor` | `Pragma.Dots.Lockstep.Editor`: *Window > Pragma > Lockstep Sessions* |
 | `Assets/PragmaDOTS/Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`, only with `com.unity.netcode`: the RPC and the Netcode server and client systems; config, status and start/end request components in `Components` |
 | `Assets/PragmaDOTS/Modules/Navigation` | `PRAGMA_DOTS_NAVIGATION`, needs Lockstep. `Pragma.Dots.Navigation` (`Runtime`): grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math), the navigation systems and the actor parts (`Parts`) |
 | `Assets/PragmaDOTS/Modules/Vision` | `PRAGMA_DOTS_VISION`, needs Lockstep. `Pragma.Dots.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and the actor parts (`Parts`) |
 | `Assets/PragmaDOTS/Modules/Stats` | `PRAGMA_DOTS_STATS`, needs Lockstep. `Pragma.Dots.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
 | `Assets/PragmaDOTS/Modules/Views` | `PRAGMA_DOTS_VIEWS`, needs Lockstep. `Pragma.Dots.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`, `ViewPart`. `Pragma.Dots.Views.Authoring` (`Authoring`): `EntityViewConfigAuthoring`. `Pragma.Dots.Views.Editor` (`Editor`): the actor view previews |
 | `Assets/PragmaDOTS/Skills~` | Claude Code skills shipped with the package (gameplay, sessions, desync); Unity skips the folder. Read them before writing simulation code |
-| `Assets/Tests/Core/Editor` | `Pragma.Dots.Tests.Editor`: the EditMode suite of the core (not shipped): `Mathematics`, `Utils` |
+| `Assets/Tests/Core/Editor` | `Pragma.Dots.Tests.Editor`: the EditMode suite of the core (not shipped): `Mathematics`, `Utils`, `Actors`; test components and parts in `Support` |
 | `Assets/Tests/Modules/<Module>/Editor` | `Pragma.Dots.<Module>.Tests.Editor`: the suite of a module, compiled only with its define; the lockstep suite (`Pragma.Dots.Lockstep.Tests.Editor`) keeps the session and frame helpers and test components in `Support` |
 | `Assets/Tests/Modules/Views/Runtime` | `Pragma.Dots.Views.Tests.Runtime`: MonoBehaviours the view tests add to GameObjects; Unity refuses components from Editor assemblies |
 | `Assets/Examples` | *Lockstep Arena* sample (not shipped); its systems run in every simulation world of this project |
@@ -71,11 +71,14 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   layer: it references neither the rest of the core nor Entities. A compiled module's systems join every simulation
   world and `DefaultSimulationHash`, which is why modules are opt-in.
 - **Actors are the authoring model.** Content is `ActorDefinition` assets with parts (`[SerializeReference]`
-  `ActorPart`s); new authoring data is a part, not a MonoBehaviour with a baker. A part's `Build` runs through
-  `IActorBuilder` both while a subscene bakes (`BakerActorBuilder`) and at run time (`EntityManagerActorBuilder`), so
-  it must be deterministic from its data alone (`FixedPoint` fields; terrains are sampled in fixed point). The registry
-  (`LockstepActorRegistry`) is built in the presentation world and copied into the simulation like the scene
-  entities; placed actors get their type by key in the copy. Renaming a part class needs `[MovedFrom]`.
+  `ActorPart`s); new authoring data is a part, not a MonoBehaviour with a baker. Actors are in the core and know
+  nothing of lockstep: a module brings its parts (Lockstep: Transform, Entity Id, marked `[DefaultActorPart]` for new
+  definitions), and the placement is a `FixedPose` plus a scale. A part's `Build` runs through `IActorBuilder` both
+  while a subscene bakes (`BakerActorBuilder`) and at run time (`EntityManagerActorBuilder`), so it must be
+  deterministic from its data alone (`FixedPoint` fields; terrains are sampled in fixed point). The registry
+  (`ActorRegistry`) is built in the presentation world; Lockstep copies it into the simulation with the placed actors
+  (`PlacedActor`, `LockstepActorUtility`), which get their type by key in the copy (`ActorUtility.ResolveTypes`
+  elsewhere). Renaming a part class needs `[MovedFrom]`.
 - **No managed components** (deprecated in Entities 6.6): running sessions are found through the static
   `LockstepWorlds` registry keyed by `World.SequenceNumber`.
 - **The presentation never writes to the simulation world**, not even a tag or a cleanup component: it would move the
@@ -142,7 +145,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
 
 ## Tests
 
-- The EditMode suites: `Assets/Tests/Core/Editor` (math and utilities) and `Assets/Tests/Modules/<Module>/Editor`
+- The EditMode suites: `Assets/Tests/Core/Editor` (math, utilities and actors) and `Assets/Tests/Modules/<Module>/Editor`
   (each module; the vision suite also needs navigation, its session moves the sources with agents). They
   cover math accuracy and Burst equality, golden results, serialization, actors (inheritance, the catalog and its
   registry, placed actors and overrides, the module parts, a session spawning by key and tag),
@@ -154,7 +157,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   GameObject views (component and buffer parts), offline mode and a real Netcode server with two clients (including a command larger than the
   reliable window).
 - The suites reach internals through `InternalsVisibleTo` in `Modules/Lockstep/Runtime/AssemblyInfo.cs` (and
-  `Core/Utils/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its
+  `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its
   own `AssemblyInfo.cs`. A new test assembly needs its entries there.
 - Every test assembly that declares systems has `[assembly: DisableAutoCreation]` in its `AssemblyInfo.cs`: test
   systems enter simulations only through `LockstepSimulationOptions.AdditionalSystems`. In the lockstep `Support`,

@@ -22,6 +22,8 @@ namespace Pragma.Dots.Lockstep
 
         public static LockstepTransform FromPositionRotation(FixedVector3 position, FixedQuaternion rotation) => new LockstepTransform { position = position, rotation = rotation, scale = FixedPoint.One };
 
+        public static LockstepTransform FromPose(in FixedPose pose, FixedPoint scale) => new LockstepTransform { position = pose.position, rotation = pose.rotation, scale = scale };
+
         public FixedVector3 Forward => FixedMath.Rotate(rotation, FixedVector3.Forward);
         public FixedVector3 Up => FixedMath.Rotate(rotation, FixedVector3.Up);
         public FixedVector3 Right => FixedMath.Rotate(rotation, FixedVector3.Right);

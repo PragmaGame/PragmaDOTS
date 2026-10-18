@@ -257,7 +257,7 @@ These came up while building on Entities; neither reference package deals with t
 
 10. **Scene content.** A map's buildings and markers live in a subscene of the presentation world, which the
     simulation must never read. Like the actor registry, they are copied into the simulation world before tick 0
-    (`LockstepSceneEntity`), the counterpart of Netcode's pre-spawned ghosts. The copy is sorted by an order baked
+    (`PlacedActor`), the counterpart of Netcode's pre-spawned ghosts. The copy is sorted by an order baked
     from each object's `GlobalObjectId`, because the query order of the presentation world follows the order its
     subscene sections loaded in, which may differ between clients. The archetypes of the copies are created in that
     order before the copy: `CopyEntitiesFrom` moves chunks in an order that depends on where the source allocated them,
@@ -395,7 +395,7 @@ These came up while building on Entities; neither reference package deals with t
     definition's parts the same way. Every spawnable type is in an `ActorCatalog`; its index is the type, as the prefab
     index was, so replays stay index-stable. Identity is a key plus a flat set of tags rather than a dotted hierarchy:
     an actor belongs to several groups at once ("unit" and "player"), and a type's tags are bits of a tag table in the
-    registry, so a check is a bit test; instances carry only their key and type index (`LockstepActor`), placed actors
+    registry, so a check is a bit test; instances carry only their key and type index (`Actor`), placed actors
     find their type by key when they are copied in, because the baker of a map does not know the catalog. Generic parts
     (`ActorComponentPart<T>`, `ActorBufferPart<T>` for types with `[ActorComponent]`) give designers any component
     without code. The view is not referenced from the definition, which would load graphics into dedicated servers; a
@@ -416,6 +416,15 @@ These came up while building on Entities; neither reference package deals with t
     of defines still compiles, and the settings page turns a module on together with Lockstep and off together with it.
     Splitting the simulation from the protocol was not worth it: a game that simulates without a network runs lockstep
     offline, over the loopback.
+
+    Actors went into the core with that move. The authoring model serves any Entities game, and every module brings
+    parts for it, so as a module it would be one the others depend on. What tied actors to lockstep moved out: the
+    placement is a `FixedPose` of the math (the lockstep transform takes the X of the placement scale as its uniform
+    scale), the Transform and Entity Id parts are in the lockstep module, which marks them `[DefaultActorPart]` so that
+    new definitions still start with them, and copying the registry and the placed actors into a simulation is
+    `LockstepActorUtility` there; a game without lockstep resolves the types of its placed actors with
+    `ActorUtility.ResolveTypes`. The actor types lost their `Lockstep` prefix (`Actor`, `ActorLookup`, `ActorRegistry`,
+    `PlacedActor` for the former scene entity).
 
 ## Limitations and future work
 

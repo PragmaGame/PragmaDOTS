@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using Pragma.Dots.Navigation;
@@ -20,7 +21,7 @@ namespace Pragma.Dots.Tests
             using (var world = new World("Parts"))
             {
                 var entityManager = world.EntityManager;
-                var entity = LockstepActorUtility.CreatePlaced(entityManager, definition, LockstepTransform.FromPosition(new FixedVector3(10, 0, 0)), One, null, 1);
+                var entity = ActorUtility.CreatePlaced(entityManager, definition, new FixedPose(new FixedVector3(10, 0, 0), FixedQuaternion.Identity), One, null, 1);
 
                 var built = entityManager.GetComponentData<LockstepNavAgent>(entity);
                 Assert.AreEqual((FixedPoint)5, built.speed);
@@ -44,15 +45,15 @@ namespace Pragma.Dots.Tests
             {
                 var entityManager = world.EntityManager;
                 var rotation = FixedQuaternion.AxisAngle(FixedVector3.Up, FixedMath.HalfPi);
-                var placement = new LockstepTransform { position = new FixedVector3(5, 0, 5), rotation = rotation, scale = 2 };
+                var placement = new FixedPose(new FixedVector3(5, 0, 5), rotation);
 
-                var moving = LockstepActorUtility.CreatePlaced(entityManager, building, placement, new FixedVector3(2, 1, 3), null, 1);
+                var moving = ActorUtility.CreatePlaced(entityManager, building, placement, new FixedVector3(2, 1, 3), null, 1);
                 var local = entityManager.GetComponentData<LockstepNavObstacle>(moving);
                 Assert.AreEqual(new FixedVector2(1, 1), local.center, "the box of a moving obstacle stays local");
                 Assert.AreEqual(new FixedVector2(2, 2), local.size);
-                Assert.AreEqual(placement.scale, entityManager.GetComponentData<LockstepTransform>(moving).scale, "it scales with the actor's transform");
+                Assert.AreEqual((FixedPoint)2, entityManager.GetComponentData<LockstepTransform>(moving).scale, "it scales with the actor's transform, by X");
 
-                var fixedWall = LockstepActorUtility.CreatePlaced(entityManager, wall, placement, new FixedVector3(2, 1, 3), null, 2);
+                var fixedWall = ActorUtility.CreatePlaced(entityManager, wall, placement, new FixedVector3(2, 1, 3), null, 2);
                 var box = entityManager.GetComponentData<LockstepNavObstacle>(fixedWall);
                 Assert.AreEqual(new FixedVector2(2, 3), box.center, "a static box takes the non-uniform scale of its placement");
                 Assert.AreEqual(new FixedVector2(4, 6), box.size);
@@ -84,7 +85,7 @@ namespace Pragma.Dots.Tests
             using (var world = new World("Parts"))
             {
                 var entityManager = world.EntityManager;
-                var entity = LockstepActorUtility.CreatePlaced(entityManager, definition, LockstepTransform.FromPosition(new FixedVector3(2, 0, 4)), One, null, 1);
+                var entity = ActorUtility.CreatePlaced(entityManager, definition, new FixedPose(new FixedVector3(2, 0, 4), FixedQuaternion.Identity), One, null, 1);
 
                 var built = entityManager.GetComponentData<LockstepNavGrid>(entity);
                 Assert.AreEqual(10, built.width);
@@ -112,7 +113,7 @@ namespace Pragma.Dots.Tests
             var definition = Definition("map", new NavAvoidancePart());
             using (var world = new World("Parts"))
             {
-                var entity = LockstepActorUtility.CreatePlaced(world.EntityManager, definition, LockstepTransform.Identity, One, null, 1);
+                var entity = ActorUtility.CreatePlaced(world.EntityManager, definition, FixedPose.Identity, One, null, 1);
                 var avoidance = world.EntityManager.GetComponentData<LockstepNavAvoidance>(entity);
                 Assert.AreEqual(FixedPoint.FromFraction(3, 2), avoidance.timeHorizon);
                 Assert.AreEqual(8, avoidance.maxNeighbours);

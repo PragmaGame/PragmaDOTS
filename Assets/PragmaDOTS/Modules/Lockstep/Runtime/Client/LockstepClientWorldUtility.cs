@@ -1,3 +1,4 @@
+using Pragma.Dots.Actors;
 using Unity.Entities;
 using UnityEngine;
 
@@ -48,8 +49,8 @@ namespace Pragma.Dots.Lockstep
         }
 
         /// <summary>
-        /// Simulation options that copy this world's actor registry and scene entities (<see cref="LockstepSceneEntity"/>,
-        /// the placed actors) into every simulation world.
+        /// Simulation options that copy this world's actor registry and placed actors (<see cref="PlacedActor"/>) into
+        /// every simulation world.
         /// </summary>
         public static LockstepSimulationOptions CreateSimulationOptions(World presentationWorld, bool waitForActorRegistry)
         {
@@ -59,12 +60,12 @@ namespace Pragma.Dots.Lockstep
                 Initialize = simulationWorld =>
                 {
                     LockstepActorUtility.CopyRegistry(presentationWorld.EntityManager, simulationWorld.EntityManager);
-                    LockstepActorUtility.CopySceneEntities(presentationWorld.EntityManager, simulationWorld.EntityManager);
+                    LockstepActorUtility.CopyPlacedActors(presentationWorld.EntityManager, simulationWorld.EntityManager);
                 },
             };
             if (waitForActorRegistry)
             {
-                options.CanCreate = () => presentationWorld.IsCreated && LockstepActorUtility.HasRegistry(presentationWorld.EntityManager);
+                options.CanCreate = () => presentationWorld.IsCreated && ActorUtility.HasRegistry(presentationWorld.EntityManager);
             }
             return options;
         }

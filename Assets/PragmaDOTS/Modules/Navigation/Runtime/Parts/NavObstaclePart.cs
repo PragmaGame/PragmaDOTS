@@ -1,4 +1,5 @@
 using System;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using UnityEngine;
@@ -70,13 +71,13 @@ namespace Pragma.Dots.Navigation
             Gizmos.DrawLine(center - right + forward, center - right - forward);
         }
 
-        private void GetSimulationData(in LockstepTransform placement, FixedVector3 scale, bool isMoving, out LockstepNavObstacle obstacle,
+        private void GetSimulationData(in FixedPose placement, FixedVector3 scale, bool isMoving, out LockstepNavObstacle obstacle,
             out LockstepTransform transform)
         {
             if (isMoving)
             {
-                // The box stays local and scales with the actor's transform.
-                transform = placement;
+                // The box stays local and scales with the actor's transform, which takes the uniform scale (X).
+                transform = LockstepTransform.FromPose(placement, scale.x);
                 obstacle = new LockstepNavObstacle { center = _center, size = _size };
                 return;
             }

@@ -4,6 +4,7 @@
     "references": [
         "Pragma.Dots.Lockstep",
         "Pragma.Dots.Mathematics",
+        "Pragma.Dots.Actors",
         "Pragma.Dots.Lockstep.Tests.Editor",
         "Pragma.Dots.Navigation",
         "Unity.Entities",

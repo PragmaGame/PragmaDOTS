@@ -1,3 +1,6 @@
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Lockstep.Netcode;
+
 #if PRAGMA_DOTS_UNITY_NETCODE
 using System.Collections.Generic;
 using NUnit.Framework;

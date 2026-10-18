@@ -1,0 +1,20 @@
+{
+    "name": "Pragma.Dots.Actors.Editor",
+    "rootNamespace": "Pragma.Dots.Actors.Editor",
+    "references": [
+        "Pragma.Dots.Actors",
+        "Unity.Entities",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

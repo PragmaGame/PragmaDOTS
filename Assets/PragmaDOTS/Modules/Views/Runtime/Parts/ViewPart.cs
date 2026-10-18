@@ -1,5 +1,5 @@
 using System;
-using Pragma.Dots.Lockstep;
+using Pragma.Dots.Actors;
 using Unity.Collections;
 using UnityEngine;
 

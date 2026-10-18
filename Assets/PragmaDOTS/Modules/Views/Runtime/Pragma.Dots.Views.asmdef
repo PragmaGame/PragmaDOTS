@@ -4,6 +4,7 @@
     "references": [
         "Pragma.Dots.Lockstep",
         "Pragma.Dots.Mathematics",
+        "Pragma.Dots.Actors",
         "Unity.Entities",
         "Unity.Collections",
         "Unity.Mathematics",

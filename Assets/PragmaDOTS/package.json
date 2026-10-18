@@ -3,7 +3,7 @@
   "displayName": "Pragma DOTS",
   "version": "1.0.0",
   "unity": "6000.6",
-  "description": "Building blocks for multiplayer games on Unity DOTS: fixed-point math and utilities, with opt-in modules. Lockstep: deterministic lockstep with an isolated simulation world, a server that orders inputs, adaptive input timing, desync detection with state hashes, late join, replays, an offline mode that runs the same code path, actors described in assets of parts, and a Netcode for Entities transport. Navigation, vision, stats and pooled GameObject views build on it.",
+  "description": "Building blocks for multiplayer games on Unity DOTS: fixed-point math, actors (game objects described in assets of parts, spawned by key, placed on maps, baked or built at run time) and utilities, with opt-in modules. Lockstep: deterministic lockstep with an isolated simulation world, a server that orders inputs, adaptive input timing, desync detection with state hashes, late join, replays, an offline mode that runs the same code path and a Netcode for Entities transport. Navigation, vision, stats and pooled GameObject views build on it.",
   "keywords": [
     "dots",
     "ecs",
@@ -11,6 +11,7 @@
     "lockstep",
     "deterministic",
     "fixed-point",
+    "actors",
     "netcode",
     "multiplayer",
     "views"

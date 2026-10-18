@@ -1,4 +1,5 @@
 using System;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using UnityEngine;

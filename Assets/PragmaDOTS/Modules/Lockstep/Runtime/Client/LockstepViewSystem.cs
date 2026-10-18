@@ -1,3 +1,4 @@
+using Pragma.Dots.Actors;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Transforms;
@@ -5,7 +6,7 @@ using Unity.Transforms;
 namespace Pragma.Dots.Lockstep
 {
     /// <summary>
-    /// Mirrors the simulation into the presentation world: for every simulation actor (<see cref="LockstepActor"/>) it
+    /// Mirrors the simulation into the presentation world: for every simulation actor (<see cref="Actor"/>) it
     /// instantiates the prefab of its type from the actor registry of the presentation world, writes an interpolated
     /// <c>LocalTransform</c> from <see cref="LockstepTransform"/> every frame, and destroys the view when the simulation entity goes away.
     /// </summary>
@@ -40,7 +41,7 @@ namespace Pragma.Dots.Lockstep
             _alive = new NativeHashSet<Entity>(256, Allocator.Persistent);
             _stale = new NativeList<Entity>(64, Allocator.Persistent);
             _registryQuery = new EntityQueryBuilder(Allocator.Temp)
-                .WithAll<LockstepActorRegistry, LockstepActorType>()
+                .WithAll<ActorRegistry, ActorType>()
                 .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                 .Build(this);
         }
@@ -68,20 +69,20 @@ namespace Pragma.Dots.Lockstep
             {
                 DestroyAllViews();
                 _simulationWorld = simulation.World;
-                _simulationQuery = _simulationWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepActor>());
+                _simulationQuery = _simulationWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<Actor>());
             }
 
             if (_registryQuery.CalculateEntityCount() == 0)
             {
                 return;
             }
-            var registry = EntityManager.GetBuffer<LockstepActorType>(_registryQuery.GetSingletonEntity(), true).ToNativeArray(Allocator.Temp);
+            var registry = EntityManager.GetBuffer<ActorType>(_registryQuery.GetSingletonEntity(), true).ToNativeArray(Allocator.Temp);
 
             var simulationManager = _simulationWorld.EntityManager;
             var lastTick = simulation.Tick - 1;
             var alpha = client.InterpolationAlpha;
             var entities = _simulationQuery.ToEntityArray(Allocator.Temp);
-            var actors = _simulationQuery.ToComponentDataArray<LockstepActor>(Allocator.Temp);
+            var actors = _simulationQuery.ToComponentDataArray<Actor>(Allocator.Temp);
 
             _alive.Clear();
             for (var i = 0; i < entities.Length; i++)

@@ -1,7 +1,7 @@
 # Determinism test templates
 
 EditMode tests (NUnit, Unity Test Framework). The test assembly references `Pragma.Dots.Lockstep`,
-`Pragma.Dots.Mathematics`, `Unity.Entities`, `Unity.Collections` and your game assembly, and allows unsafe code
+`Pragma.Dots.Mathematics` (and `Pragma.Dots.Actors` when it builds actors), `Unity.Entities`, `Unity.Collections` and your game assembly, and allows unsafe code
 for the replay templates. Simulations created in tests auto-discover every system of
 `LockstepSimulationSystemGroup`, so the whole game simulation runs.
 
@@ -149,7 +149,7 @@ public unsafe void SameFrames_GiveTheSameState()
 
 Record the replay from a real match (`client.ExportReplay()` or the debug window). Pass the game's
 `LockstepSimulationOptions` to both simulations when the simulation spawns actors (build the registry from the
-catalog with `LockstepActorUtility.CreateRegistry` in a presentation world).
+catalog with `ActorUtility.CreateRegistry` in a presentation world).
 
 ## Golden replay
 

@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-gameplay
-description: Write deterministic gameplay for the lockstep module of Pragma DOTS (com.pragma.dots, Pragma.Dots.Lockstep) - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, actors (ActorDefinition, ActorPart, ActorCatalog, ActorAuthoring, LockstepActors: types by key, tags, parts, map placement, spawning), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
+description: Write deterministic gameplay for the lockstep module of Pragma DOTS (com.pragma.dots, Pragma.Dots.Lockstep) - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, actors (ActorDefinition, ActorPart, ActorCatalog, ActorAuthoring, ActorLookup: types by key, tags, parts, map placement, spawning), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
 ---
 
 # Gameplay with Pragma DOTS lockstep
@@ -33,24 +33,27 @@ actor parts are in its runtime assembly.
 
 Units, buildings, projectiles and map objects are actors: an `ActorDefinition` asset (key such as "rifleman", tags
 such as "unit" and "player", a parent to inherit from, and parts), spawned by key from the `ActorCatalog` and placed on
-maps with `ActorAuthoring`. Prefer them to hand-built archetypes and to bakers of your own:
+maps with `ActorAuthoring`. They are in the core (namespace and assembly `Pragma.Dots.Actors`); the lockstep module
+adds the Transform and Entity Id parts and copies the registry and the placed actors into the simulation. Prefer them
+to hand-built archetypes and to bakers of your own:
 
 - **A component of the game** becomes a part without code: `[Serializable, ActorComponent("Combat/Health")]` on the
   struct (public fields, `FixedPoint` rather than `float`); the part menu lists it as `ActorComponentPart<T>` (or
   `ActorBufferPart<T>` for buffer elements).
 - **A part with logic** derives from `ActorPart` (`[Serializable]`, optional `[ActorPartMenu("Combat/Weapon")]`) and
   overrides `Build(IActorBuilder builder)`: `builder.AddComponent`, `AddBuffer` (fill it before adding anything else),
-  `SetComponentEnabled`, `HasPart<T>()`, `Key`, `IsPlaced`, `Placement`, `PlacementScale`, `DependsOn(asset)`. The same
+  `SetComponentEnabled`, `HasPart<T>()`, `Key`, `IsPlaced`, `Placement` (a `FixedPose`), `PlacementScale`,
+  `DependsOn(asset)`. The same
   `Build` runs at bake time and at run time: keep `FixedPoint` fields, read only the part's data and the builder.
   Reference other actors by `ActorDefinition` field and store their key. Never rename a part class without
   `[MovedFrom]`: its data is serialized by reference.
-- **Spawning**: `var actors = LockstepActors.Get(ref state); actors.TryGetType("rifleman", out var type);
+- **Spawning**: `var actors = ActorLookup.Get(ref state); actors.TryGetType("rifleman", out var type);
   actors.Instantiate(state.EntityManager, type)` (or a command buffer), then set its `LockstepTransform`. Read
-  `LockstepActors` again after a structural change. Look keys and tags up once and keep the indices.
+  `ActorLookup` again after a structural change. Look keys and tags up once and keep the indices.
 - **Tags**: `actors.TryGetTag("unit", out var unit)`, then `actors.HasTag(actorComponent, unit)` (a bit test) for
-  rules such as "only units capture points". `LockstepActor { key, type }` is on every actor's root entity.
+  rules such as "only units capture points". `Actor { key, type }` is on every actor's root entity.
 - **Map content** is placed with `ActorAuthoring` in the map subscene (definition plus overriding parts); it is a
-  scene entity the simulation starts with. Without subscenes, `LockstepActorUtility.CreateRegistry(entityManager,
+  placed actor (`PlacedActor`) the simulation starts with. Without subscenes, `ActorUtility.CreateRegistry(entityManager,
   catalog)` and `CreatePlaced(...)` build the same content at run time on every client.
 
 ## Where code goes
@@ -97,14 +100,14 @@ var buffer = SystemAPI.GetSingleton<LockstepEndSimulationEntityCommandBufferSyst
 
 // Actors of the catalog, by key (the registry is copied into every simulation world; empty if a baking subscene had
 // not loaded when the simulation was created, so start with waitForActorRegistry).
-var actors = LockstepActors.Get(ref state);
+var actors = ActorLookup.Get(ref state);
 if (actors.TryGetType("rifleman", out var rifleman))
 {
     var unit = actors.Instantiate(state.EntityManager, rifleman);
 }
 
 // Actors placed on the map (ActorAuthoring) are already in the simulation world at tick 0: query them like any
-// entity (they keep LockstepSceneEntity).
+// entity (they keep PlacedActor).
 
 // Cross-client identities.
 var ids = SystemAPI.GetSingleton<LockstepEntityIdMap>();

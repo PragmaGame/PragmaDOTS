@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Pragma.Dots.Actors;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using Unity.Collections;
