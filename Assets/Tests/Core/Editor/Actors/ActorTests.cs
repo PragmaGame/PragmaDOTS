@@ -180,6 +180,45 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void MergeablePart_Override_ChangesTheEntriesItLists_AndKeepsTheOthers()
+        {
+            var parentPart = new TestMergeablePart(1, (1, 10), (2, 20));
+            var parent = Definition("", null, new string[0], parentPart);
+            var child = Definition("veteran", parent, new string[0], new TestMergeablePart(2, (2, 25), (3, 30)));
+
+            var parts = new List<ActorPart>();
+            child.GetParts(parts);
+            Assert.AreEqual(1, parts.Count);
+            CollectionAssert.AreEqual(new[] { (1, 10), (2, 25), (3, 30) }, Entries((TestMergeablePart)parts[0]));
+            CollectionAssert.AreEqual(new[] { (1, 10), (2, 20) }, Entries(parentPart), "the parent's part does not change");
+
+            using (var world = new World("Actors"))
+            {
+                var entityManager = world.EntityManager;
+                var placed = ActorUtility.CreatePlaced(entityManager, child, FixedPose.Identity, new FixedVector3(1, 1, 1),
+                    new ActorPart[] { new TestMergeablePart(3, (1, 11)) }, 1);
+                var entries = entityManager.GetBuffer<TestMergedEntry>(placed);
+                CollectionAssert.AreEqual(new[] { (1, 11), (2, 25), (3, 30) }, new[] { Pair(entries[0]), Pair(entries[1]), Pair(entries[2]) });
+                Assert.AreEqual((FixedPoint)3, entityManager.GetComponentData<TestActorValue>(placed).value, "the override's settings");
+            }
+
+            var start = (TestMergeablePart)((IMergeableActorPart)parts[0]).CreateOverride();
+            Assert.AreEqual(0, start.Entries.Count, "an override starts with no entries");
+        }
+
+        private static (int, int)[] Entries(TestMergeablePart part)
+        {
+            var entries = new (int, int)[part.Entries.Count];
+            for (var i = 0; i < entries.Length; i++)
+            {
+                entries[i] = Pair(part.Entries[i]);
+            }
+            return entries;
+        }
+
+        private static (int, int) Pair(TestMergedEntry entry) => (entry.key, entry.value);
+
+        [Test]
         public void LocalTransformPart_PlacesTheActor_AndKeepsANonUniformScaleApart()
         {
             var wall = Definition("wall", null, new string[0], new LocalTransformPart());

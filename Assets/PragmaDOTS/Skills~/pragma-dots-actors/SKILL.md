@@ -39,8 +39,11 @@ Deeper reference:
 ## Inheritance
 
 A definition inherits its parent's tags and parts. Its own part replaces the parent's part of the same type (an
-*override*), and its own tags are added to the parent's. The inspector shows the inherited parts greyed with *Override*;
-*Add Part* lists every part type, *Add Tag* the tags of the project. The catalog reports a cycle of parents; the
+*override*), and its own tags are added to the parent's. A *mergeable* part (`IMergeableActorPart`: stats, grants)
+merges with the parent's instead: the override lists only the entries it adds or changes by key, and later changes
+of the parent's other entries still reach it. The inspector shows the inherited parts greyed with *Override* (a
+mergeable one merged over the whole lineage, also above its override, and its override starts empty); *Add Part*
+lists every part type, *Add Tag* the tags of the project. The catalog reports a cycle of parents; the
 lineage then stops where it repeats.
 
 ## Parts
@@ -91,6 +94,10 @@ Rules for `Build`:
   (`EntityManagerActorBuilder`). It must give the same result from the same data on every machine: `FixedPoint` fields
   rather than floats, nothing read but the part's own fields and the builder (no scene lookups, no `Random`, no time).
   A terrain or another asset is sampled in fixed point, and named with `DependsOn`.
+- A part of entries by key implements `IMergeableActorPart` when variants should change single entries:
+  `MergeOnto(inherited)` returns a new part (its entries replace the inherited ones with the same key, the rest are
+  added; its other settings win), `CreateOverride()` the empty override the inspector starts from. Never change
+  either input: they are the parts of assets.
 - Reference other actors by an `ActorDefinition` field and store their key (`FixedString32Bytes`); the entity of
   another type is spawned by key later. Never store an `Entity` of another actor in a part.
 - Parts are serialized by reference (`[SerializeReference]`): renaming or moving a part class, its namespace or its
@@ -193,8 +200,10 @@ for (var i = 0; i < level.Actors.Count; i++)
 | A subclass of `StateMachinePart<TMachine, TState>` | State machines | A machine component of the game, entering the initial state on its first update |
 
 New definitions start with the parts marked `[DefaultActorPart]`: Local Transform in a game without lockstep; with the
-lockstep module its Transform (which replaces Local Transform) and Entity Id. The Stats module has no part: give stats from a part of the game (`builder.AddBuffer<LockstepStat>()`, see the
-`pragma-lockstep-gameplay` skill).
+lockstep module its Transform (which replaces Local Transform) and Entity Id. The Stats module's parts are generic
+bases the game closes over its enums in one line each:
+`[Serializable, ActorPartMenu("Stats")] public sealed class UnitStatsPart : StatsPart<StatType, StatTarget> { }` and
+`UnitGrantsPart : StatGrantsPart<StatType, StatTarget>` (see the `pragma-lockstep-gameplay` skill).
 
 ## Without the lockstep module
 

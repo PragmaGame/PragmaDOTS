@@ -169,6 +169,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entity's transform (`TransformUsageFlags.ManualOverride`), since baking strips it otherwise. `DefaultActorPartAttribute.Replaces`: the lockstep Transform part
   replaces it in new definitions.
 - `LockstepClient.EndReason`: why the server ended the match.
+- `IMergeableActorPart`: a part whose override merges with the inherited part of its type instead of replacing it, so
+  derived definitions and placements list only the entries they add or change; the inspector shows the merged
+  inherited part and starts overrides empty.
+- Stats actor parts, generic bases the game closes over its enums: `StatsPart<TStat, TTarget>` (attributes,
+  resources with their caps, targets, whether the actor receives grants; it adds the buffers the actor takes part in)
+  and `StatGrantsPart<TStat, TTarget>` (permanent grants with a source). Both merge by stat (grants by stat, modifier
+  type and target). `NoStatTarget` for games without targets; `LockstepStatSource` is serializable.
 - State machines (`Pragma.Dots.StateMachines`, module `PRAGMA_DOTS_STATE_MACHINES`, needs only the core), taken from
   PragmaCommonDOTS and redesigned for jobs: a machine component of the game holds a `StateMachine` (current,
   previous and requested state, ticks in the state; states are the values of an enum), a

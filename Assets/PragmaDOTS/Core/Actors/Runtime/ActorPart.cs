@@ -9,7 +9,8 @@ namespace Pragma.Dots.Actors
     /// </summary>
     /// <remarks>
     /// <para>An actor has at most one part of each type: a derived definition or a placement replaces the part of the same
-    /// type. A part that needs several entries (weapons, stats) keeps a list.</para>
+    /// type. A part that needs several entries (weapons, stats) keeps a list, and implements
+    /// <see cref="IMergeableActorPart"/> when overrides should change single entries rather than the whole list.</para>
     /// <para>The same <see cref="Build"/> runs when a subscene bakes and when actors are built at run time
     /// (<see cref="ActorUtility"/>), so it must give the same result from the same data on every machine: keep
     /// <c>FixedPoint</c> fields rather than floats, and read nothing but the part's own data and the builder.</para>

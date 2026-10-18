@@ -14,6 +14,7 @@ namespace Pragma.Dots.Stats
     /// an effect again after removing its source replaces it; <see cref="LockstepStatStacking.Strongest"/> modifiers of one
     /// kind from different sources do not add up either.
     /// </remarks>
+    [Serializable]
     public struct LockstepStatSource : IEquatable<LockstepStatSource>
     {
         public uint kind;

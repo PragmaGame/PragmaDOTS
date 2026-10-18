@@ -7,20 +7,24 @@ namespace Pragma.Dots.Actors.Editor
 {
     /// <summary>
     /// Inspector of a part list: the inherited parts read-only with an Override button, the own parts editable with Remove
-    /// or Revert, and the menu that adds parts.
+    /// or Revert, and the menu that adds parts. A mergeable part (<see cref="IMergeableActorPart"/>) shows what the lineage
+    /// merged into it, also above its override, and is overridden starting from no entries.
     /// </summary>
     internal static class ActorPartsGUI
     {
         private const string INHERITED_FOLDOUT = "Pragma.Dots.ActorPart.";
 
+        private static ActorPartHolder _holder;
+
         /// <summary>A part a definition of the lineage gives, the closest definition winning.</summary>
         public readonly struct Inherited
         {
-            public Inherited(ActorDefinition source, int index, Type type)
+            public Inherited(ActorDefinition source, int index, Type type, ActorPart merged)
             {
                 Source = source;
                 Index = index;
                 Type = type;
+                Merged = merged;
             }
 
             public ActorDefinition Source { get; }
@@ -28,14 +32,21 @@ namespace Pragma.Dots.Actors.Editor
             public int Index { get; }
 
             public Type Type { get; }
+
+            /// <summary>The part the whole lineage gives: the closest one, or for a mergeable part the merge of all of them.</summary>
+            public ActorPart Merged { get; }
+
+            public bool IsMergeable => typeof(IMergeableActorPart).IsAssignableFrom(Type);
         }
 
         /// <summary>The parts <paramref name="lineage"/> (root first) gives, one per type.</summary>
         public static List<Inherited> GetInherited(IReadOnlyList<ActorDefinition> lineage)
         {
             var result = new List<Inherited>();
+            var merged = new List<ActorPart>();
             foreach (var definition in lineage)
             {
+                ActorParts.Override(merged, definition.OwnParts);
                 var parts = definition.OwnParts;
                 for (var i = 0; i < parts.Count; i++)
                 {
@@ -44,7 +55,7 @@ namespace Pragma.Dots.Actors.Editor
                         continue;
                     }
                     var type = parts[i].GetType();
-                    var entry = new Inherited(definition, i, type);
+                    var entry = new Inherited(definition, i, type, null);
                     var index = result.FindIndex(inherited => inherited.Type == type);
                     if (index >= 0)
                     {
@@ -55,6 +66,11 @@ namespace Pragma.Dots.Actors.Editor
                         result.Add(entry);
                     }
                 }
+            }
+            for (var i = 0; i < result.Count; i++)
+            {
+                var entry = result[i];
+                result[i] = new Inherited(entry.Source, entry.Index, entry.Type, merged[ActorParts.IndexOf(merged, entry.Type)]);
             }
             return result;
         }
@@ -68,7 +84,12 @@ namespace Pragma.Dots.Actors.Editor
             var sources = new Dictionary<ActorDefinition, SerializedObject>();
             foreach (var entry in inherited)
             {
-                if (!ownTypes.Contains(entry.Type))
+                var isOverridden = ownTypes.Contains(entry.Type);
+                if (entry.IsMergeable)
+                {
+                    DrawMerged(parts, entry, isOverridden);
+                }
+                else if (!isOverridden)
                 {
                     DrawInherited(parts, entry, sources);
                 }
@@ -105,6 +126,43 @@ namespace Pragma.Dots.Actors.Editor
                     if (GUILayout.Button(new GUIContent("Override", "Copy the part here to change it."), EditorStyles.miniButton, GUILayout.Width(60f)))
                     {
                         Add(parts, Clone(entry.Source.OwnParts[entry.Index]));
+                        GUIUtility.ExitGUI();
+                    }
+                }
+                if (expanded)
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        DrawFields(element);
+                    }
+                }
+            }
+        }
+
+        // A mergeable part the lineage gives, merged; its override lists only what it adds or changes.
+        private static void DrawMerged(SerializedProperty parts, Inherited entry, bool isOverridden)
+        {
+            if (_holder == null)
+            {
+                _holder = ScriptableObject.CreateInstance<ActorPartHolder>();
+                _holder.hideFlags = HideFlags.HideAndDontSave;
+            }
+            _holder.part = entry.Merged;
+            var element = new SerializedObject(_holder).FindProperty(nameof(ActorPartHolder.part));
+            var key = INHERITED_FOLDOUT + "merged." + entry.Type.FullName;
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                bool expanded;
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    expanded = EditorGUILayout.Foldout(SessionState.GetBool(key, false), ActorPartTypes.GetTitle(entry.Type), true);
+                    SessionState.SetBool(key, expanded);
+                    GUILayout.FlexibleSpace();
+                    GUILayout.Label(isOverridden ? "inherited, merged with the override below" : "inherited", EditorStyles.miniLabel);
+                    if (!isOverridden && GUILayout.Button(new GUIContent("Override", "Add entries here or change inherited ones."),
+                            EditorStyles.miniButton, GUILayout.Width(60f)))
+                    {
+                        Add(parts, ((IMergeableActorPart)entry.Merged).CreateOverride());
                         GUIUtility.ExitGUI();
                     }
                 }
@@ -204,12 +262,14 @@ namespace Pragma.Dots.Actors.Editor
                     menu.AddDisabledItem(new GUIContent(menuPath));
                     continue;
                 }
-                var label = inherited.Exists(entry => entry.Type == type) ? menuPath + " (override)" : menuPath;
+                var index = inherited.FindIndex(entry => entry.Type == type);
+                var label = index >= 0 ? menuPath + " (override)" : menuPath;
                 var partType = type;
+                var start = index >= 0 && inherited[index].Merged is IMergeableActorPart mergeable ? mergeable.CreateOverride() : null;
                 menu.AddItem(new GUIContent(label), false, () =>
                 {
                     serializedObject.Update();
-                    Add(serializedObject.FindProperty(path), (ActorPart)Activator.CreateInstance(partType));
+                    Add(serializedObject.FindProperty(path), start ?? (ActorPart)Activator.CreateInstance(partType));
                 });
             }
             menu.DropDown(rect);

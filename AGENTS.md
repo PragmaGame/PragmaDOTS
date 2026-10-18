@@ -25,7 +25,7 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 | `Assets/PragmaDOTS/Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`, only with `com.unity.netcode`: the RPC and the Netcode server and client systems; config, status and start/end request components in `Components` |
 | `Assets/PragmaDOTS/Modules/Navigation` | `PRAGMA_DOTS_NAVIGATION`, needs Lockstep. `Pragma.Dots.Navigation` (`Runtime`): grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math), the navigation systems and the actor parts (`Parts`) |
 | `Assets/PragmaDOTS/Modules/Vision` | `PRAGMA_DOTS_VISION`, needs Lockstep. `Pragma.Dots.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and the actor parts (`Parts`) |
-| `Assets/PragmaDOTS/Modules/Stats` | `PRAGMA_DOTS_STATS`, needs Lockstep. `Pragma.Dots.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
+| `Assets/PragmaDOTS/Modules/Stats` | `PRAGMA_DOTS_STATS`, needs Lockstep. `Pragma.Dots.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers; the actor parts in `Parts` (`StatsPart<TStat, TTarget>`, `StatGrantsPart<TStat, TTarget>`, generic bases the game closes over its enums) |
 | `Assets/PragmaDOTS/Modules/Views` | `PRAGMA_DOTS_VIEWS`, needs Lockstep. `Pragma.Dots.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`, `ViewPart`. `Pragma.Dots.Views.Authoring` (`Authoring`): `EntityViewConfigAuthoring`. `Pragma.Dots.Views.Editor` (`Editor`): the actor view previews |
 | `Assets/PragmaDOTS/Modules/StateMachines` | `PRAGMA_DOTS_STATE_MACHINES`, needs only the core. `Pragma.Dots.StateMachines` (`Runtime`): `StateMachine` (current, previous, requested state, ticks in state), `IStateMachine` (a machine component of the game: a `StateMachine` and nothing else), `StateMachineSystemGroup<TMachine>` (applies the transitions in a Burst job, then runs its state systems), `StateMachinePart<TMachine, TState>` (`Parts`) |
 | `Assets/PragmaDOTS/Skills~` | Claude Code skills shipped with the package (actors, gameplay, sessions, desync); Unity skips the folder. Read them before writing content or simulation code |
@@ -76,7 +76,8 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   nothing of lockstep: the core has Unity's transform (`LocalTransformPart`), a module brings its parts (Lockstep:
   Transform, which replaces the Unity one in new definitions, and Entity Id, marked `[DefaultActorPart]`), and the placement is a `FixedPose` plus a scale. A part's `Build` runs through `IActorBuilder` both
   while a subscene bakes (`BakerActorBuilder`) and at run time (`EntityManagerActorBuilder`), so it must be
-  deterministic from its data alone (`FixedPoint` fields; terrains are sampled in fixed point). The registry
+  deterministic from its data alone (`FixedPoint` fields; terrains are sampled in fixed point). A part of keyed entries
+  implements `IMergeableActorPart`, so that overrides merge with the inherited part (stats, grants). The registry
   (`ActorRegistry`) is built in the presentation world; Lockstep copies it into the simulation with the placed actors
   (`PlacedActor`, `LockstepActorUtility`), which get their type by key in the copy (`ActorUtility.ResolveTypes`
   elsewhere). Renaming a part class needs `[MovedFrom]`.
@@ -148,12 +149,12 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
 
 - The EditMode suites: `Assets/Tests/Core/Editor` (math, utilities and actors) and `Assets/Tests/Modules/<Module>/Editor`
   (each module; the vision suite also needs navigation, its session moves the sources with agents). They
-  cover math accuracy and Burst equality, golden results, serialization, actors (inheritance, the catalog and its
+  cover math accuracy and Burst equality, golden results, serialization, actors (inheritance, mergeable parts, the catalog and its
   registry, placed actors and overrides, the module parts, a session spawning by key and tag),
   checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session), stats (formula,
   non-stacking modifiers, sources, timed modifiers, resources and caps, changes, grants, enum ids in Burst, change
-  versions, a session with a late joiner), state machines (transitions, enter and exit, Burst jobs against a managed
+  versions, a session with a late joiner, the actor parts and their merging), state machines (transitions, enter and exit, Burst jobs against a managed
   model, several machines per entity, the actor part, a session with a late joiner), sessions
   (latency, jitter, late join, disconnects, desync attribution, replays, commands with large data), presentation,
   GameObject views (component and buffer parts), offline mode and a real Netcode server with two clients (including a command larger than the

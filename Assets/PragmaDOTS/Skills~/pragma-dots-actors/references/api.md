@@ -29,7 +29,8 @@ Namespace and assembly `Pragma.Dots.Actors` (the core, always compiled) unless n
 | `[ActorComponent("Group/Name")]` | On an unmanaged `[Serializable]` `IComponentData` or `IBufferElementData`: the menu offers it as `ActorComponentPart<T>` / `ActorBufferPart<T>`, whose inspector edits the value |
 | `IActorBuilder` | `FixedString32Bytes Key`, `bool IsPlaced`, `FixedPose Placement` (identity on a type's prefab), `FixedVector3 PlacementScale` (along the local axes), `HasPart<T>()`, `AddComponent<T>(in T)`, `DynamicBuffer<T> AddBuffer<T>()` (fill it before adding anything else), `SetComponentEnabled<T>(bool)`, `DependsOn(UnityEngine.Object)` (bake again when it changes; nothing at run time) |
 | `BakerActorBuilder` (`Pragma.Dots.Actors.Authoring`), `EntityManagerActorBuilder` | The builder while a subscene bakes, and at run time |
-| `ActorParts` | `Override(parts, overrides)` (the merge rule, for placement data of your own), `IndexOf(parts, type)`, `TryGet<T>(parts, out part)` |
+| `IMergeableActorPart` | `ActorPart MergeOnto(ActorPart inherited)` (a new part: its entries over the inherited ones by key, its other settings), `ActorPart CreateOverride()` (its settings, no entries). An override of such a part merges instead of replacing |
+| `ActorParts` | `Override(parts, overrides)` (the merge rule, for placement data of your own; merges mergeable parts), `IndexOf(parts, type)`, `TryGet<T>(parts, out part)` |
 | `ActorGizmoContext` | `Transform`, `IsSelected`, `Parts`, `HasPart<T>()` |
 | `ActorGizmos` | `DrawCircle(center, radius, color)`, `DrawRectangle(corner, size, color)` |
 
@@ -97,4 +98,8 @@ By menu path, module in brackets:
 - `StateMachinePart<TMachine, TState>` (State Machines) - abstract: a game's subclass per machine
   (`[Serializable, ActorPartMenu("Unit Brain")] public sealed class UnitBrainPart : StateMachinePart<UnitBrain, UnitState> { }`)
   gives the machine component, entering `Initial` on its first update.
-- Stats has no part: build the stat buffers in a part of the game.
+- `StatsPart<TStat, TTarget>` (Stats) - abstract, closed by the game: attributes (stat, base value), resources (stat,
+  cap attribute, cap policy, amount when uncapped), targets, *Receives Grants*; adds `LockstepStat` and the buffers the
+  actor takes part in. Mergeable by stat; targets add up.
+- `StatGrantsPart<TStat, TTarget>` (Stats) - abstract, closed by the game: a source and permanent grants (stat,
+  modifier type, value, stacking, target). Mergeable by stat, modifier type and target.

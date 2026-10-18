@@ -183,9 +183,12 @@ against vision ("attack only what you see") reads the planes the previous tick l
 
 ## Stats
 
-Namespace and assembly `Pragma.Dots.Stats`: the Stats module (`PRAGMA_DOTS_STATS`, needs Lockstep). It has no actor
-part: a part of the game builds the buffers (`builder.AddBuffer<LockstepStat>()`, filled at once, then the empty
-`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrantor`, `LockstepStatTarget`).
+Namespace and assembly `Pragma.Dots.Stats`: the Stats module (`PRAGMA_DOTS_STATS`, needs Lockstep). Its actor parts
+are generic bases the game closes over its enums: `StatsPart<TStat, TTarget>` (`Attributes` of
+`StatAttributeEntry<TStat>`, `Resources` of `StatResourceEntry<TStat>`, `Targets`, `ReceivesGrants`) and
+`StatGrantsPart<TStat, TTarget>` (`Source`, `Grants` of `StatGrantEntry<TStat, TTarget>`), both mergeable;
+`NoStatTarget` for games without targets. An entity built by hand gets `LockstepStat` filled at once, then the empty
+`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrantor`, `LockstepStatTarget`.
 
 | Type | Members |
 |---|---|

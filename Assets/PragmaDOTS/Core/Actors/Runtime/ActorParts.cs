@@ -2,12 +2,16 @@ using System.Collections.Generic;
 
 namespace Pragma.Dots.Actors
 {
-    /// <summary>The rule that combines parts: a part replaces the part of its type, a part of a new type is added at the end.</summary>
+    /// <summary>
+    /// The rule that combines parts: a part replaces the part of its type (a <see cref="IMergeableActorPart"/> merges with
+    /// it), a part of a new type is added at the end.
+    /// </summary>
     public static class ActorParts
     {
         /// <summary>
-        /// Applies <paramref name="overrides"/> to <paramref name="parts"/>: each one replaces the part of its type in place,
-        /// or is added at the end. Empty entries (a part whose class no longer exists) are skipped.
+        /// Applies <paramref name="overrides"/> to <paramref name="parts"/>: each one replaces the part of its type in place
+        /// (a mergeable part puts the merge of both there), or is added at the end. Empty entries (a part whose class no
+        /// longer exists) are skipped.
         /// </summary>
         public static void Override(List<ActorPart> parts, IReadOnlyList<ActorPart> overrides)
         {
@@ -25,7 +29,7 @@ namespace Pragma.Dots.Actors
                 var index = IndexOf(parts, part.GetType());
                 if (index >= 0)
                 {
-                    parts[index] = part;
+                    parts[index] = part is IMergeableActorPart mergeable ? mergeable.MergeOnto(parts[index]) : part;
                 }
                 else
                 {

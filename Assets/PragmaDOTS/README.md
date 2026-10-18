@@ -318,6 +318,7 @@ are copied into every simulation world, and the module adds the Transform and En
 | Navigation/Agent, Obstacle, Avoidance, Grid | Navigation | See [Navigation](#navigation) |
 | Vision/Source, Grid | Vision | See [Vision](#vision) |
 | View (`ViewPart`) | Views | `EntityViewKey`: the actor's key, unless the part names another; see [Views](#views) |
+| Stats, Stat Grants (subclasses of `StatsPart`, `StatGrantsPart`) | Stats | The stats of an actor, the grants it gives; see [Stats](#stats) |
 
 New definitions start with Unity's transform (Local Transform); with the lockstep module they start with its Transform
 and Entity Id parts instead, since the lockstep Transform replaces the Unity one (`[DefaultActorPart(Replaces = ...)]`).
@@ -356,6 +357,12 @@ public sealed class WeaponPart : ActorPart
 }
 ```
 
+A part of entries by key (stats by stat, weapons by slot) may implement `IMergeableActorPart`: its override then merges
+with the inherited part instead of replacing it, so a derived definition or a placement lists only the entries it
+adds or changes, and later changes of the parent's other entries still reach it. `MergeOnto(inherited)` returns the
+merge as a new part (the override's entries replace those with the same key, its other settings win),
+`CreateOverride()` the empty override the inspector starts from.
+
 The same `Build` runs when a subscene bakes and when actors are built at run time, so it must give the same result from
 the same data on every machine: keep `FixedPoint` fields rather than floats, and read only the part's data and the
 builder. Parts are serialized by reference: renaming or moving a part class loses its data unless the class gets
@@ -365,7 +372,8 @@ builder. Parts are serialized by reference: renaming or moving a part class lose
 
 The inspector of a definition shows the tags and parts it inherits, greyed, with *Override* to copy a part and change
 it; its own parts have *Remove* (or *Revert* for an override). *Add Part* lists every part type (an inherited type is
-added as an override), *Add Tag* lists the tags of the project's definitions. The catalog inspector shows the tag
+added as an override), *Add Tag* lists the tags of the project's definitions. A mergeable part shows what the whole
+lineage merged into it, also above its override, and *Override* starts from no entries. The catalog inspector shows the tag
 table and what would break the registry: keys that are empty, too long or taken twice, too many tags, empty parts.
 
 ### Spawning and tags
@@ -1799,37 +1807,45 @@ A [module](#turning-modules-on) on top of [Lockstep](#lockstep): turn it on with
 | `LockstepStatSource` | What applied a modifier, a grant or a change: two numbers the game picks (`kind`, `id`) |
 | `LockstepStatSystem` | In `LockstepSimulationSystemGroup`: removes expired modifiers and grants, recalculates the attributes whose base values, modifiers or grants changed, fits resources to their caps and applies the tick's changes |
 | `LockstepStats` | Extensions on the stat buffer, also taking the game's enum: `TryGet`, `TryGetValue`, `TryGetPendingValue`, `TryGetBase`, `TrySetBase`; `RemoveModifiers`, `RemoveGrants`, `Calculate` (the formula, for tooltips and previews), `Id` |
+| `StatsPart<TStat, TTarget>` | Base of the game's actor part with the stats of an actor: attributes (stat, base value), resources (stat, the attribute that caps it, its policy, the amount of an uncapped one), the targets grants reach it as, whether it receives grants. Mergeable |
+| `StatGrantsPart<TStat, TTarget>` | Base of the game's actor part with the grants an actor gives: a source and grants (stat, modifier type, value, stacking, target). Mergeable |
 
 ### Setting it up
 
-Name the stats with an enum of your own and give an entity the buffers it needs, from an [actor part](#parts) of the
-game: `LockstepStat`, plus `LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrantor` and `LockstepStatTarget`
-for what it takes part in. Empty buffers cost nothing, and gameplay fills them without structural changes:
+Name the stats with an enum of your own (and the groups grants target with another, or use `NoStatTarget`), and
+declare the two [actor parts](#parts) closed over them:
 
 ```csharp
 public enum StatType { None = 0, MaxHealth = 1, Speed = 2, Health = 3 }
 public enum StatTarget { Any = 0, Infantry = 1, Vehicle = 2 }
 
-[Serializable, ActorPartMenu("Combat/Infantry Stats")]
-public sealed class InfantryStatsPart : ActorPart
+[Serializable, ActorPartMenu("Stats")]
+public sealed class UnitStatsPart : StatsPart<StatType, StatTarget>
 {
-    [SerializeField] private FixedPoint _maxHealth = 100;
-    [SerializeField] private FixedPoint _speed = 5;
+}
 
-    public override void Build(IActorBuilder builder)
-    {
-        // Fill a buffer before adding anything else: adding invalidates it.
-        var stats = builder.AddBuffer<LockstepStat>();
-        stats.Add(LockstepStat.Attribute(StatType.MaxHealth, _maxHealth));
-        stats.Add(LockstepStat.Attribute(StatType.Speed, _speed));
-        stats.Add(LockstepStat.Resource(StatType.Health, StatType.MaxHealth, LockstepStatCapPolicy.KeepRatio)); // starts full
-        builder.AddBuffer<LockstepStatModifier>();
-        builder.AddBuffer<LockstepStatChange>();
-        builder.AddBuffer<LockstepStatGrantor>();
-        builder.AddBuffer<LockstepStatTarget>().Add(LockstepStatTarget.Create(StatTarget.Infantry));
-    }
+[Serializable, ActorPartMenu("Stat Grants")]
+public sealed class UnitGrantsPart : StatGrantsPart<StatType, StatTarget>
+{
 }
 ```
+
+- **Stats.** Give units and buildings a *Stats* part: attributes (*Max Health* 100, *Speed* 5), resources (*Health*
+  capped by *Max Health*, keeping its ratio; it starts full; an uncapped one such as money starts with its amount),
+  the targets grants reach it as (*Infantry*) and whether it receives grants. Besides `LockstepStat` the part adds
+  the buffers the actor takes part in: `LockstepStatModifier` with any attribute, `LockstepStatChange` with any
+  resource, `LockstepStatTarget` with any target, `LockstepStatGrantor` when it receives grants (gameplay names the
+  grantors, its player or squad, where the unit is created). It warns about a stat listed twice and a resource
+  capped by a stat that is not an attribute of the actor.
+- **Grants.** Give the entities that grant (a squad, a commander, a banner) a *Stat Grants* part: a source and the
+  grants, each a modifier (stat, type, value, stacking) and the target it reaches (zero for every receiver). They
+  are permanent; gameplay ends them with `RemoveGrants(source)`.
+- **Variants.** Both parts merge: the *Stats* of a veteran derived from the rifleman lists only *Max Health* 150, and
+  a placed building on one map only its own *Health* cap; everything else, and every later change of the parent,
+  comes from the parent. A stat listed as a resource where the parent has an attribute becomes a resource, targets
+  add up, and the other settings are the override's.
+- **In code.** An entity built by hand gets the same buffers: `LockstepStat.Attribute`, `LockstepStat.Resource`, then
+  the empty buffers; gameplay fills them without structural changes.
 
 Change stats in systems that update before `LockstepStatSystem` and read them in systems after it, and both happen on
 the same tick:
@@ -2277,7 +2293,7 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 | Agents walk through an obstacle | The obstacle is not in the simulation world (a static map object must be a placed actor), lies outside the grid, or is thinner than a cell with an agent radius of zero |
 | Agents stop short of the destination | `isPathPartial`: the destination is blocked or walled in, and the path ends at the closest reachable point |
 | A stat keeps its old value | The modifier names another stat or a resource (resources take `LockstepStatChange`s), the change names an attribute, the receiver lacks the grant's `LockstepStatTarget` or a `LockstepStatGrantor` naming the granting entity, or it was added after `LockstepStatSystem` updated (it applies from the next tick) |
-| A capped resource stays empty or ignores its cap | The entity has no attribute of the `cap` type, so the resource is uncapped; bake the cap attribute in the same buffer |
+| A capped resource stays empty or ignores its cap | The entity has no attribute of the `cap` type, so the resource is uncapped; list the cap attribute in the same *Stats* part (it warns) |
 | `LockstepStatSystem` recalculates every tick | A system writes the stats every tick, also by only taking `DynamicBuffer<LockstepStat>` in a `SystemAPI.Query`, which is read-write: read them with `in` in an `IJobEntity` or with a read-only `BufferLookup` |
 | Connections drop when the window loses focus | `Application.runInBackground` is off |
 | A "Burst error" in the console | Burst falls back to managed code silently in some cases; fix the reported construct (for example a managed array in a Burst method) |

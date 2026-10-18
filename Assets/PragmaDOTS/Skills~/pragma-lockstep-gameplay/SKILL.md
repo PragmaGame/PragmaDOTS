@@ -403,9 +403,13 @@ Numbers that upgrades, research, abilities, auras or cover change (max health, s
 gameplay spends and refills (health, morale, energy, money), are stats of the Stats module (`PRAGMA_DOTS_STATS`, needs
 Lockstep; namespace and assembly `Pragma.Dots.Stats`), not fields that systems patch by hand:
 
-- **Data.** The game names its stats with an enum (0 = none); the factories and helpers take the enum itself. The
-  module has no actor part: an `ActorPart` of the game builds the buffers (`builder.AddBuffer<LockstepStat>()`, filled
-  at once, then the others). An entity has a `LockstepStat` buffer of attributes (`LockstepStat.Attribute(type, baseValue)`) and resources
+- **Data.** The game names its stats with an enum (0 = none) and its grant targets with another (0 = any; or
+  `NoStatTarget`); the factories and helpers take the enum itself. Content gets its stats from the module's actor parts,
+  closed by the game in one line each: `[Serializable, ActorPartMenu("Stats")] public sealed class UnitStatsPart :
+  StatsPart<StatType, StatTarget> { }` (attributes, resources and their caps, targets, receives grants; it adds the
+  buffers the actor takes part in) and `UnitGrantsPart : StatGrantsPart<StatType, StatTarget>` (permanent grants of a
+  squad, a commander). Both merge: a variant's part lists only the stats or grants it changes. An entity has a
+  `LockstepStat` buffer of attributes (`LockstepStat.Attribute(type, baseValue)`) and resources
   (`LockstepStat.Resource(type, amount)`, or `Resource(type, capAttribute, LockstepStatCapPolicy.KeepRatio)`, which
   starts full), plus the empty buffers it takes part in: `LockstepStatModifier`, `LockstepStatChange`,
   `LockstepStatGrantor`, `LockstepStatTarget`.

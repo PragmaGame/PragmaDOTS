@@ -3,6 +3,7 @@
     "rootNamespace": "Pragma.Dots.Tests",
     "references": [
         "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Actors",
         "Pragma.Dots.Mathematics",
         "Pragma.Dots.Lockstep.Tests.Editor",
         "Pragma.Dots.Stats",

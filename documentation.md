@@ -361,6 +361,14 @@ These came up while building on Entities; neither reference package deals with t
       of the speed. Both percentage factors are floored at zero, so any pile of debuffs ends at zero. The flat part and
       the result are not floored: negative armor or regeneration are legitimate values, and a game that needs other
       bounds clamps where it reads the stat.
+    - **Parts the game closes.** The stat ids are the game's enum, so the actor parts (`StatsPart`, `StatGrantsPart`)
+      are generic bases a game closes in one line, like `StateMachinePart`, and the inspector shows the enum's names.
+      Stats are the case an override that replaces the whole part gets wrong: a veteran that copies the rifleman's
+      list to change one number stops following the rifleman. So the parts merge (`IMergeableActorPart`, in the core:
+      an override lays its entries over the inherited part by key, and the inspector starts it empty and shows the
+      merged parent above it). Removing an inherited entry is left out: a variant without a stat derives from a
+      parent without it. The settings that are not entries (whether the actor receives grants, the source of the
+      grants) are the override's, copied from the parent when the override starts.
 
 15. **Modules behind scripting defines.** Unity compiles every assembly of a package whether a game references it or
     not, and every compiled system that carries the simulation filter joins every simulation world and enters

@@ -3,6 +3,7 @@
     "rootNamespace": "Pragma.Dots.Stats",
     "references": [
         "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Actors",
         "Pragma.Dots.Mathematics",
         "Unity.Entities",
         "Unity.Collections",
