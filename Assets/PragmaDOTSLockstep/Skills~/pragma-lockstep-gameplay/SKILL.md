@@ -19,6 +19,16 @@ Deeper reference:
   `Library/PackageCache/com.pragma.dotslockstep@*/README.md` in a project that installed it.
 - The `pragma-lockstep-desync` skill when something already diverged; `pragma-lockstep-sessions` for networking.
 
+## Modules
+
+Navigation, vision, stats and GameObject views are modules: each compiles only with its scripting define
+(`PRAGMA_LOCKSTEP_NAVIGATION`, `PRAGMA_LOCKSTEP_VISION`, `PRAGMA_LOCKSTEP_STATS`, `PRAGMA_LOCKSTEP_VIEWS`), all off after
+installation. If a `Pragma.Lockstep.Navigation` type (or another module's) "could not be found", the module is off: turn
+it on in *Project Settings > Pragma > Lockstep*, which writes the define to every build target. Never add the define to
+one target only: builds with different modules run different simulation systems and refuse each other. The bakers of a
+module are in its own assembly (`Pragma.Lockstep.Navigation.Authoring`, `.Vision.Authoring`, `.Views.Authoring`), the
+namespace stays `Pragma.Lockstep.Authoring`.
+
 ## Where code goes
 
 | Code | World | How |
@@ -268,7 +278,8 @@ foreach (var (player, commands, commandData) in
 
 ## Navigation
 
-Units that walk around obstacles use `Pragma.Lockstep.Navigation` (assembly reference `Pragma.Lockstep.Navigation`):
+Units that walk around obstacles use `Pragma.Lockstep.Navigation` (module `PRAGMA_LOCKSTEP_NAVIGATION`; assembly
+references `Pragma.Lockstep.Navigation`, and `Pragma.Lockstep.Navigation.Authoring` for the bakers):
 
 - **Grid.** One `LockstepNavGrid` per simulation world, baked with `LockstepNavGridAuthoring` into the map subscene
   (a scene entity): size, cell size, agent radius (that of the common units). Its `LockstepNavCell` buffer counts the
@@ -314,7 +325,8 @@ Units that walk around obstacles use `Pragma.Lockstep.Navigation` (assembly refe
 
 ## Vision
 
-What each player slot sees is simulation state (`Pragma.Lockstep.Vision`, assembly reference `Pragma.Lockstep.Vision`),
+What each player slot sees is simulation state (`Pragma.Lockstep.Vision`, module `PRAGMA_LOCKSTEP_VISION`; assembly
+references `Pragma.Lockstep.Vision`, and `Pragma.Lockstep.Vision.Authoring` for the bakers),
 so rules may depend on it and every client agrees:
 
 - **Grid.** One `LockstepVisionGrid` per simulation world, baked with `LockstepVisionGridAuthoring` (size, cell size) into
@@ -333,8 +345,8 @@ so rules may depend on it and every client agrees:
 ## Stats
 
 Numbers that upgrades, research, abilities, auras or cover change (max health, speed, damage, range), and amounts that
-gameplay spends and refills (health, morale, energy, money), are stats of `Pragma.Lockstep.Stats` (assembly reference
-`Pragma.Lockstep.Stats`), not fields that systems patch by hand:
+gameplay spends and refills (health, morale, energy, money), are stats of `Pragma.Lockstep.Stats` (module
+`PRAGMA_LOCKSTEP_STATS`, assembly reference `Pragma.Lockstep.Stats`), not fields that systems patch by hand:
 
 - **Data.** The game names its stats with an enum (0 = none); the factories and helpers take the enum itself. An entity
   bakes a `LockstepStat` buffer of attributes (`LockstepStat.Attribute(type, baseValue)`) and resources
@@ -382,7 +394,8 @@ if (LockstepWorlds.TryGetClient(presentationWorld, out var client) && client.Sim
 ```
 
 - Entities need `LockstepTransformPrevious` to interpolate (add it, or tick *Interpolate* on `LockstepTransformAuthoring`).
-- GameObject views (`Pragma.Lockstep.Views`, ported from ECV) are the usual way to show units: give the entity an
+- GameObject views (`Pragma.Lockstep.Views`, module `PRAGMA_LOCKSTEP_VIEWS`, ported from ECV) are the usual way to
+  show units: give the entity an
   `EntityViewKey` where it is created, make a prefab with `EntityView`, `TransformComponentView` and one part per
   component type (`EntityComponentViewUnmanaged<T>` reacts to changes only), add
   `public partial class XViewUpdateSystem : EntityViewUpdateSystem<X> { }` per type, and bind keys to prefabs in an

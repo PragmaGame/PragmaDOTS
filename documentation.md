@@ -362,6 +362,26 @@ These came up while building on Entities; neither reference package deals with t
       the result are not floored: negative armor or regeneration are legitimate values, and a game that needs other
       bounds clamps where it reads the stat.
 
+15. **Modules behind scripting defines.** Unity compiles every assembly of a package whether a game references it or
+    not, and every compiled system that carries the simulation filter joins every simulation world and enters
+    `DefaultSimulationHash`. A game without navigation would still create the navigation systems (idle, but in the
+    hash and in the build). So navigation, vision, stats and views are modules whose assemblies have a
+    `defineConstraints` entry (`PRAGMA_LOCKSTEP_NAVIGATION`...), off by default: an unused module is not compiled. The
+    core (protocol, simulation, math, Netcode) and the utilities are always on, and modules depend on the core only,
+    so any subset compiles. Scripting defines are per build target, and a server and clients built with different
+    modules refuse each other through the simulation hash; the *Project Settings > Pragma > Lockstep* page writes a
+    define to every build target at once and warns when a module is on for some targets only. Each module carries its
+    own authoring assembly, since one assembly of all the bakers could not compile without every module.
+16. **Utilities taken from PragmaCommonDOTS.** A few general types (`FixedDictionary4096Bytes`, `OptionalValue`, the
+    fixed list and fixed string drawers, `CollisionMatrixToFilter`) moved here so that projects no longer need that
+    package. They live in `Pragma.Lockstep.Utils`, the lowest layer, with no dependency on the core, so that they can
+    move out again without touching it. The move fixed what lockstep use exposed: the dictionary lost entries when
+    removed slots filled the table and could not grow past 16 entries, and its slot states were an enum nested in the
+    generic struct, whose value 2 Burst 2.0 compiled as 0, emptying removed slots that probe chains still ran through
+    (byte constants now; a test compares a Burst run with a managed one). The list drawer now draws elements through
+    a serialized array (a `[SerializeReference]` generic box), so their own drawers apply; the physics helper compiles
+    only when Unity Physics is installed (`versionDefines`), and its cache keeps the group index of each call.
+
 ## Limitations and future work
 
 - **Prediction and rollback**: a predicted copy of the simulation world, restored from the confirmed one and

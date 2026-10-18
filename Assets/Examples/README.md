@@ -1,5 +1,8 @@
 # Lockstep Arena (sample)
 
+The sample uses the GameObject views module: its assembly compiles only with `PRAGMA_LOCKSTEP_VIEWS` on
+(*Project Settings > Pragma > Lockstep*). This project has every module on.
+
 Open `Scenes/LockstepArena.unity` and press Play. The panel in the top-left corner starts the game:
 
 - **Play offline** runs a session against an in-process server. It is the same protocol, just without a network.

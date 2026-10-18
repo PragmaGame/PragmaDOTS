@@ -235,7 +235,10 @@ grant ending on tick T + D was applied on ticks T to T + D - 1 when added on tic
 
 ## Authoring components
 
-Namespace `Pragma.Lockstep.Authoring`:
+Namespace `Pragma.Lockstep.Authoring`. The core bakers (transform, prefab registry, scene entity, entity id) are in the
+assembly `Pragma.Lockstep.Authoring`; the bakers of a module are in its own assembly, compiled with the module:
+`Pragma.Lockstep.Views.Authoring` (view keys and catalogs), `Pragma.Lockstep.Navigation.Authoring` (grid, obstacles,
+agents, avoidance), `Pragma.Lockstep.Vision.Authoring` (grid, sources).
 
 - `LockstepTransformAuthoring` - bakes the transform into `LockstepTransform` (float to `FixedPoint` once, at bake time); *Interpolate*
   adds `LockstepTransformPrevious`.

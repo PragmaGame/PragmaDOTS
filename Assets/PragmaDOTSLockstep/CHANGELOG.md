@@ -8,6 +8,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Modules: navigation, vision, stats and GameObject views compile only with their scripting define symbol
+  (`PRAGMA_LOCKSTEP_NAVIGATION`, `PRAGMA_LOCKSTEP_VISION`, `PRAGMA_LOCKSTEP_STATS`, `PRAGMA_LOCKSTEP_VIEWS`), all off
+  after installation. *Project Settings > Pragma > Lockstep* turns them on and off on every build target at once and
+  warns when a module is on for some targets only. A module that is off is not compiled: its systems no longer join
+  every simulation world and the simulation hash.
+
+- Utilities (`Pragma.Lockstep.Utils`), taken from PragmaCommonDOTS: `FixedDictionary4096Bytes<TKey, TValue>`, a hash map
+  stored in the struct (grows up to its 4 KB capacity, reuses removed slots, Burst-compatible), and `OptionalValue<T>`.
+  `Pragma.Lockstep.Utils.Editor` draws fixed strings as text fields and fixed lists as arrays whose elements use their
+  own drawers. `CollisionMatrixToFilter` (`Pragma.Lockstep.Utils.Physics`, compiled only with `com.unity.physics`) builds
+  Unity Physics collision filters from the layer matrix, now keeping the group index of each call.
+
 - `LockstepSpatialIndex`: the points of a tick sorted into square cells (a counting sort over their bounding box, the
   cells growing so that there are never more than a given number) for "what lies near here" queries, which visit the
   cells a square around a point touches in the same order on every client.
@@ -129,6 +141,15 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the wire and reach every client in one tick.
 
 ### Changed
+
+- Package layout: `Core` (`Mathematics`, `Lockstep`, `Netcode`), `Modules` (`Navigation`, `Vision`, `Stats`, `Views`)
+  and `Utils`, each with `Runtime`, `Authoring` and `Editor` folders as needed. Namespaces and runtime assembly names
+  are unchanged.
+- `Pragma.Lockstep.Authoring` keeps the bakers of the core (transforms, the prefab registry, scene entities, entity
+  ids). The bakers of the modules moved to `Pragma.Lockstep.Navigation.Authoring`, `Pragma.Lockstep.Vision.Authoring`
+  and `Pragma.Lockstep.Views.Authoring`; reference those from assemblies that use them. Their namespace stays
+  `Pragma.Lockstep.Authoring`.
+- The fixed-point drawers moved to `Pragma.Lockstep.Mathematics.Editor`.
 
 - Protocol version 2: a command on the wire ends with its data length and data. Clients, servers and replays of
   version 1 are refused.

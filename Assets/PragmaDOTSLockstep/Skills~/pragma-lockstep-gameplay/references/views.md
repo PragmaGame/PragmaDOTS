@@ -1,7 +1,7 @@
 # GameObject views reference
 
-Namespace `Pragma.Lockstep.Views` (assembly `Pragma.Lockstep.Views`); the authoring components are in
-`Pragma.Lockstep.Authoring`. A port of ECV (Entity Component View) that never writes to the simulation world.
+Namespace `Pragma.Lockstep.Views` (assembly `Pragma.Lockstep.Views`, module `PRAGMA_LOCKSTEP_VIEWS`); the authoring
+components are in the namespace `Pragma.Lockstep.Authoring`, assembly `Pragma.Lockstep.Views.Authoring`. A port of ECV (Entity Component View) that never writes to the simulation world.
 
 ## Contents
 

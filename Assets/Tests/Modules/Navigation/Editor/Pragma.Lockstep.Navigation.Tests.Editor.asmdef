@@ -1,0 +1,34 @@
+{
+    "name": "Pragma.Lockstep.Navigation.Tests.Editor",
+    "rootNamespace": "Pragma.Lockstep.Tests",
+    "references": [
+        "Pragma.Lockstep",
+        "Pragma.Lockstep.Mathematics",
+        "Pragma.Lockstep.Tests.Editor",
+        "Pragma.Lockstep.Navigation",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "PRAGMA_LOCKSTEP_NAVIGATION"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

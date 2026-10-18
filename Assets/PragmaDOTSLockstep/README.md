@@ -24,6 +24,7 @@ simulated entities.
 - [Stats](#stats)
 - [Sessions](#sessions)
 - [Presentation](#presentation)
+- [Utilities](#utilities)
 - [Timing and latency](#timing-and-latency)
 - [Configuration reference](#configuration-reference)
 - [Desync detection and debugging](#desync-detection-and-debugging)
@@ -54,6 +55,9 @@ It is a poor fit for:
 
 ## Features
 
+- **Modules.** The core is the protocol, the simulation world, fixed-point math and the Netcode integration.
+  Navigation, vision, stats and GameObject views are modules, each compiled only when its scripting define is on
+  (*Project Settings > Pragma > Lockstep*), so a game carries and runs only what it uses.
 - **Isolated simulation world.** A plain Entities `World` that changes only one confirmed tick at a time. Gameplay
   systems opt in by living in `LockstepSimulationSystemGroup`; they are never created in the default, client or
   server worlds.
@@ -93,7 +97,10 @@ It is a poor fit for:
   view part per component type fed when that component changes, transforms interpolated between ticks, and a pool each
   project can replace (com.pragma.pool, Addressables...). `LockstepViewSystem` mirrors entities into Entities Graphics
   copies of the baked registry prefabs, and anything else can read the simulation world directly.
-- **Tooling.** Fixed-point inspectors, the *Window > Pragma > Lockstep Sessions* debug window and Claude Code skills.
+- **Utilities.** `FixedDictionary4096Bytes` (a hash map that fits in a component), `OptionalValue`, inspectors for
+  fixed lists and fixed strings, and `CollisionMatrixToFilter` for projects with Unity Physics.
+- **Tooling.** Fixed-point inspectors, the *Project Settings > Pragma > Lockstep* modules page, the
+  *Window > Pragma > Lockstep Sessions* debug window and Claude Code skills.
 
 ## Requirements
 
@@ -118,18 +125,41 @@ Or add it to `Packages/manifest.json`:
 
 Append `#<tag or commit>` to the URL to pin a revision.
 
-Reference the assemblies you use from your assembly definitions:
+Reference the assemblies you use from your assembly definitions. The core and the utilities are always compiled:
 
 | Assembly | Contents | Reference it from |
 |---|---|---|
 | `Pragma.Lockstep.Mathematics` | `FixedPoint`, vectors, quaternion, `FixedMath`, `FixedRandom`; no Entities dependency | simulation and presentation code |
 | `Pragma.Lockstep` | Protocol, simulation world, components, checksums, replays, offline mode, presentation helpers | simulation and presentation code |
-| `Pragma.Lockstep.Navigation` | The walkability grid, obstacles, agents, `LockstepPathfinder` and the navigation systems | simulation code |
-| `Pragma.Lockstep.Stats` | Attributes, resources, modifiers, changes and grants, `LockstepStatSystem` and the `LockstepStats` helpers | simulation code, and presentation code that shows stats |
-| `Pragma.Lockstep.Vision` | The vision grid, vision sources, `LockstepVisionSystem` and the `LockstepVision` queries | simulation code, and presentation code that draws the fog of war |
-| `Pragma.Lockstep.Views` | GameObject views: `EntityView`, view parts, `EntityViewKey`, the view manager, catalogs, the pool abstraction | presentation code, and simulation code that sets an `EntityViewKey` |
 | `Pragma.Lockstep.Netcode` | Netcode for Entities RPC and the server and client systems | bootstrap code |
-| `Pragma.Lockstep.Authoring` | Bakers for transforms, the prefab registry, scene entities, entity ids, view catalogs and view keys, navigation and vision | authoring code, if any |
+| `Pragma.Lockstep.Authoring` | Bakers for transforms, the prefab registry, scene entities and entity ids | authoring code, if any |
+| `Pragma.Lockstep.Utils` | `FixedDictionary4096Bytes`, `OptionalValue`; no Entities dependency | any code |
+| `Pragma.Lockstep.Utils.Physics` | `CollisionMatrixToFilter`; compiled only when the project has `com.unity.physics` | presentation code |
+
+### Modules
+
+Navigation, vision, stats and GameObject views are modules. A module compiles only when its scripting define symbol is
+set, and all of them are off after installation. Turn on the ones you use in **Project Settings > Pragma > Lockstep**:
+the page writes the define to every build target at once.
+
+| Module | Define | Assemblies | Reference them from |
+|---|---|---|---|
+| Navigation | `PRAGMA_LOCKSTEP_NAVIGATION` | `Pragma.Lockstep.Navigation`: the walkability grid, obstacles, agents, `LockstepPathfinder` and the navigation systems; `Pragma.Lockstep.Navigation.Authoring`: bakers of the grid, obstacles, agents and avoidance | simulation code; authoring code |
+| Vision | `PRAGMA_LOCKSTEP_VISION` | `Pragma.Lockstep.Vision`: the vision grid, vision sources, `LockstepVisionSystem` and the `LockstepVision` queries; `Pragma.Lockstep.Vision.Authoring`: bakers of the grid and sources | simulation code, and presentation code that draws the fog of war; authoring code |
+| Stats | `PRAGMA_LOCKSTEP_STATS` | `Pragma.Lockstep.Stats`: attributes, resources, modifiers, changes and grants, `LockstepStatSystem` and the `LockstepStats` helpers | simulation code, and presentation code that shows stats |
+| Views | `PRAGMA_LOCKSTEP_VIEWS` | `Pragma.Lockstep.Views`: `EntityView`, view parts, `EntityViewKey`, the view manager, catalogs, the pool abstraction; `Pragma.Lockstep.Views.Authoring`: bakers of view catalogs and view keys | presentation code, and simulation code that sets an `EntityViewKey`; authoring code |
+
+The modules depend on the core only, never on each other. Their authoring components keep the namespace
+`Pragma.Lockstep.Authoring`.
+
+Why defines rather than references alone: Unity compiles every assembly of a package, and a compiled module's systems
+join every simulation world (they carry the simulation filter) and enter `LockstepSimulation.DefaultSimulationHash`.
+Turned off, a module is not compiled at all: no idle systems, no code in the build.
+
+All builds that play together need the same modules. A server built without a module has a different simulation hash
+than clients built with it and refuses them (`ValidateSimulationHash`), so keep the defines the same on every target:
+the page warns when a module is on for some targets only. Build Profiles can add scripting defines of their own; keep
+the module defines in Player Settings, where the page writes them.
 
 ## How it works
 
@@ -757,6 +787,9 @@ larger than the grid's agent radius kept out of gaps they do not fit through, on
 together, and optional avoidance that steers walking agents around each other and paths around crowds. NavMesh cannot
 drive gameplay in lockstep: it works in floats, is built per platform and answers differently on different machines.
 
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_NAVIGATION`. The bakers are in
+`Pragma.Lockstep.Navigation.Authoring`.
+
 | Type | What it is |
 |---|---|
 | `LockstepNavGrid` | Singleton: origin, cell size, width, height, agent radius, the steepest walkable slope (`maxSlope`, rise over run) and a version that changes with the cells. The cells are the `LockstepNavCell` buffer of the same entity: the number of obstacles over each cell and its clearance, how many rings of free cells surround it |
@@ -920,6 +953,8 @@ plane per slot, filled again on every tick from the entities that see. Vision is
 client computes the same planes, so rules may depend on it (orders only on targets the player sees, units that hide
 until detected, the AI) and the presentation draws the fog of war from it.
 
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VISION`. The bakers are in `Pragma.Lockstep.Vision.Authoring`.
+
 | Type | What it is |
 |---|---|
 | `LockstepVisionGrid` | Singleton: origin, cell size, width, height (laid out as a `FixedGrid`, like the navigation grid), the number of planes (`slotCount`, the session's `maxPlayers`) and `isRevealed`, which shows everything to every slot. The cells are the `LockstepVisionCell` buffer of the same entity: plane by plane in slot order, `isVisible` per cell |
@@ -985,6 +1020,8 @@ Each tick clears `slotCount` planes and stamps every source over the square arou
 and auras change (max health, speed, damage, range) and *resources* that gameplay spends and refills (health, morale,
 energy, a player's money). One system applies the modifiers, the grants an entity inherits and the one-tick changes, and
 recalculates only what changed.
+
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_STATS`.
 
 | Type | What it is |
 |---|---|
@@ -1253,6 +1290,8 @@ carries that entity's capture.
 with one MonoBehaviour *part* per component type that receives the component when it changes. Use it for what Entities
 Graphics does not draw well: animators, VFX, health bars, selection rings, world-space UI.
 
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VIEWS`. The bakers are in `Pragma.Lockstep.Views.Authoring`.
+
 1. **Give entities a key.** `EntityViewKey` (a `FixedString32Bytes`, 1 to 29 bytes of UTF-8) names the view that shows
    an entity. It is simulation data like any other: set it where the entity is created, or bake it on a registry prefab
    with `EntityViewKeyAuthoring`. Changing it swaps the view.
@@ -1436,6 +1475,26 @@ Presentation may skip ticks (several ticks can be simulated in one frame) and mu
 trigger one-shot effects, let the simulation record them in its own state with the tick, for example a buffer of
 `{ tick, kind, position }` elements trimmed after a second, and let the presentation play the entries newer than the
 last tick it handled.
+
+## Utilities
+
+`Pragma.Lockstep.Utils` holds small types that lockstep games keep needing. It does not depend on the core or on
+Entities.
+
+| Type | Use |
+|---|---|
+| `FixedDictionary4096Bytes<TKey, TValue>` | A hash map of unmanaged keys and values stored in the struct itself (4 KB), so it fits in a component and gets copied, hashed and serialized with it. Open addressing with linear probing; the table starts at 16 slots and doubles up to `MaxCapacity` (about 340 entries of `int` to `int`). `Add` and the indexer throw when it is full, `TryAdd` returns false. Burst-compatible |
+| `OptionalValue<T>` | An unmanaged value that may be absent (`IsSet`, `Value`, `ToNullable`, `FromNullable`): a `Nullable<T>` for components |
+| `CollisionMatrixToFilter` | Unity Physics `CollisionFilter`s built from the layer collision matrix of *Project Settings > Physics*, cached per layer. In `Pragma.Lockstep.Utils.Physics`, compiled only when the project has `com.unity.physics`. For the presentation side: Unity Physics is not part of a lockstep simulation |
+
+The dictionary enumerates its slots, so the order follows the keys' `GetHashCode` and the history of adds and removes.
+In simulation state use keys whose hash is the same on every machine: integers, fixed strings, structs that override
+`GetHashCode` over such fields. Not `Entity` (its index differs between clients) and not structs left with the default
+`ValueType.GetHashCode`.
+
+`Pragma.Lockstep.Utils.Editor` draws `FixedString32Bytes` to `FixedString4096Bytes` fields as text fields (text past the
+capacity is cut) and `FixedList32Bytes<T>` to `FixedList4096Bytes<T>` fields as arrays whose elements use their own
+property drawers (a `FixedPoint` element shows as a number), capped at the list's capacity.
 
 ## Timing and latency
 
@@ -1756,21 +1815,24 @@ that form and relays the bytes without decoding them.
 
 | Path | Contents |
 |---|---|
-| `Runtime/Mathematics` | `Pragma.Lockstep.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom` |
-| `Runtime/Core` | Protocol, `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays and `LockstepReplayHost`, loopback network |
-| `Runtime/Simulation` | `LockstepSimulation`, the system group, command buffer systems, frame application, checksums, entity ids |
-| `Runtime/Simulation/Components` | The simulation components and singletons (`LockstepTime`, `LockstepPlayer`, `LockstepCommand`...) |
-| `Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries |
-| `Runtime/Transforms` | `LockstepTransform`, `LockstepTransformPrevious`, transform history |
-| `Runtime/Client` | Local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem` |
-| `Runtime/Navigation` | `Pragma.Lockstep.Navigation`: the grid, obstacles, agents, `LockstepPathfinder`, the navigation systems |
-| `Runtime/Stats` | `Pragma.Lockstep.Stats`: attributes and resources, modifiers, changes and grants, `LockstepStatSystem`, `LockstepStats` |
-| `Runtime/Vision` | `Pragma.Lockstep.Vision`: the vision grid, sources, `LockstepVisionSystem`, `LockstepVision` |
-| `Runtime/Views` | `Pragma.Lockstep.Views`: GameObject views (`EntityView`, view parts, `EntityViewManagerSystem`, update systems, catalogs, the pool) |
-| `Runtime/Netcode` | `Pragma.Lockstep.Netcode`: the RPC, server and client systems, `LockstepNetcode` |
-| `Runtime/Netcode/Components` | `LockstepServerConfig`, `LockstepClientConfig`, `LockstepServerStatus`, start and end requests |
-| `Runtime/Authoring` | `Pragma.Lockstep.Authoring`: bakers (transforms, prefab registry, scene entities, entity ids, view catalogs and keys, navigation grid, obstacles and agents, vision grid and sources) |
-| `Editor` | `Pragma.Lockstep.Editor`: fixed-point drawers, the debug window |
+| `Core/Mathematics/Runtime` | `Pragma.Lockstep.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid` |
+| `Core/Mathematics/Editor` | `Pragma.Lockstep.Mathematics.Editor`: fixed-point drawers |
+| `Core/Lockstep/Runtime/Protocol` | `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays and `LockstepReplayHost`, loopback network |
+| `Core/Lockstep/Runtime/Simulation` | `LockstepSimulation`, the system group, command buffer systems, frame application, checksums, entity ids |
+| `Core/Lockstep/Runtime/Simulation/Components` | The simulation components and singletons (`LockstepTime`, `LockstepPlayer`, `LockstepCommand`...) |
+| `Core/Lockstep/Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries |
+| `Core/Lockstep/Runtime/Transforms` | `LockstepTransform`, `LockstepTransformPrevious`, transform history |
+| `Core/Lockstep/Runtime/Client` | Local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem` |
+| `Core/Lockstep/Authoring` | `Pragma.Lockstep.Authoring`: bakers of transforms, the prefab registry, scene entities and entity ids |
+| `Core/Lockstep/Editor` | `Pragma.Lockstep.Editor`: the modules page, the debug window |
+| `Core/Netcode/Runtime` | `Pragma.Lockstep.Netcode`: the RPC, server and client systems, `LockstepNetcode`; config, status and request components in `Components` |
+| `Modules/Navigation` | `Runtime`: `Pragma.Lockstep.Navigation`; `Authoring`: `Pragma.Lockstep.Navigation.Authoring` |
+| `Modules/Vision` | `Runtime`: `Pragma.Lockstep.Vision`; `Authoring`: `Pragma.Lockstep.Vision.Authoring` |
+| `Modules/Stats` | `Runtime`: `Pragma.Lockstep.Stats` |
+| `Modules/Views` | `Runtime`: `Pragma.Lockstep.Views`; `Authoring`: `Pragma.Lockstep.Views.Authoring` |
+| `Utils/Runtime` | `Pragma.Lockstep.Utils`: `FixedDictionary4096Bytes`, `OptionalValue` |
+| `Utils/Editor` | `Pragma.Lockstep.Utils.Editor`: drawers of fixed lists and fixed strings |
+| `Utils/Physics` | `Pragma.Lockstep.Utils.Physics`: `CollisionMatrixToFilter` |
 | `Skills~` | Claude Code skills (Unity skips folders whose name ends with `~`) |
 
 ## Claude Code skills

@@ -39,7 +39,8 @@ Related skills: `pragma-lockstep-gameplay` (how to write simulation code correct
    debug window, or `server.ExportReplay()`).
 2. **Same build?** `ValidateSimulationHash` only compares the *list* of simulation systems (and the protocol version).
    A changed system body, a different asset or a different config file passes that check and desyncs. Make sure both
-   machines run the same build and the same content.
+   machines run the same build and the same content. Builds with different modules (`PRAGMA_LOCKSTEP_*` defines set
+   on some build targets only) fail that check: *Project Settings > Pragma > Lockstep* sets them on every target.
 3. **Narrow the window.** Reproduce with a small `ChecksumInterval` (1-10) so the first bad tick is close to the cause.
 4. **Find the component.** On each machine, re-simulate the same replay to the reported tick and compare the
    per-type hashes; the type whose hash differs is the one that diverged:

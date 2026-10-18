@@ -1,0 +1,18 @@
+{
+    "name": "Pragma.Lockstep.Utils.Editor",
+    "rootNamespace": "Pragma.Lockstep.Utils.Editor",
+    "references": [
+        "Unity.Collections"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

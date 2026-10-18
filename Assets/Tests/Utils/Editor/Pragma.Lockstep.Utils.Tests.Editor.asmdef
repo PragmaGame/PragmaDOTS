@@ -1,0 +1,37 @@
+{
+    "name": "Pragma.Lockstep.Utils.Tests.Editor",
+    "rootNamespace": "Pragma.Lockstep.Utils.Tests",
+    "references": [
+        "Pragma.Lockstep.Utils",
+        "Pragma.Lockstep.Utils.Editor",
+        "Pragma.Lockstep.Utils.Physics",
+        "Pragma.Lockstep.Mathematics",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics",
+        "Unity.Physics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.physics",
+            "expression": "1.0.0",
+            "define": "PRAGMA_LOCKSTEP_UNITY_PHYSICS"
+        }
+    ],
+    "noEngineReferences": false
+}

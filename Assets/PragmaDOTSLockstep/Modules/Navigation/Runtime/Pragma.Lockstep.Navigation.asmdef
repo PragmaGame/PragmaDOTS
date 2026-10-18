@@ -1,0 +1,23 @@
+{
+    "name": "Pragma.Lockstep.Navigation",
+    "rootNamespace": "Pragma.Lockstep.Navigation",
+    "references": [
+        "Pragma.Lockstep",
+        "Pragma.Lockstep.Mathematics",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_LOCKSTEP_NAVIGATION"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

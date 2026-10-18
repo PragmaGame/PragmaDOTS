@@ -21,7 +21,9 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": false,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "PRAGMA_LOCKSTEP_VIEWS"
+    ],
     "versionDefines": [
         {
             "name": "com.unity.inputsystem",

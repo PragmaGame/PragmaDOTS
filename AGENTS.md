@@ -15,24 +15,21 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 
 | Path | Contents |
 |------|----------|
-| `Assets/PragmaDOTSLockstep/Runtime/Mathematics` | `Pragma.Lockstep.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid`. No Entities dependency |
-| `Assets/PragmaDOTSLockstep/Runtime/Core` | Transport-agnostic protocol: `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network |
-| `Assets/PragmaDOTSLockstep/Runtime/Simulation` | `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids |
-| `Assets/PragmaDOTSLockstep/Runtime/Simulation/Components` | Simulation components and singletons |
-| `Assets/PragmaDOTSLockstep/Runtime/Transforms` | `LockstepTransform`, history and interpolation |
-| `Assets/PragmaDOTSLockstep/Runtime/Client` | Local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem` |
-| `Assets/PragmaDOTSLockstep/Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries (core assembly) |
-| `Assets/PragmaDOTSLockstep/Runtime/Navigation` | `Pragma.Lockstep.Navigation`: grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math) and the navigation systems |
-| `Assets/PragmaDOTSLockstep/Runtime/Vision` | `Pragma.Lockstep.Vision`: the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem` and the `LockstepVision` queries |
-| `Assets/PragmaDOTSLockstep/Runtime/Stats` | `Pragma.Lockstep.Stats`: attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
-| `Assets/PragmaDOTSLockstep/Runtime/Views` | `Pragma.Lockstep.Views`: GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool` |
-| `Assets/PragmaDOTSLockstep/Runtime/Netcode` | `Pragma.Lockstep.Netcode`: the RPC and the Netcode server and client systems |
-| `Assets/PragmaDOTSLockstep/Runtime/Netcode/Components` | Server/client config, status and start/end request components |
-| `Assets/PragmaDOTSLockstep/Runtime/Authoring` | `Pragma.Lockstep.Authoring`: bakers |
-| `Assets/PragmaDOTSLockstep/Editor` | Fixed-point drawers, *Window > Pragma > Lockstep Sessions* |
+| `Assets/PragmaDOTSLockstep/Core/Mathematics` | `Pragma.Lockstep.Mathematics` (`Runtime`): `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid`. No Entities dependency. `Pragma.Lockstep.Mathematics.Editor` (`Editor`): fixed-point drawers |
+| `Assets/PragmaDOTSLockstep/Core/Lockstep/Runtime` | `Pragma.Lockstep`, the core assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components`. `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem`. `Spatial`: `LockstepSpatialIndex` |
+| `Assets/PragmaDOTSLockstep/Core/Lockstep/Authoring` | `Pragma.Lockstep.Authoring`: bakers of the core (transforms, prefab registry, scene entities, entity ids) |
+| `Assets/PragmaDOTSLockstep/Core/Lockstep/Editor` | `Pragma.Lockstep.Editor`: *Project Settings > Pragma > Lockstep* (module defines), *Window > Pragma > Lockstep Sessions* |
+| `Assets/PragmaDOTSLockstep/Core/Netcode/Runtime` | `Pragma.Lockstep.Netcode`: the RPC and the Netcode server and client systems; config, status and start/end request components in `Components` |
+| `Assets/PragmaDOTSLockstep/Modules/Navigation` | `PRAGMA_LOCKSTEP_NAVIGATION`. `Pragma.Lockstep.Navigation` (`Runtime`): grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math) and the navigation systems. `Pragma.Lockstep.Navigation.Authoring` (`Authoring`) |
+| `Assets/PragmaDOTSLockstep/Modules/Vision` | `PRAGMA_LOCKSTEP_VISION`. `Pragma.Lockstep.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem` and the `LockstepVision` queries. `Pragma.Lockstep.Vision.Authoring` (`Authoring`) |
+| `Assets/PragmaDOTSLockstep/Modules/Stats` | `PRAGMA_LOCKSTEP_STATS`. `Pragma.Lockstep.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
+| `Assets/PragmaDOTSLockstep/Modules/Views` | `PRAGMA_LOCKSTEP_VIEWS`. `Pragma.Lockstep.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`. `Pragma.Lockstep.Views.Authoring` (`Authoring`) |
+| `Assets/PragmaDOTSLockstep/Utils` | `Pragma.Lockstep.Utils` (`Runtime`): `FixedDictionary4096Bytes`, `OptionalValue`. `Pragma.Lockstep.Utils.Editor` (`Editor`): fixed list and fixed string drawers. `Pragma.Lockstep.Utils.Physics` (`Physics`, only with `com.unity.physics`): `CollisionMatrixToFilter` |
 | `Assets/PragmaDOTSLockstep/Skills~` | Claude Code skills shipped with the package (gameplay, sessions, desync); Unity skips the folder. Read them before writing simulation code |
-| `Assets/Tests/Editor` | `Pragma.Lockstep.Tests.Editor`: the EditMode suite (not shipped); helpers and test components in `Support` |
-| `Assets/Tests/Runtime` | `Pragma.Lockstep.Tests.Runtime`: MonoBehaviours the tests add to GameObjects; Unity refuses components from Editor assemblies |
+| `Assets/Tests/Core/Editor` | `Pragma.Lockstep.Tests.Editor`: the EditMode suite of the core (not shipped); helpers and test components in `Support` |
+| `Assets/Tests/Modules/<Module>/Editor` | `Pragma.Lockstep.<Module>.Tests.Editor`: the suite of a module, compiled only with its define |
+| `Assets/Tests/Modules/Views/Runtime` | `Pragma.Lockstep.Views.Tests.Runtime`: MonoBehaviours the view tests add to GameObjects; Unity refuses components from Editor assemblies |
+| `Assets/Tests/Utils/Editor` | `Pragma.Lockstep.Utils.Tests.Editor`: the suite of the utilities |
 | `Assets/Examples` | *Lockstep Arena* sample (not shipped); its systems run in every simulation world of this project |
 | `documentation.md`, `mebecs_research.md`, `photon_research.md` | Design notes and the research they are based on |
 
@@ -63,6 +60,12 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   list, which is what `ValidateSimulationHash` compares.
 - **Netcode integration** is one hand-serialized RPC (`LockstepPacketRpc`, 1024 bytes) on the reliable channel; the
   framer fragments larger messages. Connections are tracked by entity, not by `NetworkId`.
+- **Modules.** Navigation, vision, stats and views compile only with their define (`defineConstraints`), all off in a
+  new project; this project turns every one on in Player Settings (through *Project Settings > Pragma > Lockstep*).
+  A module depends on the core only, never on another module, so every subset compiles; its bakers live in its own
+  `Authoring` assembly. The core never references a module. `Utils` is the lowest layer: it references neither the
+  core nor Entities. A compiled module's systems join every simulation world and `DefaultSimulationHash`, which is
+  why modules are opt-in.
 - **No managed components** (deprecated in Entities 6.6): running sessions are found through the static
   `LockstepWorlds` registry keyed by `World.SequenceNumber`.
 - **The presentation never writes to the simulation world**, not even a tag or a cleanup component: it would move the
@@ -71,7 +74,9 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   `EntityViewTests.Views_LeaveTheSimulationUntouched` guards it. Local state (selection, hover) stays on the views.
 - **Burst.** Burst-compiled code must not allocate managed arrays (archetypes use `stackalloc ComponentType[] { ... }`).
   Burst falls back to managed code with only a console error, so tests still pass: check the console for
-  "Burst error" after touching Burst code.
+  "Burst error" after touching Burst code. Burst 2.0 also compiled the value 2 of a byte enum nested in a generic
+  struct as 0 without any error (`FixedDictionary4096Bytes` uses byte constants for that reason): code with such
+  enums needs a test that compares a Burst run with a managed one.
 
 ## Code style
 
@@ -115,20 +120,21 @@ unity --no-banner --json command recompile                  # then poll recompil
 unity --no-banner --json command recompile_status           # "completed" / "up_to_date"; errors listed
 unity --no-banner --json command console_status             # compile-failure flag, error and warning counts
 unity --no-banner --json command console --tail 50 --level error
-unity --no-banner --json command --timeout 900 run_tests --mode editor --filter_type assembly --filter Pragma.Lockstep.Tests.Editor
+unity --no-banner --json command --timeout 1500 run_tests --mode editor   # every suite; --filter_type assembly --filter <name> for one
 ```
 
 `recompile` may find the editor already compiled the change: compare the timestamps of
 `Library/ScriptAssemblies/Pragma.Lockstep*.dll`. If a command hangs, `editor_status` reports a blocking modal dialog.
 
 Without a running editor, run the tests in batch mode from a copy of the project (the open editor locks this one):
-`Unity.exe -batchmode -nographics -projectPath <copy> -runTests -testPlatform EditMode -assemblyNames
-Pragma.Lockstep.Tests.Editor -testResults <xml>`. Copies under long temp paths hit the 260-character limit; map them
-to a drive letter with `subst`.
+`Unity.exe -batchmode -nographics -projectPath <copy> -runTests -testPlatform EditMode -testResults <xml>`.
+Copies under long temp paths hit the 260-character limit; map them to a drive letter with `subst`.
 
 ## Tests
 
-- `Assets/Tests/Editor` is the EditMode suite: math accuracy and Burst equality, golden results, serialization,
+- The EditMode suites: `Assets/Tests/Core/Editor` (core), `Assets/Tests/Modules/<Module>/Editor` (each module; the
+  vision suite also needs navigation, its session moves the sources with agents) and `Assets/Tests/Utils/Editor`. They
+  cover math accuracy and Burst equality, golden results, serialization,
   checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session), stats (formula,
   non-stacking modifiers, sources, timed modifiers, resources and caps, changes, grants, enum ids in Burst, change
@@ -136,13 +142,15 @@ to a drive letter with `subst`.
   (latency, jitter, late join, disconnects, desync attribution, replays, commands with large data), presentation,
   GameObject views (component and buffer parts), offline mode and a real Netcode server with two clients (including a command larger than the
   reliable window).
-- The suite reaches internals through `InternalsVisibleTo` in `Runtime/AssemblyInfo.cs`.
-- `Assets/Tests/Editor/AssemblyInfo.cs` has `[assembly: DisableAutoCreation]`: test systems enter simulations only
-  through `LockstepSimulationOptions.AdditionalSystems`. In `Support`, `SessionHarness` runs a server and clients over
-  the loopback network, `FrameBuilder` writes frames by hand in the wire format and `ViewHarness` is a presentation
-  world with the view systems and a runtime catalog.
-- MonoBehaviours a test adds to a GameObject (view parts) go to `Assets/Tests/Runtime`: `AddComponent` refuses scripts
-  from Editor assemblies ("Can't add script behaviour ... because it is an editor script").
+- The suites reach internals through `InternalsVisibleTo` in `Core/Lockstep/Runtime/AssemblyInfo.cs` (and
+  `Utils/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the core suite through its own
+  `AssemblyInfo.cs`. A new test assembly needs its entries there.
+- Every test assembly that declares systems has `[assembly: DisableAutoCreation]` in its `AssemblyInfo.cs`: test
+  systems enter simulations only through `LockstepSimulationOptions.AdditionalSystems`. In the core `Support`,
+  `SessionHarness` runs a server and clients over the loopback network and `FrameBuilder` writes frames by hand in the
+  wire format; `ViewHarness` (views suite) is a presentation world with the view systems and a runtime catalog.
+- MonoBehaviours a test adds to a GameObject (view parts) go to `Assets/Tests/Modules/Views/Runtime`: `AddComponent`
+  refuses scripts from Editor assemblies ("Can't add script behaviour ... because it is an editor script").
 - Settings and configs are structs with properties: never mutate a struct-typed property in place
   (`config.StartData.Add(x)` changes a copy and compiles silently); build a local and assign it.
 - The Netcode integration test disables `LockstepInputSystemGroup` in its worlds, so the sample's input system does

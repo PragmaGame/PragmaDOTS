@@ -27,6 +27,9 @@ server never simulates, and the bandwidth depends on the number of players, not 
   grants to all of its units; recalculated only where something changed.
 - GameObject views adapted from ECV: pooled view prefabs per entity key, per-component parts fed when their component
   changes, interpolated transforms, a pool each project can replace.
+- Modules: navigation, vision, stats and views compile only when their scripting define is on
+  (*Project Settings > Pragma > Lockstep*); the core and the utilities (`FixedDictionary4096Bytes`, `OptionalValue`,
+  fixed list and string inspectors) are always there.
 
 ## Installation
 
@@ -43,10 +46,11 @@ Only `Assets/PragmaDOTSLockstep` ships; everything else is the development proje
 
 | Path | Contents |
 |---|---|
-| `Assets/PragmaDOTSLockstep` | The package: runtime, Netcode integration, authoring, editor tools, Claude Code skills (`Skills~`) |
+| `Assets/PragmaDOTSLockstep` | The package: `Core` (math, protocol, simulation, Netcode), `Modules` (navigation, vision, stats, views), `Utils`, Claude Code skills (`Skills~`) |
 | `Assets/Examples` | *Lockstep Arena*, a playable sample: offline, host and join ([README](Assets/Examples/README.md)) |
-| `Assets/Tests/Editor` | EditMode tests: math, serialization, checksums, simulation, navigation, vision, stats, sessions, presentation, GameObject views, Netcode integration |
-| `Assets/Tests/Runtime` | MonoBehaviours the tests put on GameObjects (Unity cannot add components from Editor assemblies) |
+| `Assets/Tests/Core/Editor` | EditMode tests of the core: math, serialization, checksums, simulation, spatial index, sessions, replays, presentation, Netcode integration |
+| `Assets/Tests/Modules` | EditMode tests of each module (`Navigation`, `Vision`, `Stats`, `Views`), compiled with the module; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
+| `Assets/Tests/Utils/Editor` | EditMode tests of the utilities |
 | [`documentation.md`](documentation.md) | Design notes: architecture, decisions, what was taken from ME.BECS, Photon Quantum and ECV, and why |
 | [`mebecs_research.md`](mebecs_research.md) | How ME.BECS implements determinism and networking |
 | [`photon_research.md`](photon_research.md) | How Photon Quantum implements determinism and prediction/rollback |
@@ -59,12 +63,14 @@ Move with WASD or the left stick, shoot with Space, dash with Shift, change colo
 
 ## Tests
 
-Run the `Pragma.Lockstep.Tests.Editor` assembly in *Window > General > Test Runner > EditMode*, or with the `unity`
-CLI of `com.unity.pipeline` while the editor is open:
+Run the EditMode tests in *Window > General > Test Runner > EditMode*, or with the `unity` CLI of
+`com.unity.pipeline` while the editor is open:
 
 ```bash
-unity command run_tests --mode editor --filter_type assembly --filter Pragma.Lockstep.Tests.Editor
+unity command run_tests --mode editor
 ```
+
+This project has every module on; the module suites compile only with their module.
 
 ## License
 

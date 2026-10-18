@@ -76,7 +76,9 @@ LockstepNetcode.Connect(remote, NetworkEndpoint.Parse(address, 7979));
   `ClientServerBootstrap` subclass, and create worlds on demand as above.
 - **Dedicated server.** Only the server world. Set `MinPlayersToStart` or call `LockstepNetcode.RequestStart` from
   lobby logic. The server compares the clients' `LockstepSimulation.DefaultSimulationHash` with its own, so build it
-  from the same code (or set `ValidateSimulationHash = false`).
+  from the same code and with the same modules (or set `ValidateSimulationHash = false`). The module defines are per
+  build target: a Linux Server target without `PRAGMA_LOCKSTEP_NAVIGATION` refuses Windows clients built with it.
+  *Project Settings > Pragma > Lockstep* writes them to every target.
 - **Thin clients.** `LockstepNetcodeClientSystem` runs in thin client worlds too and forces `Simulate = false`. They
   still need a `LockstepClientConfig`. They send input, never simulate, never report checksums.
 - Keep `TickRate` at or below Netcode's `ClientServerTickRate.SimulationTickRate`: the server closes lockstep ticks
