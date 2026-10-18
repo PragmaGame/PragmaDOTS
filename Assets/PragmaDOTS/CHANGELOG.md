@@ -188,6 +188,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LockstepStat.Resource(type, cap, capPolicy, amount)`: a capped resource that starts with an amount (a building under
   construction, energy that starts empty); the *Amount* of a capped resource in `StatsPart` does the same.
 - `LockstepVision.MAX_RADIUS` (30 000): a larger radius of sight counts as it.
+- Server limits on what a client can make it hold: `MaxMessageSize` (4 MB, the reassembly of fragments),
+  `MaxCommandDataSize` (1 MB), `MaxBufferedCommandBytes` (4 MB per player, commands sent ahead or waiting) and
+  `MaxCommandBytesPerTick` (64 KB per player and frame, so the history grows at a bounded rate). Going beyond one
+  drops the data and raises `ProtocolViolationEvent`. `LockstepPacketFramer` takes a message size limit.
+- `LockstepClient.OnDisconnected()` and `LockstepEndReason.ConnectionLost`; `LockstepClientSettings.Validate()`, which
+  the client calls.
 
 ### Changed
 
@@ -235,6 +241,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blocked no cell at all when it passed between cell centres.
 - A `FixedRandom` left at `default` runs the default sequence from a zero state instead of returning zero forever, and
   `FixedMath.InverseLerp` of an empty range is zero (it saturated, and `Remap` overflowed).
+- `LockstepNetcodeClientSystem` keeps a session whose connection dropped: it ends with `ConnectionLost`, simulates the
+  frames it has and stays registered until the config is removed or a new connection joins (it disposed the session at
+  once, losing the end of a match the server had ended).
+- The server reports a desync once per newly diverged slot instead of on every later checksum round, and takes
+  checksum reports only for ticks on the interval. A client sends at most 32 commands, and about 256 KB of them, per
+  input message.
+- `MaxSendBytesPerUpdate` of zero takes the default (32 KB); it sent no frames at all.
 
 ### Fixed
 
@@ -275,6 +288,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grant), and the second one won when built.
 - `FixedPoint.TryParse` wrapped to a negative value for the largest integer with a fraction that rounds up, and a
   `FixedGrid` with a zero cell size divided by zero.
+- A start message that reached a client after it had left started it again, at tick 0 with no frames to come.
+- A thin client without `RecordReplay` kept every frame of the match.
+- With `MaxInputWaitTicks`, every late join held the frames of all players for about a round trip: the server waited for
+  inputs the joiner could not have sent yet. A player is now waited for once one of its inputs arrived in time.
 
 ### Removed
 

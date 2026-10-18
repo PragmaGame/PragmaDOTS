@@ -18,8 +18,12 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxInputWaitTicks` | 0 | Ticks a frame may wait for missing input; 0 = repeat the previous input immediately |
 | `MaxInputLeadTicks` | 0 | Inputs further ahead are ignored; 0 = four seconds (`EffectiveMaxInputLeadTicks`), at most 4096 |
 | `FeedbackIntervalTicks` | 4 | Ticks between timing feedback messages per client |
-| `MaxSendBytesPerUpdate` | 32 768 | Frame bytes per connection per update (late-join bursts) |
+| `MaxSendBytesPerUpdate` | 32 768 | Frame bytes per connection per update (late-join bursts); 0 = default |
 | `MaxPacketSize` | 1024 | Packet size limit; larger messages are fragmented. At least 64. Netcode caps it at 1024 (the RPC capacity); larger values apply only to custom transports |
+| `MaxMessageSize` | 4 MB | Largest message reassembled from a client; larger = protocol violation, dropped; 0 = default |
+| `MaxCommandDataSize` | 1 MB | Largest data of one command; larger = protocol violation; 0 = default. Must fit `MaxMessageSize` and `MaxBufferedCommandBytes` |
+| `MaxCommandBytesPerTick` | 64 KB | Command bytes of one player per frame; the rest waits, a single larger command goes alone; 0 = default |
+| `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player held by the server (ring and backlog); beyond = protocol violation, dropped; 0 = default |
 | `ValidateSimulationHash` | true | Reject clients whose `LockstepSimulation.DefaultSimulationHash` differs |
 | `StartData` | empty | `FixedList128Bytes<byte>` (126 bytes) for match parameters |
 
@@ -34,9 +38,12 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxTicksPerUpdate` | 60 | Most ticks simulated in one update while catching up |
 | `MaxSimulationMillisecondsPerUpdate` | 16 | Time budget per update while catching up; at least one tick runs |
 | `PingIntervalSeconds` | 0.5 | Round-trip measurement interval |
-| `RecordReplay` | true | Keep all frames for `ExportReplay` |
+| `RecordReplay` | true | Keep all frames for `ExportReplay`; a thin client without it keeps none |
 | `StopOnDesync` | false | Stop simulating after a desync report |
 | `MaxPacketSize` | 1024 | Packet size limit (0 or less means 1024); Netcode caps it at 1024 |
+
+`LockstepClient` validates its settings (`LockstepClientSettings.Validate`): settings never filled in (`default`)
+throw instead of running one tick per update.
 
 The offline mode uses `InputMarginTicks = 0.5` and `PlayoutDelayTicks = 0.5`, since the loopback has no latency.
 

@@ -32,10 +32,27 @@ namespace Pragma.Dots.Lockstep
         [field: SerializeField] public int MaxInputLeadTicks { get; set; }
         /// <summary>Ticks between input timing feedback messages to each client.</summary>
         [field: SerializeField] public int FeedbackIntervalTicks { get; set; }
-        /// <summary>Frame bytes sent to one connection per update; limits late-join catch-up bursts.</summary>
+        /// <summary>Frame bytes sent to one connection per update; limits late-join catch-up bursts. Zero takes 32 KB.</summary>
         [field: SerializeField] public int MaxSendBytesPerUpdate { get; set; }
         /// <summary>Largest packet handed to the transport.</summary>
         [field: SerializeField] public int MaxPacketSize { get; set; }
+        /// <summary>
+        /// The largest message the server reassembles from a client; a larger one is dropped as a protocol violation. Zero
+        /// takes 4 MB.
+        /// </summary>
+        [field: SerializeField] public int MaxMessageSize { get; set; }
+        /// <summary>The largest data of one command; a larger one is a protocol violation. Zero takes 1 MB.</summary>
+        [field: SerializeField] public int MaxCommandDataSize { get; set; }
+        /// <summary>
+        /// Command bytes of one player that go into one frame; the rest waits for the next ticks, and a single larger
+        /// command goes alone. Bounds how fast the frame history grows. Zero takes 64 KB.
+        /// </summary>
+        [field: SerializeField] public int MaxCommandBytesPerTick { get; set; }
+        /// <summary>
+        /// Command bytes of one player the server holds, sent ahead or waiting for a frame; commands beyond it are dropped
+        /// as a protocol violation. Zero takes 4 MB.
+        /// </summary>
+        [field: SerializeField] public int MaxBufferedCommandBytes { get; set; }
         /// <summary>Refuse clients whose <see cref="LockstepSimulation.DefaultSimulationHash"/> differs from this one.</summary>
         [field: SerializeField] public bool ValidateSimulationHash { get; set; }
         /// <summary>Game-defined start parameters, readable in the simulation through <see cref="LockstepSessionInfo"/>.</summary>
@@ -56,11 +73,25 @@ namespace Pragma.Dots.Lockstep
             FeedbackIntervalTicks = 4,
             MaxSendBytesPerUpdate = 32 * 1024,
             MaxPacketSize = LockstepProtocol.DEFAULT_MAX_PACKET_SIZE,
+            MaxMessageSize = 4 * 1024 * 1024,
+            MaxCommandDataSize = 1024 * 1024,
+            MaxCommandBytesPerTick = 64 * 1024,
+            MaxBufferedCommandBytes = 4 * 1024 * 1024,
             ValidateSimulationHash = true,
         };
 
         /// <summary>Effective input lead limit: four seconds when not configured.</summary>
         public int EffectiveMaxInputLeadTicks => MaxInputLeadTicks > 0 ? MaxInputLeadTicks : TickRate * 4;
+
+        public int EffectiveMaxSendBytesPerUpdate => MaxSendBytesPerUpdate > 0 ? MaxSendBytesPerUpdate : 32 * 1024;
+
+        public int EffectiveMaxMessageSize => MaxMessageSize > 0 ? MaxMessageSize : 4 * 1024 * 1024;
+
+        public int EffectiveMaxCommandDataSize => MaxCommandDataSize > 0 ? MaxCommandDataSize : 1024 * 1024;
+
+        public int EffectiveMaxCommandBytesPerTick => MaxCommandBytesPerTick > 0 ? MaxCommandBytesPerTick : 64 * 1024;
+
+        public int EffectiveMaxBufferedCommandBytes => MaxBufferedCommandBytes > 0 ? MaxBufferedCommandBytes : 4 * 1024 * 1024;
 
         public void Validate()
         {
@@ -91,6 +122,17 @@ namespace Pragma.Dots.Lockstep
             if (EffectiveMaxInputLeadTicks > 4096)
             {
                 throw new ArgumentOutOfRangeException(nameof(MaxInputLeadTicks), MaxInputLeadTicks, "The input lead is limited to 4096 ticks.");
+            }
+            if (MaxSendBytesPerUpdate < 0 || MaxMessageSize < 0 || MaxCommandDataSize < 0 || MaxCommandBytesPerTick < 0 || MaxBufferedCommandBytes < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxMessageSize), "Sizes and budgets cannot be negative.");
+            }
+            // A command and its wire form (type hash, payload, data length) have to fit a message and the buffer.
+            var command = EffectiveMaxCommandDataSize + LockstepCommand.MAX_PAYLOAD_SIZE + 16;
+            if (EffectiveMaxMessageSize < command || EffectiveMaxBufferedCommandBytes < command)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxCommandDataSize), MaxCommandDataSize,
+                    "A command with the largest data has to fit the message size and the buffered command bytes.");
             }
         }
     }

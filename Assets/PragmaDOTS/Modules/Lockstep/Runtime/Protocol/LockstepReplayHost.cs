@@ -46,7 +46,8 @@ namespace Pragma.Dots.Lockstep
         {
             Replay = replay ?? throw new ArgumentNullException(nameof(replay));
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            _framer = new LockstepPacketFramer(maxPacketSize);
+            // Viewers only join and ping: a small limit is plenty.
+            _framer = new LockstepPacketFramer(maxPacketSize, 64 * 1024);
             _message = new NativeList<byte>(maxPacketSize * 2, Allocator.Persistent);
         }
 

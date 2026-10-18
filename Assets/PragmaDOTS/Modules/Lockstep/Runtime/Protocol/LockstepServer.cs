@@ -17,6 +17,9 @@ namespace Pragma.Dots.Lockstep
     /// being dropped. Clients get timing feedback and shift their input clock until inputs arrive just in time.</para>
     /// <para>The class is transport-agnostic: feed it with <see cref="OnPacket"/> and connection events, call
     /// <see cref="Update"/> regularly, and it sends through the <see cref="ILockstepTransport"/>.</para>
+    /// <para>What a client can make the server hold is bounded (<see cref="LockstepServerSettings.MaxMessageSize"/>,
+    /// <see cref="LockstepServerSettings.MaxCommandDataSize"/>, <see cref="LockstepServerSettings.MaxBufferedCommandBytes"/>);
+    /// going beyond a limit drops the data and raises <see cref="ProtocolViolationEvent"/>.</para>
     /// </remarks>
     public sealed unsafe class LockstepServer : ILockstepServerEndpoint, IDisposable
     {
@@ -44,6 +47,10 @@ namespace Pragma.Dots.Lockstep
             public float minEarliness = float.MaxValue;
             public int lateDrops;
             public bool hasTiming;
+            // An input arrived before its tick closed: from then on a frame may wait for this player (MaxInputWaitTicks).
+            public bool hasInputInTime;
+            // Bytes of the commands in the ring and the backlog.
+            public int bufferedCommandBytes;
 
             public Slot(int index, int inputSize, int ringSize)
             {
@@ -81,6 +88,8 @@ namespace Pragma.Dots.Lockstep
                 minEarliness = float.MaxValue;
                 lateDrops = 0;
                 hasTiming = false;
+                hasInputInTime = false;
+                bufferedCommandBytes = 0;
             }
         }
 
@@ -116,6 +125,8 @@ namespace Pragma.Dots.Lockstep
         private LockstepSessionConfig _config;
         private double _startTime;
         private int _ticksSinceFeedback;
+        // Slots a desync was reported for: later rounds that only repeat them are not reported again.
+        private ulong _reportedDesyncs;
         private bool _disposed;
 
         public LockstepServer(in LockstepServerSettings settings, ILockstepTransport transport)
@@ -123,7 +134,7 @@ namespace Pragma.Dots.Lockstep
             settings.Validate();
             _settings = settings;
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            _framer = new LockstepPacketFramer(settings.MaxPacketSize);
+            _framer = new LockstepPacketFramer(settings.MaxPacketSize, settings.EffectiveMaxMessageSize);
             _history = new LockstepFrameHistory();
             var ringSize = math.ceilpow2(settings.EffectiveMaxInputLeadTicks + 2);
             _ringMask = ringSize - 1;
@@ -179,7 +190,10 @@ namespace Pragma.Dots.Lockstep
         /// <summary>Inputs that arrived after their tick had closed and were replaced by the previous input.</summary>
         public int LateInputCount { get; private set; }
 
-        /// <summary>Raised when clients disagree about the state at a tick.</summary>
+        /// <summary>
+        /// Raised when clients disagree about the state at a tick: once for the first round a slot disagrees in, and again
+        /// only when another slot starts to disagree.
+        /// </summary>
         public event Action<LockstepDesyncReport> DesyncDetectedEvent;
 
         /// <summary>Raised with a connection id that sent malformed data; the transport may want to drop it.</summary>
@@ -224,8 +238,12 @@ namespace Pragma.Dots.Lockstep
                 return;
             }
             var connection = GetOrAddConnection(connectionId);
-            if (!_framer.Receive(connectionId, data, length, out var message, out var messageLength))
+            if (!_framer.Receive(connectionId, data, length, out var message, out var messageLength, out var isTooLarge))
             {
+                if (isTooLarge)
+                {
+                    ReportViolation(connection, $"a message larger than {_settings.EffectiveMaxMessageSize} bytes");
+                }
                 return;
             }
 
@@ -418,6 +436,7 @@ namespace Pragma.Dots.Lockstep
             }
 
             slot.Reset();
+            _reportedDesyncs &= ~(1UL << slot.index);
             slot.inUse = true;
             slot.pendingJoin = true;
             slot.connectionId = connection.id;
@@ -478,9 +497,14 @@ namespace Pragma.Dots.Lockstep
                     {
                         var start = reader.CurrentPtr;
                         var startPosition = reader.Position;
-                        if (!LockstepCommandWire.TryRead(ref reader, out _, out _, out _, out _, out _))
+                        if (!LockstepCommandWire.TryRead(ref reader, out _, out _, out _, out _, out var dataLength))
                         {
                             break;
+                        }
+                        if (dataLength > _settings.EffectiveMaxCommandDataSize)
+                        {
+                            ReportViolation(connection, $"a command with {dataLength} bytes of data, more than {_settings.EffectiveMaxCommandDataSize}");
+                            return;
                         }
                         var command = new byte[reader.Position - startPosition];
                         fixed (byte* destination = command)
@@ -496,7 +520,7 @@ namespace Pragma.Dots.Lockstep
                     ReportViolation(connection, "malformed input");
                     return;
                 }
-                StoreInput(slot, firstTick + i);
+                StoreInput(connection, slot, firstTick + i);
             }
 
             if (State == LockstepServerState.Running && count > 0)
@@ -508,8 +532,16 @@ namespace Pragma.Dots.Lockstep
             }
         }
 
-        private void StoreInput(Slot slot, int tick)
+        private void StoreInput(Connection connection, Slot slot, int tick)
         {
+            var bytes = CountBytes(_receivedCommands);
+            if (bytes > 0 && slot.bufferedCommandBytes + bytes > _settings.EffectiveMaxBufferedCommandBytes)
+            {
+                ReportViolation(connection, $"more than {_settings.EffectiveMaxBufferedCommandBytes} bytes of commands waiting");
+                _receivedCommands.Clear();
+                bytes = 0;
+            }
+
             var closedTicks = ClosedTicks;
             if (State != LockstepServerState.Running || tick < closedTicks || tick < slot.joinTick ||
                 tick >= closedTicks + _settings.EffectiveMaxInputLeadTicks)
@@ -521,25 +553,40 @@ namespace Pragma.Dots.Lockstep
                 }
                 // The input of that tick is lost, but commands are never dropped: they go to the next frame.
                 slot.pendingCommands.AddRange(_receivedCommands);
+                slot.bufferedCommandBytes += bytes;
                 return;
             }
 
             var index = tick & _ringMask;
             slot.ringTicks[index] = tick;
+            slot.hasInputInTime = true;
             if (_settings.InputSize > 0)
             {
                 Buffer.BlockCopy(slot.lastReceivedInput, 0, slot.ringInputs, index * _settings.InputSize, _settings.InputSize);
             }
             var commands = slot.ringCommands[index];
+            slot.bufferedCommandBytes += bytes - CountBytes(commands);
             commands.Clear();
             commands.AddRange(_receivedCommands);
+        }
+
+        private static int CountBytes(List<byte[]> commands)
+        {
+            var bytes = 0;
+            foreach (var command in commands)
+            {
+                bytes += command.Length;
+            }
+            return bytes;
         }
 
         private void HandleChecksum(Connection connection, ref LockstepByteReader reader)
         {
             var tick = reader.ReadInt();
             var hash = reader.ReadULong();
-            if (reader.HasFailed || connection.slot < 0 || tick < 0 || tick >= ClosedTicks)
+            // Only the ticks clients hash: anything else would open rounds nobody completes.
+            if (reader.HasFailed || connection.slot < 0 || tick < 0 || tick >= ClosedTicks ||
+                _settings.ChecksumInterval <= 0 || tick % _settings.ChecksumInterval != 0)
             {
                 return;
             }
@@ -626,7 +673,9 @@ namespace Pragma.Dots.Lockstep
             var index = tick & _ringMask;
             foreach (var slot in _slots)
             {
-                if (!slot.inUse || slot.pendingLeave || slot.joinTick > tick)
+                // A player whose inputs never arrived in time, such as one that just joined and has not found its timing
+                // yet, is not waited for.
+                if (!slot.inUse || slot.pendingLeave || slot.joinTick > tick || !slot.hasInputInTime)
                 {
                     continue;
                 }
@@ -688,7 +737,7 @@ namespace Pragma.Dots.Lockstep
                     {
                         slot.pendingCommands.AddRange(slot.ringCommands[index]);
                     }
-                    commandCount = Math.Min(slot.pendingCommands.Count, LockstepProtocol.MAX_COMMANDS_PER_TICK);
+                    commandCount = CountCommandsOfTick(slot.pendingCommands);
                     if (commandCount > 0)
                     {
                         flags |= LockstepFrameRecordFlags.Commands;
@@ -732,6 +781,7 @@ namespace Pragma.Dots.Lockstep
                         {
                             writer.WriteBytes(bytes, command.Length);
                         }
+                        slot.bufferedCommandBytes -= command.Length;
                     }
                     slot.pendingCommands.RemoveRange(0, commandCount);
                 }
@@ -754,6 +804,26 @@ namespace Pragma.Dots.Lockstep
             _ticksSinceFeedback++;
         }
 
+        // The oldest commands that go into one frame: at most MAX_COMMANDS_PER_TICK, within the byte budget of a tick, and
+        // always the first one, however large.
+        private int CountCommandsOfTick(List<byte[]> commands)
+        {
+            var budget = _settings.EffectiveMaxCommandBytesPerTick;
+            var count = 0;
+            var bytes = 0;
+            while (count < commands.Count && count < LockstepProtocol.MAX_COMMANDS_PER_TICK)
+            {
+                var size = commands[count].Length;
+                if (count > 0 && bytes + size > budget)
+                {
+                    break;
+                }
+                bytes += size;
+                count++;
+            }
+            return count;
+        }
+
         private void SendFrames()
         {
             foreach (var connection in _connectionOrder)
@@ -762,7 +832,7 @@ namespace Pragma.Dots.Lockstep
                 {
                     continue;
                 }
-                var budget = _settings.MaxSendBytesPerUpdate;
+                var budget = _settings.EffectiveMaxSendBytesPerUpdate;
                 while (connection.nextFrameToSend < ClosedTicks && budget > 0)
                 {
                     budget -= SendFramesMessage(connection);
@@ -915,6 +985,12 @@ namespace Pragma.Dots.Lockstep
 
         private void RaiseDesync(int tick, ulong slotMask)
         {
+            // Once a client diverged every later round disagrees too: report what is new only.
+            if ((slotMask & ~_reportedDesyncs) == 0)
+            {
+                return;
+            }
+            _reportedDesyncs |= slotMask;
             foreach (var connection in _connectionOrder)
             {
                 if (!connection.started)

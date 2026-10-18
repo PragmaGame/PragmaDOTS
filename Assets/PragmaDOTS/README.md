@@ -1160,7 +1160,10 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 - **End.** `RequestEnd` / `server.EndGame(reason)` stops closing ticks and tells everybody;
   `client.EndedEvent` fires, `client.EndReason` says why (`Finished`, or `ServerShutdown` when the server config goes
   away) and the client finishes simulating the frames it already has. Ending in the lobby tells the players waiting
-  there the same way (they never simulate), and later joins are rejected with `GameEnded`.
+  there the same way (they never simulate), and later joins are rejected with `GameEnded`. A client whose connection
+  drops ends with `ConnectionLost` (`client.OnDisconnected()`, which `LockstepNetcodeClientSystem` calls) and also
+  simulates the frames it has, such as the last ones of a match the server ended before it closed the connections; the
+  Netcode session stays registered until its config is removed or a new connection joins again.
 - **Rejection.** `client.RejectedEvent` reports `LockstepJoinRejectReason`: `InvalidRequest`, `ProtocolMismatch`,
   `SimulationMismatch` (a different build), `SessionFull`, `GameInProgress` (late join is off), `GameEnded`.
 
@@ -1187,7 +1190,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `Config`, `Settings` | The session configuration and the server settings |
 | `ClosedTicks`, `PlayerCount`, `History` | Progress, players present, every closed frame |
 | `VerifiedChecksumCount`, `LateInputCount` | Diagnostics |
-| `DesyncDetectedEvent`, `ProtocolViolationEvent` | Events |
+| `DesyncDetectedEvent`, `ProtocolViolationEvent` | Events; a violation (malformed data, or a message or commands over the limits) carries the connection id and the reason, and the data is dropped |
 | `StartGame`, `EndGame`, `ExportReplay`, `TryGetPlayerSlot`, `IsSlotInUse` | Actions and queries |
 
 | `LockstepReplayHost` | |
@@ -1264,7 +1267,8 @@ a 60 ms round trip this is roughly 200 ms, which suits strategy games. Tune it t
   connections.
 - **`MaxInputWaitTicks`** (default 0) on the server: 0 never waits, so a lagging player's previous input repeats and
   only that player feels the lag. A positive value holds a frame up to that many ticks for missing input: classic
-  lockstep, where everybody waits for the slowest player.
+  lockstep, where everybody waits for the slowest player. A player is waited for once one of its inputs arrived in
+  time, so a late joiner that is still finding its timing holds nobody up.
 
 Bandwidth: a frame carries a player's record only when something about that player changed, so idle players cost
 nothing and an active player costs roughly the input size per tick downstream to every client. Upstream, each client
@@ -1289,8 +1293,12 @@ Start from `LockstepServerSettings.Default`. The settings are serializable, so t
 | `MaxInputWaitTicks` | 0 | How long a frame may wait for a missing input; 0 never waits |
 | `MaxInputLeadTicks` | 0 (4 s) | Inputs further ahead are ignored (a broken client clock) |
 | `FeedbackIntervalTicks` | 4 | Ticks between timing feedback messages to each client |
-| `MaxSendBytesPerUpdate` | 32 KB | Frame bytes per connection per update; limits late-join bursts |
+| `MaxSendBytesPerUpdate` | 32 KB | Frame bytes per connection per update; limits late-join bursts (0 takes the default) |
 | `MaxPacketSize` | 1024 | Largest packet handed to the transport; larger messages are fragmented |
+| `MaxMessageSize` | 4 MB | Largest message reassembled from a client; a larger one is dropped as a protocol violation |
+| `MaxCommandDataSize` | 1 MB | Largest data of one command; a larger one is a protocol violation |
+| `MaxCommandBytesPerTick` | 64 KB | Command bytes of one player per frame; the rest waits for the next ticks, a single larger command goes alone |
+| `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player the server holds (sent ahead or waiting); beyond it they are dropped as a protocol violation |
 | `ValidateSimulationHash` | true | Refuse clients whose `DefaultSimulationHash` differs |
 | `StartData` | empty | Up to 126 bytes, readable in the simulation through `LockstepSessionInfo` |
 
@@ -1307,7 +1315,7 @@ Start from `LockstepClientSettings.Default`.
 | `MaxTicksPerUpdate` | 60 | Catch-up limit per update |
 | `MaxSimulationMillisecondsPerUpdate` | 16 | Catch-up time budget per update; at least one tick always runs |
 | `PingIntervalSeconds` | 0.5 | Round-trip measurement interval |
-| `RecordReplay` | true | Keep every frame so the match can be exported |
+| `RecordReplay` | true | Keep every frame so the match can be exported; a thin client without it keeps no frames at all |
 | `StopOnDesync` | false | Stop simulating after a reported desync |
 | `MaxPacketSize` | 1024 | Largest packet handed to the transport |
 
@@ -1338,7 +1346,9 @@ Every `ChecksumInterval` ticks each simulating client hashes its simulation worl
 hash to the server. The server compares the hashes of a tick by majority and broadcasts the result:
 
 - The server raises `DesyncDetectedEvent` with a `LockstepDesyncReport` (`tick`, `slotMask` of the clients that
-  disagree; with no majority, for example two players, every reporter is flagged).
+  disagree; with no majority, for example two players, every reporter is flagged). A diverged client disagrees on every
+  later round too: the server reports a round only when it flags a slot no earlier report did (a new player in the
+  slot counts as new). Hashes are taken only for ticks on the `ChecksumInterval`.
 - Each client raises `DesyncedEvent(tick, isLocalClientAffected)` and logs an error. With `StopOnDesync` it stops
   simulating.
 

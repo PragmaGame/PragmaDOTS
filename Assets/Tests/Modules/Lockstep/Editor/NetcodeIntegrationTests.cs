@@ -144,7 +144,18 @@ namespace Pragma.Dots.Tests
             }
             Tick(60);
             Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(a.Simulation.World.EntityManager));
-            Assert.IsFalse(LockstepNetcode.TryGetClient(clientB, out _), "the disconnected client disposed its session");
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var lost), "the disconnected client keeps its session");
+            Assert.AreEqual(LockstepClientState.Ended, lost.State);
+            Assert.AreEqual(LockstepEndReason.ConnectionLost, lost.EndReason);
+            Assert.AreEqual(lost.ConfirmedTicks, lost.SimulatedTicks, "and simulates the frames it got");
+
+            // Removing the config disposes it.
+            using (var query = clientB.EntityManager.CreateEntityQuery(typeof(LockstepClientConfig)))
+            {
+                clientB.EntityManager.DestroyEntity(query);
+            }
+            Tick(1);
+            Assert.IsFalse(LockstepNetcode.TryGetClient(clientB, out _));
         }
 
         [Test]

@@ -39,5 +39,30 @@ namespace Pragma.Dots.Lockstep
             StopOnDesync = false,
             MaxPacketSize = LockstepProtocol.DEFAULT_MAX_PACKET_SIZE,
         };
+
+        /// <summary>Throws for values a client cannot run with, such as the zeros of settings never filled in.</summary>
+        public void Validate()
+        {
+            if (MaxTicksPerUpdate < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxTicksPerUpdate), MaxTicksPerUpdate, "At least one tick per update.");
+            }
+            if (MaxSimulationMillisecondsPerUpdate <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxSimulationMillisecondsPerUpdate), MaxSimulationMillisecondsPerUpdate, "The time budget must be positive.");
+            }
+            if (PingIntervalSeconds <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(PingIntervalSeconds), PingIntervalSeconds, "The ping interval must be positive.");
+            }
+            if (InputMarginTicks < 0f || PlayoutDelayTicks < 0f || MaxPlayoutDelayTicks < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(InputMarginTicks), "Margins and delays cannot be negative.");
+            }
+            if (MaxPacketSize != 0 && MaxPacketSize < 64)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxPacketSize), MaxPacketSize, "Packets must hold at least 64 bytes (zero takes the default).");
+            }
+        }
     }
 }

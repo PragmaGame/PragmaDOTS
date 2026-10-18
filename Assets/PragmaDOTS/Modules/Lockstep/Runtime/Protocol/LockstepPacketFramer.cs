@@ -9,7 +9,8 @@ namespace Pragma.Dots.Lockstep
     /// </summary>
     /// <remarks>
     /// Each packet starts with one header byte: a complete message, a fragment, or the last fragment.
-    /// The channel is reliable and ordered, so the fragments of one message always arrive back to back.
+    /// The channel is reliable and ordered, so the fragments of one message always arrive back to back. A receiver with a
+    /// message size limit drops a message that grows past it, with the rest of its fragments, instead of buffering it.
     /// </remarks>
     public sealed unsafe class LockstepPacketFramer : IDisposable
     {
@@ -22,19 +23,29 @@ namespace Pragma.Dots.Lockstep
             public NativeList<byte> buffer;
             // The buffer holds a returned message that must stay valid until the next packet.
             public bool holdsCompletedMessage;
+            // The message outgrew the limit: its remaining fragments are dropped.
+            public bool isDiscarding;
         }
 
         private readonly int _maxPacketSize;
+        private readonly int _maxMessageSize;
         private readonly Dictionary<int, Reassembly> _reassembly = new Dictionary<int, Reassembly>();
         private NativeList<byte> _packet;
 
-        public LockstepPacketFramer(int maxPacketSize)
+        /// <param name="maxPacketSize">The largest packet handed to the transport.</param>
+        /// <param name="maxMessageSize">The largest message reassembled from fragments; zero takes any size.</param>
+        public LockstepPacketFramer(int maxPacketSize, int maxMessageSize = 0)
         {
             if (maxPacketSize < 16)
             {
                 throw new ArgumentOutOfRangeException(nameof(maxPacketSize), maxPacketSize, "A packet must hold at least 16 bytes.");
             }
+            if (maxMessageSize < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maxMessageSize), maxMessageSize, "The message size limit cannot be negative.");
+            }
             _maxPacketSize = maxPacketSize;
+            _maxMessageSize = maxMessageSize;
             _packet = new NativeList<byte>(maxPacketSize, Allocator.Persistent);
         }
 
@@ -67,8 +78,16 @@ namespace Pragma.Dots.Lockstep
         /// <returns>False while a fragmented message is incomplete, or when the packet is malformed.</returns>
         public bool Receive(int connectionId, byte* packet, int length, out byte* message, out int messageLength)
         {
+            return Receive(connectionId, packet, length, out message, out messageLength, out _);
+        }
+
+        /// <inheritdoc cref="Receive(int, byte*, int, out byte*, out int)"/>
+        /// <param name="isTooLarge">True on the packet that made a message outgrow the size limit: the sender broke it.</param>
+        public bool Receive(int connectionId, byte* packet, int length, out byte* message, out int messageLength, out bool isTooLarge)
+        {
             message = null;
             messageLength = 0;
+            isTooLarge = false;
 
             _reassembly.TryGetValue(connectionId, out var state);
             if (state != null && state.holdsCompletedMessage)
@@ -94,6 +113,12 @@ namespace Pragma.Dots.Lockstep
                     if (state != null)
                     {
                         state.buffer.Clear();
+                        state.isDiscarding = false;
+                    }
+                    if (_maxMessageSize > 0 && payloadLength > _maxMessageSize)
+                    {
+                        isTooLarge = true;
+                        return false;
                     }
                     message = payload;
                     messageLength = payloadLength;
@@ -105,6 +130,18 @@ namespace Pragma.Dots.Lockstep
                     {
                         state = new Reassembly { buffer = new NativeList<byte>(_maxPacketSize * 2, Allocator.Persistent) };
                         _reassembly.Add(connectionId, state);
+                    }
+                    if (state.isDiscarding)
+                    {
+                        state.isDiscarding = header == FRAGMENT;
+                        return false;
+                    }
+                    if (_maxMessageSize > 0 && state.buffer.Length + payloadLength > _maxMessageSize)
+                    {
+                        state.buffer.Clear();
+                        state.isDiscarding = header == FRAGMENT;
+                        isTooLarge = true;
+                        return false;
                     }
                     if (payloadLength > 0)
                     {
@@ -123,6 +160,7 @@ namespace Pragma.Dots.Lockstep
                     if (state != null)
                     {
                         state.buffer.Clear();
+                        state.isDiscarding = false;
                     }
                     return false;
             }

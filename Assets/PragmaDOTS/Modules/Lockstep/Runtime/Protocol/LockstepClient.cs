@@ -25,6 +25,8 @@ namespace Pragma.Dots.Lockstep
     {
         private const int SERVER_CONNECTION_ID = 0;
         private const float FEEDBACK_IGNORE_SECONDS = 0.25f;
+        // Command bytes per input message, well under the server's default message limit; a larger command goes alone.
+        private const int MAX_COMMAND_BYTES_PER_MESSAGE = 256 * 1024;
 
         private readonly LockstepClientSettings _settings;
         private readonly LockstepSimulationOptions _simulationOptions;
@@ -58,6 +60,7 @@ namespace Pragma.Dots.Lockstep
 
         public LockstepClient(in LockstepClientSettings settings, ILockstepTransport transport, LockstepSimulationOptions simulationOptions = null)
         {
+            settings.Validate();
             _settings = settings;
             _transport = transport ?? throw new ArgumentNullException(nameof(transport));
             _simulationOptions = simulationOptions;
@@ -146,6 +149,22 @@ namespace Pragma.Dots.Lockstep
             BeginMessage(LockstepMessageType.Leave);
             Send();
             State = LockstepClientState.Ended;
+        }
+
+        /// <summary>
+        /// Tells the client that its transport lost the server. A session that has not ended ends with
+        /// <see cref="LockstepEndReason.ConnectionLost"/>; the client goes on simulating the frames it already has, and
+        /// sends nothing more.
+        /// </summary>
+        public void OnDisconnected()
+        {
+            if (State != LockstepClientState.Joining && State != LockstepClientState.Lobby && State != LockstepClientState.Running)
+            {
+                return;
+            }
+            EndReason = LockstepEndReason.ConnectionLost;
+            State = LockstepClientState.Ended;
+            EndedEvent?.Invoke(this);
         }
 
         /// <summary>The input for the ticks generated from now on, as raw bytes.</summary>
@@ -273,6 +292,11 @@ namespace Pragma.Dots.Lockstep
             {
                 AdvanceSimulation(deltaTime * _playbackSpeed);
             }
+            else if (!_settings.Simulate && !_settings.RecordReplay && _frames.Count > 0)
+            {
+                // A thin client never simulates: only the count of confirmed frames matters.
+                _frames.DropBefore(_frames.EndTick);
+            }
         }
 
         /// <summary>The match so far as a replay; needs <see cref="LockstepClientSettings.RecordReplay"/>.</summary>
@@ -326,7 +350,9 @@ namespace Pragma.Dots.Lockstep
             var joinTick = reader.ReadInt();
             var position = reader.ReadDouble();
             reader.ReadInt();
-            if (reader.HasFailed || version != LockstepProtocol.VERSION || State == LockstepClientState.Running)
+            // Only a client waiting to start: one that left already, while the start was on its way, stays out.
+            if (reader.HasFailed || version != LockstepProtocol.VERSION ||
+                (State != LockstepClientState.Joining && State != LockstepClientState.Lobby))
             {
                 return;
             }
@@ -521,7 +547,7 @@ namespace Pragma.Dots.Lockstep
                     for (var i = 0; i < count; i++)
                     {
                         var writeInput = i == 0 && inputChanged;
-                        var commandCount = i == 0 ? Math.Min(_pendingCommands.Count, byte.MaxValue) : 0;
+                        var commandCount = i == 0 ? CountCommandsOfMessage() : 0;
                         var flags = LockstepInputTickFlags.None;
                         if (!writeInput)
                         {
@@ -559,6 +585,25 @@ namespace Pragma.Dots.Lockstep
                     first += count;
                 }
             }
+        }
+
+        // The oldest commands that go into one input message: as many as the server puts into one frame, within a byte
+        // budget, and always the first one; the rest goes with the next message.
+        private int CountCommandsOfMessage()
+        {
+            var count = 0;
+            var bytes = 0;
+            while (count < _pendingCommands.Count && count < LockstepProtocol.MAX_COMMANDS_PER_TICK)
+            {
+                var size = _pendingCommands[count].Length;
+                if (count > 0 && bytes + size > MAX_COMMAND_BYTES_PER_MESSAGE)
+                {
+                    break;
+                }
+                bytes += size;
+                count++;
+            }
+            return count;
         }
 
         private void AdvanceSimulation(double deltaTime)

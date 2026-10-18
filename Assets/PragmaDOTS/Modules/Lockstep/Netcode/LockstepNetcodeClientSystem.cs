@@ -11,7 +11,8 @@ namespace Pragma.Dots.Lockstep.Netcode
     /// </summary>
     /// <remarks>
     /// The session is registered in <see cref="LockstepWorlds"/>, which is where the presentation systems find it.
-    /// Losing the connection ends and disposes the session.
+    /// Losing the connection ends the session (<see cref="LockstepEndReason.ConnectionLost"/>), which still simulates the
+    /// frames it has and stays registered until the config is removed or a new connection joins again.
     /// </remarks>
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ThinClientSimulation)]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
@@ -61,26 +62,42 @@ namespace Pragma.Dots.Lockstep.Netcode
             var hasConfig = SystemAPI.TryGetSingleton<LockstepClientConfig>(out var config);
             var connection = _connectionQuery.CalculateEntityCount() == 1 ? _connectionQuery.GetSingletonEntity() : Entity.Null;
 
-            if (_client != null && (!hasConfig || connection == Entity.Null || connection != _transport.connection))
+            if (_client != null && !hasConfig)
             {
                 // Removing the config on a live connection leaves the session: the server frees the slot, and a new
                 // config can join again over the same connection.
-                if (!hasConfig && connection != Entity.Null && connection == _transport.connection)
+                if (connection != Entity.Null && connection == _transport.connection)
                 {
                     _client.Leave();
                 }
                 Shutdown();
             }
+            if (_client != null && connection != _transport.connection)
+            {
+                if (_transport.connection != Entity.Null)
+                {
+                    // Lost: the session ends, and the frames it has are still simulated (the end of a match the server
+                    // ended before it dropped the connection).
+                    _transport.connection = Entity.Null;
+                    _client.OnDisconnected();
+                }
+                if (connection != Entity.Null)
+                {
+                    // A new connection joins as a new player.
+                    Shutdown();
+                }
+            }
             if (_client == null && hasConfig && connection != Entity.Null)
             {
                 Startup(config, connection);
             }
-            if (_client == null)
+            if (_client == null || _transport.connection == Entity.Null)
             {
                 if (!_receivedQuery.IsEmptyIgnoreFilter)
                 {
                     EntityManager.DestroyEntity(_receivedQuery);
                 }
+                _client?.Update(SystemAPI.Time.ElapsedTime);
                 return;
             }
 

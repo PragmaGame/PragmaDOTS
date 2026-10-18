@@ -97,6 +97,42 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Framer_DropsAMessageOverItsLimit_AndReadsTheNextOne()
+        {
+            var transport = new CapturingTransport();
+            using (var sender = new LockstepPacketFramer(64))
+            using (var receiver = new LockstepPacketFramer(64, 300))
+            {
+                foreach (var size in new[] { 1000, 200, 500, 3 })
+                {
+                    var message = new byte[size];
+                    message[0] = (byte)(size % 251);
+                    fixed (byte* data = message)
+                    {
+                        sender.Send(transport, 3, data, message.Length);
+                    }
+                }
+
+                var received = new List<int>();
+                var tooLarge = 0;
+                foreach (var packet in transport.packets)
+                {
+                    fixed (byte* data = packet.Data)
+                    {
+                        if (receiver.Receive(packet.Connection, data, packet.Data.Length, out _, out var length, out var isTooLarge))
+                        {
+                            received.Add(length);
+                        }
+                        tooLarge += isTooLarge ? 1 : 0;
+                    }
+                }
+
+                CollectionAssert.AreEqual(new[] { 200, 3 }, received, "the rest of a dropped message is not read as another one");
+                Assert.AreEqual(2, tooLarge, "each dropped message is reported once");
+            }
+        }
+
+        [Test]
         public void Framer_FragmentsAndReassemblesLargeMessages()
         {
             var transport = new CapturingTransport();

@@ -280,6 +280,231 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void CommandData_OverTheLimit_IsAProtocolViolation()
+        {
+            var settings = Settings(minPlayers: 1);
+            settings.MaxCommandDataSize = 1024;
+            using (var session = new SessionHarness(settings, latency: 0.03, jitter: 0.02))
+            {
+                var client = session.AddClient();
+                session.Run(1, VaryingInput);
+                var violations = new List<string>();
+                session.Server.ProtocolViolationEvent += (_, reason) => violations.Add(reason);
+
+                LogAssert.Expect(LogType.Warning, new Regex("sent invalid data: a command with 2000 bytes of data"));
+                using (var large = new NativeArray<byte>(2000, Allocator.Temp))
+                {
+                    client.AddCommand(new TestCommand { value = 1 }, large);
+                }
+                session.Run(1, VaryingInput);
+                using (var small = new NativeArray<byte>(800, Allocator.Temp))
+                {
+                    client.AddCommand(new TestCommand { value = 2 }, small);
+                }
+                session.Run(1, VaryingInput);
+
+                Assert.AreEqual(1, violations.Count);
+                var state = TestUtility.PlayerState(client.Simulation, client.LocalSlot);
+                Assert.AreEqual(2, state.commandSum, "only the command within the limit reached a frame");
+                Assert.AreEqual(LockstepClientState.Running, client.State);
+            }
+        }
+
+        [Test]
+        public void Commands_OverTheByteBudgetOfATick_GoIntoTheNextFrames()
+        {
+            var settings = Settings(minPlayers: 1);
+            settings.MaxCommandBytesPerTick = 1000;
+            using (var session = new SessionHarness(settings, latency: 0.03, jitter: 0.02))
+            {
+                var client = session.AddClient();
+                session.Run(1, VaryingInput);
+                for (var i = 0; i < 3; i++)
+                {
+                    using (var data = new NativeArray<int>(150, Allocator.Temp))
+                    {
+                        client.AddCommand(new TestCommand { value = 1 }, data);
+                    }
+                }
+                session.Run(1, VaryingInput);
+
+                var state = TestUtility.PlayerState(client.Simulation, client.LocalSlot);
+                Assert.AreEqual(3, state.commandSum, "every command arrives");
+                Assert.AreEqual(450, state.commandDataCount);
+                var history = session.Server.History;
+                for (var tick = history.FirstTick; tick < history.EndTick; tick++)
+                {
+                    unsafe
+                    {
+                        history.TryGet(tick, out _, out var length);
+                        Assert.Less(length, 1300, $"tick {tick} carries at most two of the 600-byte commands");
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void BufferedCommands_OverTheLimit_AreAProtocolViolation()
+        {
+            var settings = Settings(minPlayers: 1);
+            settings.MaxCommandDataSize = 1024;
+            settings.MaxBufferedCommandBytes = 4096;
+            using (var session = new SessionHarness(settings, latency: 0.03, jitter: 0.02))
+            {
+                var client = session.AddClient();
+                session.Run(1, VaryingInput);
+                var violations = new List<string>();
+                session.Server.ProtocolViolationEvent += (_, reason) => violations.Add(reason);
+
+                LogAssert.Expect(LogType.Warning, new Regex("bytes of commands waiting"));
+                for (var i = 0; i < 10; i++)
+                {
+                    using (var data = new NativeArray<byte>(1000, Allocator.Temp))
+                    {
+                        client.AddCommand(new TestCommand { value = 1 }, data);
+                    }
+                }
+                session.Run(1, VaryingInput);
+
+                Assert.AreEqual(1, violations.Count);
+                Assert.AreEqual(0, TestUtility.PlayerState(client.Simulation, client.LocalSlot).commandSum, "the whole batch is dropped");
+                Assert.AreEqual(LockstepClientState.Running, client.State);
+            }
+        }
+
+        [Test]
+        public void Checksum_OfATickOffTheInterval_IsIgnored()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 1)))
+            {
+                var client = session.AddClient();
+                session.Run(1, VaryingInput);
+                using (var packet = new NativeList<byte>(32, Allocator.Temp))
+                {
+                    var writer = new LockstepByteWriter(packet);
+                    writer.WriteByte(0); // framer header: a complete message
+                    writer.WriteByte((byte)LockstepMessageType.Checksum);
+                    writer.WriteInt(3);
+                    writer.WriteULong(12345);
+                    unsafe
+                    {
+                        session.Server.OnPacket(1, packet.GetUnsafePtr(), packet.Length, session.Time);
+                    }
+                }
+                // Long enough for a round nobody completes to time out.
+                session.Run(6, VaryingInput);
+
+                using (var replay = LockstepReplay.Read(session.Server.ExportReplay()))
+                {
+                    Assert.IsFalse(replay.Checksums.ContainsKey(3));
+                    foreach (var tick in replay.Checksums.Keys)
+                    {
+                        Assert.AreEqual(0, tick % 10, $"tick {tick}");
+                    }
+                }
+                Assert.IsEmpty(session.Desyncs);
+                Assert.IsFalse(client.IsDesynced);
+            }
+        }
+
+        [Test]
+        public void Start_ArrivingAfterLeave_DoesNotStartTheClient()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 2), latency: 0.1))
+            {
+                var leaver = session.AddClient();
+                session.Run(0.5, VaryingInput);
+                Assert.AreEqual(LockstepClientState.Lobby, leaver.State);
+
+                // The second join starts the match; the start is on its way while the first player leaves.
+                session.AddClient();
+                while (session.Server.State != LockstepServerState.Running)
+                {
+                    session.Step(0.01, VaryingInput);
+                }
+                leaver.Leave();
+                session.Run(1, VaryingInput);
+
+                Assert.AreEqual(LockstepClientState.Ended, leaver.State);
+                Assert.IsNull(leaver.Simulation, "no simulation without frames");
+            }
+        }
+
+        [Test]
+        public void ThinClient_WithoutReplay_KeepsNoFrames()
+        {
+            var thin = LockstepClientSettings.Default;
+            thin.Simulate = false;
+            thin.RecordReplay = false;
+            using (var session = new SessionHarness(Settings(minPlayers: 1), latency: 0.03))
+            {
+                var client = session.AddClient(settings: thin);
+                session.Run(2, VaryingInput);
+
+                Assert.AreEqual(LockstepClientState.Running, client.State);
+                Assert.Greater(client.ConfirmedTicks, 40);
+                Assert.Throws<System.InvalidOperationException>(() => client.ExportReplay(), "the frames were dropped");
+            }
+        }
+
+        [Test]
+        public void LateJoiner_DoesNotHoldTheFrames_UnderMaxInputWait()
+        {
+            var settings = Settings(minPlayers: 1);
+            settings.MaxInputWaitTicks = 10;
+            using (var session = new SessionHarness(settings, latency: 0.1, jitter: 0.01))
+            {
+                session.AddClient();
+                session.Run(2, VaryingInput);
+                session.AddClient();
+                var maxLag = 0.0;
+                for (var i = 0; i < 100; i++)
+                {
+                    session.Step(0.01, VaryingInput);
+                    maxLag = System.Math.Max(maxLag, session.Server.GetTickPosition(session.Time) - session.Server.ClosedTicks);
+                }
+
+                Assert.Less(maxLag, 3, "the frames close on time while the joiner's first inputs travel");
+            }
+        }
+
+        [Test]
+        public void LostConnection_EndsTheSession_AndTheClientFinishesItsFrames()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 1), latency: 0.05))
+            {
+                var client = session.AddClient();
+                var ended = 0;
+                client.EndedEvent += _ => ended++;
+                session.Run(2, VaryingInput);
+                Assert.Greater(client.BufferedTicks + client.SimulatedTicks, 0);
+
+                session.Network.DetachClient(1);
+                client.OnDisconnected();
+                Assert.AreEqual(LockstepClientState.Ended, client.State);
+                Assert.AreEqual(LockstepEndReason.ConnectionLost, client.EndReason);
+                Assert.AreEqual(1, ended);
+
+                session.Run(1, VaryingInput);
+                Assert.AreEqual(client.ConfirmedTicks, client.SimulatedTicks, "the frames it had are simulated");
+            }
+        }
+
+        [Test]
+        public void Settings_ThatCannotRun_AreRefused()
+        {
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => default(LockstepClientSettings).Validate(), "settings never filled in");
+            Assert.DoesNotThrow(() => LockstepClientSettings.Default.Validate());
+
+            var server = LockstepServerSettings.Default;
+            server.MaxCommandDataSize = 8 * 1024 * 1024;
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => server.Validate(), "a command larger than a message");
+            server = LockstepServerSettings.Default;
+            server.MaxSendBytesPerUpdate = 0;
+            Assert.AreEqual(32 * 1024, server.EffectiveMaxSendBytesPerUpdate, "zero takes the default");
+        }
+
+        [Test]
         public void Desync_IsDetectedAndAttributedToTheOddClient()
         {
             using (var session = new SessionHarness(Settings(minPlayers: 3), latency: 0.02))
@@ -302,7 +527,7 @@ namespace Pragma.Dots.Tests
                     LogAssert.ignoreFailingMessages = false;
                 }
 
-                Assert.IsNotEmpty(session.Desyncs);
+                Assert.AreEqual(1, session.Desyncs.Count, "reported once, not again on every later round");
                 Assert.AreEqual(1UL << odd.LocalSlot, session.Desyncs[0].slotMask);
                 Assert.IsTrue(odd.IsDesynced);
                 Assert.IsTrue(a.IsDesynced, "every client is told");

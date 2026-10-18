@@ -23,8 +23,9 @@ placed actors), `pragma-lockstep-sessions` (settings, replays, debug window). `r
 
 - Every `ChecksumInterval` ticks (server setting, default 60) each simulating client hashes its simulation world with
   `LockstepChecksum.Compute` and sends it. The server compares the hashes of a tick by majority.
-- On disagreement the server raises `DesyncDetectedEvent(LockstepDesyncReport { tick, slotMask })`; every client
-  raises `DesyncedEvent(tick, isLocalClientAffected)` and logs
+- On disagreement the server raises `DesyncDetectedEvent(LockstepDesyncReport { tick, slotMask })`, once per newly
+  diverged slot (later rounds that repeat it are not reported); every client raises
+  `DesyncedEvent(tick, isLocalClientAffected)` and logs
   `[Lockstep] Desync detected at tick T (slots mask 0x..), including this client.`. With two players there is no
   majority, so both are flagged. With `LockstepClientSettings.StopOnDesync` (off by default) the client stops
   simulating.
