@@ -48,23 +48,23 @@ namespace Pragma.Lockstep
         }
 
         /// <summary>
-        /// Simulation options that copy this world's prefab registry and scene entities (<see cref="LockstepSceneEntity"/>)
-        /// into every simulation world.
+        /// Simulation options that copy this world's actor registry and scene entities (<see cref="LockstepSceneEntity"/>,
+        /// the placed actors) into every simulation world.
         /// </summary>
-        public static LockstepSimulationOptions CreateSimulationOptions(World presentationWorld, bool waitForPrefabRegistry)
+        public static LockstepSimulationOptions CreateSimulationOptions(World presentationWorld, bool waitForActorRegistry)
         {
             var options = new LockstepSimulationOptions
             {
                 WorldName = $"Lockstep Simulation ({presentationWorld.Name})",
                 Initialize = simulationWorld =>
                 {
-                    LockstepPrefabUtility.CopyRegistry(presentationWorld.EntityManager, simulationWorld.EntityManager);
-                    LockstepPrefabUtility.CopySceneEntities(presentationWorld.EntityManager, simulationWorld.EntityManager);
+                    LockstepActorUtility.CopyRegistry(presentationWorld.EntityManager, simulationWorld.EntityManager);
+                    LockstepActorUtility.CopySceneEntities(presentationWorld.EntityManager, simulationWorld.EntityManager);
                 },
             };
-            if (waitForPrefabRegistry)
+            if (waitForActorRegistry)
             {
-                options.CanCreate = () => presentationWorld.IsCreated && LockstepPrefabUtility.HasRegistry(presentationWorld.EntityManager);
+                options.CanCreate = () => presentationWorld.IsCreated && LockstepActorUtility.HasRegistry(presentationWorld.EntityManager);
             }
             return options;
         }

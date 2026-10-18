@@ -43,12 +43,12 @@ The offline mode uses `InputMarginTicks = 0.5` and `PlayoutDelayTicks = 0.5`, si
 ## `LockstepOfflineConfig`
 
 `Create<TInput>(tickRate = 30)` sets `tickRate`, `maxPlayers = 1`, `inputSize`. Other fields: `seed`,
-`checksumInterval`, `startData`, `joinData`, `waitForPrefabRegistry`. The offline server starts as soon as the local
+`checksumInterval`, `startData`, `joinData`, `waitForActorRegistry`. The offline server starts as soon as the local
 player joins (no countdown, no late join).
 
 ## `LockstepClientConfig` (Netcode client worlds)
 
-`settings` (`LockstepClientSettings`), `joinData` (`FixedList64Bytes<byte>`), `waitForPrefabRegistry`.
+`settings` (`LockstepClientSettings`), `joinData` (`FixedList64Bytes<byte>`), `waitForActorRegistry`.
 
 ## `LockstepServerConfig` (Netcode server worlds)
 

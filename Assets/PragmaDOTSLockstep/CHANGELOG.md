@@ -8,6 +8,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Actors: game objects of the simulation described in assets. An `ActorDefinition` has a key (`FixedString32Bytes`), a
+  set of tags, a parent it inherits tags and parts from, and parts (`ActorPart`, serialized by reference) that add the
+  components when the actor is built; an own part replaces the parent's part of its type. An `ActorCatalog` lists the
+  types, baked by `ActorCatalogAuthoring` into the actor registry (`LockstepActorRegistry` with `LockstepActorType` and
+  `LockstepActorTagName` buffers: a prefab entity per type and the tag table, up to 128 tags as `LockstepActorTagSet`
+  bits) that is copied into every simulation world. `LockstepActors` finds types by key, instantiates them and checks
+  tags; `LockstepActor { key, type }` is on every actor. `ActorAuthoring` places an actor on a map with overriding parts:
+  it bakes into a scene entity whose type is found by key when it is copied in. `LockstepActorUtility.CreateRegistry`
+  and `CreatePlaced` build the same content at run time, without subscenes, through the same parts. Parts:
+  `TransformPart`, `EntityIdPart`, `ActorComponentPart<T>` and `ActorBufferPart<T>` for any type with
+  `[ActorComponent]`, and in the modules `NavAgentPart`, `NavObstaclePart`, `NavAvoidancePart`, `NavGridPart`,
+  `VisionSourcePart`, `VisionGridPart`, `ViewPart`. Inspectors show inherited parts with *Override*, a part menu and the
+  project's tags; the catalog inspector lists what would break the registry. With the Views module, placed actors are
+  previewed with their views in the scene and in prefab mode (*Tools > Pragma > Lockstep > Actor View Previews*).
+
 - Modules: navigation, vision, stats and GameObject views compile only with their scripting define symbol
   (`PRAGMA_LOCKSTEP_NAVIGATION`, `PRAGMA_LOCKSTEP_VISION`, `PRAGMA_LOCKSTEP_STATS`, `PRAGMA_LOCKSTEP_VIEWS`), all off
   after installation. *Project Settings > Pragma > Lockstep* turns them on and off on every build target at once and
@@ -25,7 +40,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cells a square around a point touches in the same order on every client.
 
 - Turning on the spot (`Pragma.Lockstep.Navigation`): `LockstepNavAgent.turnInPlaceAngle` (*Turn In Place Angle* of
-  `LockstepNavAgentAuthoring`, degrees). An agent that faces further than that from where its path leads stands and turns
+  `NavAgentPart`, degrees). An agent that faces further than that from where its path leads stands and turns
   at its angular speed, and walks on once it faces within it, as a tracked vehicle does; with avoidance it picks no
   velocity while it turns. `LockstepNavAgent.MustTurnInPlace`.
 
@@ -58,14 +73,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it walks at. `LockstepNavAgent.Replan` plans the path again keeping the destination and the group.
 - `NavigationPerformanceTests`, run by name: navigation of 1200 agents on a 256 by 256 grid.
 - Local avoidance (`Pragma.Lockstep.Navigation`): while the world has a `LockstepNavAvoidance` (time horizon, neighbour
-  distance, how many neighbours; `LockstepNavAvoidanceAuthoring` bakes it, `Default` suits units walking a few units
+  distance, how many neighbours; `NavAvoidancePart` adds it, `Default` suits units walking a few units
   per second), `LockstepNavAvoidanceSystem` picks the velocity of every walking agent with a `LockstepNavVelocity` and
   a radius in a parallel Burst job: sampled around the velocity that walks its path and scored by how soon it would
   touch its nearest neighbours (found in a spatial hash; walking ones take half of the avoiding), capped so agents
   never wait or turn back and push through crowds they cannot go around. `LockstepNavMoveSystem` walks that velocity,
   slides along walls and plans the path again when a wall hides the next waypoint. Without the singleton agents walk
-  exactly as before. `LockstepNavVelocity.value` records what an agent walked on its last step;
-  `LockstepNavAgentAuthoring` bakes the component.
+  exactly as before. `LockstepNavVelocity.value` records what an agent walked on its last step; `NavAgentPart` adds
+  the component.
 - `LockstepNavigation.TryStep`: where a step may end without entering a blocked cell (whole, along X, or along Z);
   pushes of `LockstepNavSeparationSystem` use it.
 - Vision (`Pragma.Lockstep.Vision`): what every player slot sees, as simulation state. `LockstepVisionGrid` (a grid of
@@ -73,15 +88,15 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is filled again on every tick by `LockstepVisionSystem`, last in the tick, from the `LockstepVisionSource`s (a radius
   and the slot it sees for) at their transforms; a cell is visible when a circle of sight reaches into it.
   `LockstepVision` answers `IsVisible` (a point, or a body seen by its edge), `IsCellVisible` and `GetPlane` (to draw a
-  slot's fog of war). `LockstepVisionGridAuthoring` and `LockstepVisionSourceAuthoring` bake them.
+  slot's fog of war). `VisionGridPart` and `VisionSourcePart` add them.
 - `FixedGrid` (`Pragma.Lockstep.Mathematics`): the cell math of a rectangle of square cells on the XZ plane (which cell
   holds a position, cell corners and centres, indices), shared by the navigation and the vision grids;
   `LockstepNavGrid.Layout` and `LockstepVisionGrid.Layout` return it.
 - Ground heights for navigation: `LockstepNavHeight`, a buffer of world Y at every cell corner of the grid, and
   `LockstepNavGrid.maxSlope`, the steepest walkable slope. Agents walk on the ground (`LockstepNavMoveSystem`,
   `LockstepNavSeparationSystem`), cells steeper than the limit are blocked for good, and `LockstepNavigation` answers
-  `HasHeights`, `GetHeight`, `ToGround` and `IsSteep`. `LockstepNavGridAuthoring` bakes the heights from a `TerrainData`
-  (its world Y and the slope limit in degrees) and previews the steep cells. The package now depends on
+  `HasHeights`, `GetHeight`, `ToGround` and `IsSteep`. `NavGridPart` samples the heights in fixed point from a
+  `TerrainData` (its world Y and the slope limit in degrees) and previews the steep cells. The package now depends on
   `com.unity.modules.terrain`.
 
 - GameObject views (`Pragma.Lockstep.Views`), adapted from ECV (Entity Component View): `EntityView` prefabs with
@@ -91,7 +106,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `EntityBufferViewUpdateSystem<T>` when their component or buffer changes and by `TransformViewUpdateSystem` with
   interpolated transforms. Nothing is written to the simulation world.
 - View catalogs: `EntityViewConfig`, baked with `EntityViewConfigAuthoring` (skipped for dedicated servers) or
-  registered at runtime with `EntityViewConfigProvider` / `EntityViewConfigs`; `EntityViewKeyAuthoring` bakes keys.
+  registered at runtime with `EntityViewConfigProvider` / `EntityViewConfigs`; `ViewPart` gives actors their keys.
 - Pool abstraction: `IEntityViewPool`, chosen per project with `EntityViewManagerSystem.PoolFactory` or per world with
   `EntityViewManagerSystem.Pool`; `EntityViewPool` is the default.
 - `EntityViewManager`: views by entity, `Attach`/`Detach` for views the caller owns (HUD panels), `ForceUpdate`.
@@ -102,18 +117,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LockstepTransformExtensions.TryGetInterpolated`: reads and interpolates the transform of a simulation entity with the
   rule both view systems use.
 - The sample shows its avatars and projectiles with GameObject views.
-- Scene entities: `LockstepSceneEntityAuthoring` marks the objects of a subscene that every simulation world starts
-  with (buildings, resource nodes, spawn markers). `LockstepClientWorldUtility.CreateSimulationOptions` copies them,
-  with their linked entities, after the prefab registry and before tick 0, in an order baked from the objects'
-  identities (`LockstepSceneEntity.order`), so the result does not depend on the order subscenes loaded in.
-  `LockstepPrefabUtility.CopySceneEntities` does the copy for custom flows.
+- Scene entities: the actors placed on a map (`ActorAuthoring`), which every simulation world starts with
+  (buildings, resource nodes, spawn markers). `LockstepClientWorldUtility.CreateSimulationOptions` copies them, with
+  their linked entities, after the actor registry and before tick 0, in an order baked from the objects' identities
+  (`LockstepSceneEntity.order`), so the result does not depend on the order subscenes loaded in.
+  `LockstepActorUtility.CopySceneEntities` does the copy for custom flows.
 - Navigation (`Pragma.Lockstep.Navigation`): a walkability grid (`LockstepNavGrid` with its `LockstepNavCell`
   buffer), obstacles (`LockstepNavObstacle`) that block cells while their entity exists, A* with string pulling in
   integer math (`LockstepPathfinder`, queries in `LockstepNavigation`) and agents (`LockstepNavAgent`,
   `LockstepNavWaypoint`) that walk their paths in `FixedPoint`, plan in parallel and plan again when an obstacle
   blocks their way. `LockstepNavSystemGroup` runs `LockstepNavObstacleSystem`, `LockstepNavPathSystem` and
-  `LockstepNavMoveSystem`; `LockstepNavGridAuthoring`, `LockstepNavObstacleAuthoring` and `LockstepNavAgentAuthoring`
-  bake them, and selecting a grid previews the cells the obstacles block. An agent standing still on a cell that becomes
+  `LockstepNavMoveSystem`; `NavGridPart`, `NavObstaclePart` and `NavAgentPart` add them, and selecting a placed grid
+  previews the cells the obstacles block. An agent standing still on a cell that becomes
   blocked (a building placed on top of it, a unit spawned or stopped inside one) walks to the nearest walkable cell.
   `LockstepNavigation.IsClear` tells whether a footprint could be stamped without touching a blocked cell (where a
   building may be placed); `Covers` and `GetCoverage` give the cells a footprint blocks, for footprints not stamped
@@ -145,10 +160,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Package layout: `Core` (`Mathematics`, `Lockstep`, `Netcode`), `Modules` (`Navigation`, `Vision`, `Stats`, `Views`)
   and `Utils`, each with `Runtime`, `Authoring` and `Editor` folders as needed. Namespaces and runtime assembly names
   are unchanged.
-- `Pragma.Lockstep.Authoring` keeps the bakers of the core (transforms, the prefab registry, scene entities, entity
-  ids). The bakers of the modules moved to `Pragma.Lockstep.Navigation.Authoring`, `Pragma.Lockstep.Vision.Authoring`
-  and `Pragma.Lockstep.Views.Authoring`; reference those from assemblies that use them. Their namespace stays
-  `Pragma.Lockstep.Authoring`.
+- Authoring is done with actors: the authoring components of the core and of the modules became parts, and
+  `Pragma.Lockstep.Authoring` holds `ActorCatalogAuthoring` and the actor bakers. `Pragma.Lockstep.Views.Authoring`
+  keeps `EntityViewConfigAuthoring`.
+- The prefab registry is the actor registry: `waitForPrefabRegistry` is `waitForActorRegistry`
+  (`LockstepOfflineConfig`, `LockstepClientConfig`, `LockstepNetcode.JoinSession`,
+  `LockstepClientWorldUtility.CreateSimulationOptions`), `LockstepPrefabUtility` is `LockstepActorUtility`, and
+  `LockstepViewSystem` mirrors actors by `LockstepActor.type`.
+- Navigation grids sample terrains in fixed point (bilinear over the raw heightmap) and take the slope limit through
+  `FixedMath.Tan`, so a grid built at run time is the same on every machine; heights differ slightly from the float
+  sampling before.
 - The fixed-point drawers moved to `Pragma.Lockstep.Mathematics.Editor`.
 
 - Protocol version 2: a command on the wire ends with its data length and data. Clients, servers and replays of
@@ -177,6 +198,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `LockstepPrefabRegistry`, `LockstepPrefabElement`, `LockstepPrefabId`, `LockstepPrefabRegistryAuthoring`: actors and
+  the actor catalog replace them.
+- `LockstepTransformAuthoring`, `LockstepEntityIdAuthoring`, `LockstepSceneEntityAuthoring`, `EntityViewKeyAuthoring`,
+  `LockstepNavGridAuthoring`, `LockstepNavObstacleAuthoring`, `LockstepNavAgentAuthoring`,
+  `LockstepNavAvoidanceAuthoring`, `LockstepVisionGridAuthoring`, `LockstepVisionSourceAuthoring`, and the
+  `Pragma.Lockstep.Navigation.Authoring` and `Pragma.Lockstep.Vision.Authoring` assemblies: use the parts
+  (`TransformPart`, `EntityIdPart`, `ActorAuthoring`, `ViewPart`, `NavGridPart`, `NavObstaclePart`, `NavAgentPart`,
+  `NavAvoidancePart`, `VisionGridPart`, `VisionSourcePart`).
 - `LockstepClient.AddCommand(in LockstepCommand)`: use `AddCommand<T>(payload)`, `AddCommand<T, TData>(payload, data)`
   or the `LockstepCommand` buffer of the local input entity.
 

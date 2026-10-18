@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
@@ -34,6 +35,25 @@ namespace Pragma.Lockstep.Tests
         }
 
         public static void Step(LockstepSimulation simulation) => Step(simulation, new FrameBuilder().Build());
+
+        /// <summary>An actor registry of <paramref name="prefabs"/>, types "test0", "test1"..., as a catalog would build it.</summary>
+        public static Entity CreateRegistry(EntityManager entityManager, params Entity[] prefabs)
+        {
+            var types = new LockstepActorType[prefabs.Length];
+            for (var i = 0; i < prefabs.Length; i++)
+            {
+                var key = new FixedString32Bytes($"test{i}");
+                entityManager.AddComponentData(prefabs[i], new LockstepActor { key = key, type = i });
+                types[i] = new LockstepActorType { key = key, prefab = prefabs[i] };
+            }
+            var registry = entityManager.CreateEntity(typeof(LockstepActorRegistry), typeof(LockstepActorType), typeof(LockstepActorTagName));
+            var buffer = entityManager.GetBuffer<LockstepActorType>(registry);
+            foreach (var type in types)
+            {
+                buffer.Add(type);
+            }
+            return registry;
+        }
 
         public static int Count<T>(EntityManager entityManager) where T : unmanaged, IComponentData
         {

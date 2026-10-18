@@ -18,8 +18,8 @@ namespace Pragma.Lockstep
         public int checksumInterval;
         public FixedList128Bytes<byte> startData;
         public FixedList64Bytes<byte> joinData;
-        /// <summary>Wait until a prefab registry exists in this world before creating the simulation.</summary>
-        public bool waitForPrefabRegistry;
+        /// <summary>Wait until an actor registry exists in this world before creating the simulation.</summary>
+        public bool waitForActorRegistry;
 
         public static LockstepOfflineConfig Create<TInput>(int tickRate = 30) where TInput : unmanaged
         {

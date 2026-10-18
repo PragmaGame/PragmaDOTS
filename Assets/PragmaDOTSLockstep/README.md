@@ -17,6 +17,7 @@ simulated entities.
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
 - [Writing the simulation](#writing-the-simulation)
+- [Actors](#actors)
 - [Determinism rules](#determinism-rules)
 - [Fixed-point math](#fixed-point-math)
 - [Navigation](#navigation)
@@ -58,6 +59,10 @@ It is a poor fit for:
 - **Modules.** The core is the protocol, the simulation world, fixed-point math and the Netcode integration.
   Navigation, vision, stats and GameObject views are modules, each compiled only when its scripting define is on
   (*Project Settings > Pragma > Lockstep*), so a game carries and runs only what it uses.
+- **Actors.** Units, buildings and map objects are described in assets without code: an `ActorDefinition` with a key,
+  tags and parts (its transform, a path-finding agent, any component of the game), inheriting from a parent. A catalog
+  makes them the types the simulation spawns by key, maps place them with overrides, and the editor previews them with
+  their views. The same parts bake into subscenes or build at run time.
 - **Isolated simulation world.** A plain Entities `World` that changes only one confirmed tick at a time. Gameplay
   systems opt in by living in `LockstepSimulationSystemGroup`; they are never created in the default, client or
   server worlds.
@@ -95,8 +100,8 @@ It is a poor fit for:
   without simulating.
 - **Presentation.** GameObject views adapted from ECV (Entity Component View): a pooled prefab per entity key, one
   view part per component type fed when that component changes, transforms interpolated between ticks, and a pool each
-  project can replace (com.pragma.pool, Addressables...). `LockstepViewSystem` mirrors entities into Entities Graphics
-  copies of the baked registry prefabs, and anything else can read the simulation world directly.
+  project can replace (com.pragma.pool, Addressables...). `LockstepViewSystem` mirrors actors into Entities Graphics
+  copies of their type's prefab, and anything else can read the simulation world directly.
 - **Utilities.** `FixedDictionary4096Bytes` (a hash map that fits in a component), `OptionalValue`, inspectors for
   fixed lists and fixed strings, and `CollisionMatrixToFilter` for projects with Unity Physics.
 - **Tooling.** Fixed-point inspectors, the *Project Settings > Pragma > Lockstep* modules page, the
@@ -132,7 +137,7 @@ Reference the assemblies you use from your assembly definitions. The core and th
 | `Pragma.Lockstep.Mathematics` | `FixedPoint`, vectors, quaternion, `FixedMath`, `FixedRandom`; no Entities dependency | simulation and presentation code |
 | `Pragma.Lockstep` | Protocol, simulation world, components, checksums, replays, offline mode, presentation helpers | simulation and presentation code |
 | `Pragma.Lockstep.Netcode` | Netcode for Entities RPC and the server and client systems | bootstrap code |
-| `Pragma.Lockstep.Authoring` | Bakers for transforms, the prefab registry, scene entities and entity ids | authoring code, if any |
+| `Pragma.Lockstep.Authoring` | `ActorCatalogAuthoring` and the bakers of the actor catalog and of placed actors | authoring code, if any |
 | `Pragma.Lockstep.Utils` | `FixedDictionary4096Bytes`, `OptionalValue`; no Entities dependency | any code |
 | `Pragma.Lockstep.Utils.Physics` | `CollisionMatrixToFilter`; compiled only when the project has `com.unity.physics` | presentation code |
 
@@ -144,13 +149,13 @@ the page writes the define to every build target at once.
 
 | Module | Define | Assemblies | Reference them from |
 |---|---|---|---|
-| Navigation | `PRAGMA_LOCKSTEP_NAVIGATION` | `Pragma.Lockstep.Navigation`: the walkability grid, obstacles, agents, `LockstepPathfinder` and the navigation systems; `Pragma.Lockstep.Navigation.Authoring`: bakers of the grid, obstacles, agents and avoidance | simulation code; authoring code |
-| Vision | `PRAGMA_LOCKSTEP_VISION` | `Pragma.Lockstep.Vision`: the vision grid, vision sources, `LockstepVisionSystem` and the `LockstepVision` queries; `Pragma.Lockstep.Vision.Authoring`: bakers of the grid and sources | simulation code, and presentation code that draws the fog of war; authoring code |
+| Navigation | `PRAGMA_LOCKSTEP_NAVIGATION` | `Pragma.Lockstep.Navigation`: the walkability grid, obstacles, agents, `LockstepPathfinder`, the navigation systems and their actor parts | simulation code |
+| Vision | `PRAGMA_LOCKSTEP_VISION` | `Pragma.Lockstep.Vision`: the vision grid, vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and their actor parts | simulation code, and presentation code that draws the fog of war |
 | Stats | `PRAGMA_LOCKSTEP_STATS` | `Pragma.Lockstep.Stats`: attributes, resources, modifiers, changes and grants, `LockstepStatSystem` and the `LockstepStats` helpers | simulation code, and presentation code that shows stats |
-| Views | `PRAGMA_LOCKSTEP_VIEWS` | `Pragma.Lockstep.Views`: `EntityView`, view parts, `EntityViewKey`, the view manager, catalogs, the pool abstraction; `Pragma.Lockstep.Views.Authoring`: bakers of view catalogs and view keys | presentation code, and simulation code that sets an `EntityViewKey`; authoring code |
+| Views | `PRAGMA_LOCKSTEP_VIEWS` | `Pragma.Lockstep.Views`: `EntityView`, view parts, `EntityViewKey`, the view manager, catalogs, the pool abstraction, the `ViewPart` of actors; `Pragma.Lockstep.Views.Authoring`: `EntityViewConfigAuthoring`; `Pragma.Lockstep.Views.Editor`: the actor view previews | presentation code, and simulation code that sets an `EntityViewKey`; authoring code |
 
-The modules depend on the core only, never on each other. Their authoring components keep the namespace
-`Pragma.Lockstep.Authoring`.
+The modules depend on the core only, never on each other. Their actor parts are in their runtime assemblies, so they
+build at run time as well as in subscenes.
 
 Why defines rather than references alone: Unity compiles every assembly of a package, and a compiled module's systems
 join every simulation world (they carry the simulation filter) and enter `LockstepSimulation.DefaultSimulationHash`.
@@ -372,7 +377,7 @@ if (LockstepWorlds.TryGetClient(presentationWorld, out var client) && client.Sim
 ```
 
 Or let the package spawn and move views for you: GameObject prefabs bound to an `EntityViewKey`
-([GameObject views](#gameobject-views)), or Entities Graphics copies of the registry prefabs (`LockstepViewSystem`).
+([GameObject views](#gameobject-views)), or Entities Graphics copies of the actor prefabs (`LockstepViewSystem`).
 
 ## Writing the simulation
 
@@ -401,7 +406,7 @@ group, give it `[WorldSystemFilter(LockstepWorldFilter.SIMULATION)]`, or pass it
 | `LockstepSessionInfo` | `seed`, `tickRate`, `maxPlayers`, `inputSize`, `startData`; `GetStartData<T>()` |
 | `LockstepRandom` | `value`, an `FixedRandom` seeded from the session seed |
 | `LockstepPlayerSlot` (buffer) | Player entity of every slot, `Entity.Null` when free |
-| `LockstepPrefabElement` (buffer) | Prefab registry copied from the presentation world (when there is one) |
+| `LockstepActorRegistry` | The actor types (`LockstepActorType` buffer: key, prefab, tags) and the tag table (`LockstepActorTagName` buffer), copied from the presentation world; read them with `LockstepActors` |
 | `LockstepEntityIdMap` | Id to entity lookup, rebuilt at the end of every tick |
 | `LockstepEntityIdCounter` | Last id handed out |
 
@@ -547,20 +552,16 @@ foreach (var (player, commands, commandData) in
   .CreateCommandBuffer(state.WorldUnmanaged)` (or the `Begin` variant for the start of the next tick).
 - In parallel jobs, record with a parallel writer and use `[ChunkIndexInQuery]` as the sort key, so playback order
   does not depend on thread timing.
-- Prefabs: put a `LockstepPrefabRegistryAuthoring` in a subscene of the client (or local) world. The registry is
-  copied into every simulation world; instantiate with
-  `state.EntityManager.Instantiate(SystemAPI.GetSingletonBuffer<LockstepPrefabElement>(true)[index].prefab)`.
-  The registry entity always exists in the simulation world, but it is empty when the presentation world had no
-  baked registry when the simulation was created: start the session with `waitForPrefabRegistry`, and check the
-  buffer length before indexing.
-- Scene entities: what a map starts with (buildings, resource nodes, spawn markers) is placed in that subscene like
-  any scene object and gets a `LockstepSceneEntityAuthoring`. The built-in systems copy every `LockstepSceneEntity` of
-  the presentation world (with its linked entities) into the simulation before tick 0, sorted by an order baked from
-  the object's identity in its scene, so every client starts from the same entities, in archetypes created in the same
-  order, whatever order its subscenes loaded in. References between scene entities are kept; references to anything else, registry prefabs included,
-  become `Entity.Null`, so a scene entity names a prefab by registry index or by a key of your own. Only GameObject
-  views show scene entities: `LockstepViewSystem` mirrors registry instances only, and the presentation world keeps
-  its own inert copy of the baked entity.
+- Actors: spawn the types of the actor catalog by key (`LockstepActors`, see [Actors](#actors)). The registry always
+  exists in the simulation world, but it is empty when the presentation world had none when the simulation was
+  created: start the session with `waitForActorRegistry` when the catalog is baked into a subscene.
+- Scene entities: what a map starts with (buildings, resource nodes, spawn markers) is placed as actors
+  (`ActorAuthoring`). The built-in systems copy every `LockstepSceneEntity` of the presentation world (with its linked
+  entities) into the simulation before tick 0, sorted by an order baked from the object's identity in its scene, so
+  every client starts from the same entities, in archetypes created in the same order, whatever order its subscenes
+  loaded in. References between scene entities are kept; references to anything else, actor prefabs included, become
+  `Entity.Null`, so a scene entity names an actor type by key. The presentation world keeps its own inert copy of the
+  baked entity.
 
 ### Referring to entities
 
@@ -572,7 +573,7 @@ be *data* that affects the result: never sort by it, hash it, seed randomness wi
 For identities that must match across clients, use `LockstepEntityId`:
 
 ```csharp
-// Add it when creating the entity (or bake it with LockstepEntityIdAuthoring).
+// Add it when creating the entity (or give the actor an Entity Id part).
 state.EntityManager.AddComponent<LockstepEntityId>(unit);
 
 // Ids are assigned at the end of the creation tick, starting at 1 and never reused.
@@ -646,12 +647,158 @@ using (var index = new LockstepSpatialIndex(positions, cellSize: 8, maxCells: 1 
   everywhere; local effects belong to the presentation.
 - Other worlds. And nothing outside the lockstep systems may write to the simulation world.
 
+## Actors
+
+An actor is a game object of the simulation: a unit, a building, a capture point, the map itself. A game designer
+describes it in an asset, without code: a key, tags, and parts that give it its components. The types the simulation
+spawns are listed in a catalog, and maps place actors with values of their own.
+
+| Type | What it is |
+|---|---|
+| `ActorDefinition` | Asset (*Create > Pragma > Lockstep > Actor Definition*): `Key` (unique, 1 to 29 bytes of UTF-8: "rifleman"), `Parent`, tags ("unit", "player") and parts. A derived definition inherits its parent's tags and parts; its own part replaces the parent's part of the same type. A new definition starts with a Transform and an Entity Id part |
+| `ActorPart` | A piece of an actor that adds its components when the actor is built. An actor has one part of each type |
+| `ActorCatalog` | Asset (*Create > Pragma > Lockstep > Actor Catalog*): the actor types; the index is the type. Only add at the end once a game has shipped. All its definitions share at most 128 tags |
+| `ActorCatalogAuthoring` | Bakes a catalog into the actor registry of the presentation world: a prefab entity per definition and the tag table. Put it in a subscene of the client (or local) world |
+| `ActorAuthoring` | An actor placed on a map: a definition at the pose of the GameObject, with parts of its own that override the definition's |
+| `LockstepActor` | On the root entity of every actor: `key` and `type` (the index in the registry; -1 for a key no type has) |
+| `LockstepActors` | The registry of a world: `TryGetType(key)`, `GetKey`, `GetPrefab`, `Instantiate`, `TryGetTag(name)`, `HasTag`, `GetTags` |
+| `LockstepActorUtility` | Builds the registry and placed actors at run time (`CreateRegistry`, `CreatePlaced`), and copies them into a simulation world |
+
+### Parts
+
+| Part | Module | Adds |
+|---|---|---|
+| Transform (`TransformPart`) | core | `LockstepTransform`: the pose of a placed actor, identity on the prefab of a type (spawning code places it); with *Interpolate*, `LockstepTransformPrevious` |
+| Entity Id (`EntityIdPart`) | core | `LockstepEntityId` |
+| Navigation/Agent, Obstacle, Avoidance, Grid | Navigation | See [Navigation](#navigation) |
+| Vision/Source, Grid | Vision | See [Vision](#vision) |
+| View (`ViewPart`) | Views | `EntityViewKey`: the actor's key, unless the part names another; see [GameObject views](#gameobject-views) |
+
+A component or buffer element of the game becomes a part without code: give the type `[ActorComponent]` (and
+`[Serializable]`, so Unity keeps its values). The part menu lists it, and the inspector edits its fields; `FixedPoint`
+fields show as numbers.
+
+```csharp
+[Serializable, ActorComponent("Combat/Health")]
+public struct Health : IComponentData
+{
+    public FixedPoint current;
+    public FixedPoint max;
+}
+```
+
+A part with logic (several components, values worked out from others, references to other actors) derives from
+`ActorPart`. `IActorBuilder` is the actor being built: its `Key`, whether it `IsPlaced` and its `Placement`
+(`PlacementScale` for a non-uniform scale), `HasPart<T>()`, `AddComponent`, `AddBuffer` (fill the buffer before adding
+anything else), `SetComponentEnabled`, `DependsOn` (bake again when an asset changes). `DrawGizmos` draws the part of a
+placed actor in the scene view.
+
+```csharp
+[Serializable, ActorPartMenu("Combat/Weapon")]
+public sealed class WeaponPart : ActorPart
+{
+    [SerializeField] private FixedPoint _range = 10;
+    [SerializeField] private ActorDefinition _projectile;
+
+    public override void Build(IActorBuilder builder)
+    {
+        builder.AddComponent(new Weapon { range = _range, projectile = new FixedString32Bytes(_projectile != null ? _projectile.Key : "") });
+    }
+}
+```
+
+The same `Build` runs when a subscene bakes and when actors are built at run time, so it must give the same result from
+the same data on every machine: keep `FixedPoint` fields rather than floats, and read only the part's data and the
+builder. Parts are serialized by reference: renaming or moving a part class loses its data unless the class gets
+`[UnityEngine.Scripting.APIUpdating.MovedFrom]`.
+
+### Editing
+
+The inspector of a definition shows the tags and parts it inherits, greyed, with *Override* to copy a part and change
+it; its own parts have *Remove* (or *Revert* for an override). *Add Part* lists every part type (an inherited type is
+added as an override), *Add Tag* lists the tags of the project's definitions. The catalog inspector shows the tag
+table and what would break the registry: keys that are empty, too long or taken twice, too many tags, empty parts.
+
+### Spawning and tags
+
+```csharp
+[UpdateInGroup(typeof(LockstepSimulationSystemGroup))]
+public partial struct ReinforcementSystem : ISystem
+{
+    public void OnUpdate(ref SystemState state)
+    {
+        var actors = LockstepActors.Get(ref state);
+        if (!actors.TryGetType("rifleman", out var rifleman) || !actors.TryGetTag("unit", out var unit))
+        {
+            return;
+        }
+
+        var spawned = actors.Instantiate(state.EntityManager, rifleman);
+        state.EntityManager.SetComponentData(spawned, LockstepTransform.FromPosition(new FixedVector3(10, 0, 0)));
+
+        // Structural changes invalidate the registry read before them: read it again.
+        actors = LockstepActors.Get(ref state);
+        foreach (var actor in SystemAPI.Query<RefRO<LockstepActor>>())
+        {
+            if (actors.HasTag(actor.ValueRO, unit))
+            {
+                // ...
+            }
+        }
+    }
+}
+```
+
+`LockstepActors` reads the registry in place and is Burst-compatible; pass it to jobs. Look keys and tags up once and
+keep the type indices and `LockstepActorTag` handles: a check is then an array read and a bit test. Instantiate with an
+`EntityCommandBuffer` too (`Instantiate(commandBuffer, type)`).
+
+### Placing actors on a map
+
+Put a GameObject with an `ActorAuthoring` into the subscene of the map, choose its definition and override what differs
+on this map: the owner slot of a main building, the radius of a capture point. It bakes into a scene entity that every
+simulation world starts with, built from its parts at the pose of the GameObject; its type comes from the registry by
+key when it is copied in (a key no type has leaves it with type -1 and no tags, with a warning). Keep renderers off its
+GameObject: the baked entity is copied whole into the simulation, and the view shows it.
+
+A special entity can also be a definition of its own, derived from the common one and listed in the catalog ("main
+building of map 1"), and a prefab with an `ActorAuthoring` is a preset to drop into maps: Unity's prefab overrides work
+on its parts.
+
+### View previews
+
+With the Views module, a placed actor with a View part shows its view in the scene and in prefab mode: the view bound to
+its key in the `EntityViewConfig` assets of the project. The actor is built from its parts in a scratch world and its
+components go to the view's parts, so the preview runs the game's view code (a team colour, a level, a size). The
+preview is never saved; in an open subscene it lives outside the subscene so that it is not baked, and picking it
+selects the actor. *Tools > Pragma > Lockstep > Actor View Previews* turns previews off. A view part written for bound
+views (one that reads `View.Client`) may not run in edit mode: the preview logs a warning once and skips it.
+
+### Without subscenes
+
+The registry and placed actors can be built at run time, from the same assets, before the session starts:
+
+```csharp
+var entityManager = clientWorld.EntityManager;
+LockstepActorUtility.CreateRegistry(entityManager, catalog);
+for (var i = 0; i < level.Actors.Count; i++)
+{
+    var entry = level.Actors[i];
+    LockstepActorUtility.CreatePlaced(entityManager, entry.Definition, entry.Placement, new FixedVector3(1, 1, 1), entry.Overrides, (ulong)i);
+}
+// Or the ActorAuthoring objects of a scene loaded without baking: CreatePlaced(entityManager, authoring, order).
+```
+
+Every client must build the same content: the same catalog and the same placements in the same order (the order
+argument). The parts are deterministic for that: terrains, for instance, are sampled in fixed point.
+
 ## Determinism rules
 
 The package makes the plumbing deterministic; the gameplay code has to keep it that way.
 
 1. **No `float` or `double` in simulation logic.** Use `FixedPoint` and `FixedMath`. Convert authoring values once, at bake time
-   (`LockstepTransformAuthoring` does it), and quantize input on the client. Unity Physics and `Unity.Mathematics` float math
+   (actor parts keep `FixedPoint` fields; a placed actor's transform is converted once), and quantize input on the
+   client. Unity Physics and `Unity.Mathematics` float math
    are not deterministic across platforms and compilers.
 2. **Time and randomness come from the simulation.** `LockstepTime`, `LockstepRandom` or an `FixedRandom` stored in a
    component.
@@ -787,8 +934,8 @@ larger than the grid's agent radius kept out of gaps they do not fit through, on
 together, and optional avoidance that steers walking agents around each other and paths around crowds. NavMesh cannot
 drive gameplay in lockstep: it works in floats, is built per platform and answers differently on different machines.
 
-A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_NAVIGATION`. The bakers are in
-`Pragma.Lockstep.Navigation.Authoring`.
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_NAVIGATION`. Its [actor parts](#parts) are under *Navigation*
+in the part menu.
 
 | Type | What it is |
 |---|---|
@@ -804,22 +951,21 @@ A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_NAVIGATION`. The bakers a
 
 ### Setting it up
 
-1. Add a `LockstepNavGridAuthoring` to the subscene of the map (it brings a `LockstepSceneEntityAuthoring`): the size
-   in world units, centred on the GameObject, the cell size and the agent radius. For ground that is not flat, give it
-   the `TerrainData` of the map, the world Y of the terrain and the steepest walkable slope in degrees: the terrain is
-   sampled at every cell corner when the subscene bakes, and editing it bakes the grid again. Place the terrain so that
-   it covers the grid exactly (its corner at the grid's corner, its size the grid's size); Entities Graphics does not
-   draw terrains, so the terrain object itself stays in the main scene. Selecting the grid previews the cells the
-   obstacles of the open scenes block (red) and the steep ground blocks (yellow).
-2. Give obstacles a `LockstepNavObstacleAuthoring`. On a prefab with a `LockstepTransformAuthoring` the rectangle moves
-   and turns with the entity (buildings spawned from the registry). On a static map object, add a
-   `LockstepSceneEntityAuthoring`: the pose is baked, non-uniform scale included. Scene entities are copied whole into
-   the simulation, so keep renderers off the obstacle's GameObject (a child works).
-3. Give units a `LockstepNavAgentAuthoring` (next to a `LockstepTransformAuthoring`), with the radius of their body if
-   they should not stand inside each other. It bakes a `LockstepNavVelocity` too, so they can avoid each other. Set the
-   grid's agent radius to that of the common units; larger bodies (vehicles) keep to cells with room for them.
-4. For units that steer around each other, add a `LockstepNavAvoidanceAuthoring` to the subscene of the map, or add the
-   `LockstepNavAvoidance` singleton from settings of your own (a match option) before tick 0. Remove it to turn
+1. Place an actor for the map (`ActorAuthoring`) with a *Navigation/Grid* part: the size in world units, centred on
+   the actor, the cell size and the agent radius. For ground that is not flat, give it the `TerrainData` of the map,
+   the world Y of the terrain and the steepest walkable slope in degrees: the terrain is sampled in fixed point at every
+   cell corner when the actor is built, and editing it bakes the grid again. Place the terrain so that it covers the
+   grid exactly (its corner at the grid's corner, its size the grid's size); Entities Graphics does not draw terrains,
+   so the terrain object itself stays in the main scene. Selecting the actor previews the cells the obstacles of the
+   open scenes block (red) and the steep ground blocks (yellow).
+2. Give obstacles a *Navigation/Obstacle* part. On an actor with a Transform part the rectangle moves and turns with
+   it (buildings spawned from the catalog). On an actor without one (a wall placed on the map) the pose of the
+   placement is kept, non-uniform scale included.
+3. Give units a *Navigation/Agent* part (with a Transform part), with the radius of their body if they should not stand
+   inside each other. It adds a `LockstepNavVelocity` too, so they can avoid each other. Set the grid's agent radius to
+   that of the common units; larger bodies (vehicles) keep to cells with room for them.
+4. For units that steer around each other, add a *Navigation/Avoidance* part to the map's actor, or add the
+   `LockstepNavAvoidance` singleton from settings of your own (a match option) before tick 0. Leave it out to turn
    avoidance off: agents then walk exactly as without it.
 5. Set destinations from a system that updates before `LockstepNavSystemGroup`; the agent plans its path and takes its
    first step on the same tick. Send the agents of one order with `SetDestination(destination, groupGoal)`, each to its
@@ -953,7 +1099,8 @@ plane per slot, filled again on every tick from the entities that see. Vision is
 client computes the same planes, so rules may depend on it (orders only on targets the player sees, units that hide
 until detected, the AI) and the presentation draws the fog of war from it.
 
-A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VISION`. The bakers are in `Pragma.Lockstep.Vision.Authoring`.
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VISION`. Its [actor parts](#parts) are under *Vision* in the
+part menu.
 
 | Type | What it is |
 |---|---|
@@ -964,12 +1111,11 @@ A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VISION`. The bakers are i
 
 ### Setting it up
 
-1. Add a `LockstepVisionGridAuthoring` to the subscene of the map (it brings a `LockstepSceneEntityAuthoring`): the size
-   in world units, centred on the GameObject, usually the area of the navigation grid, and the cell size, which is how
-   fine the edge of the fog is (a few world units).
-2. Give whatever sees a `LockstepVisionSourceAuthoring` (next to a `LockstepTransformAuthoring`) with its radius. The
-   baked slot is -1: set `slot` where the entity gets its owner, and keep `radius` current from gameplay if sight can
-   change (research, abilities):
+1. Give the map's actor a *Vision/Grid* part: the size in world units, centred on the actor, usually the area of the
+   navigation grid, and the cell size, which is how fine the edge of the fog is (a few world units).
+2. Give whatever sees a *Vision/Source* part (with a Transform part) with its radius. The slot it starts with is -1: set
+   `slot` where the actor gets its owner, and keep `radius` current from gameplay if sight can change (research,
+   abilities):
 
 ```csharp
 [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]
@@ -1163,7 +1309,7 @@ public partial struct SpeedStatSystem : ISystem
 var config = LockstepOfflineConfig.Create<GameInput>(tickRate: 30);
 config.seed = 42;                   // zero picks a random seed
 config.checksumInterval = 0;        // nothing to compare against offline
-config.waitForPrefabRegistry = true; // when the simulation instantiates registry prefabs
+config.waitForActorRegistry = true; // when a subscene bakes the actor catalog
 world.EntityManager.CreateSingleton(config);
 ```
 
@@ -1181,14 +1327,14 @@ sides.
 | Call | Effect |
 |---|---|
 | `HostSession(serverWorld, settings)` | Hosts a session (replaces the config if one exists) |
-| `JoinSession(clientWorld, settings, joinData, waitForPrefabRegistry)` | Joins as soon as the world is connected |
+| `JoinSession(clientWorld, settings, joinData, waitForActorRegistry)` | Joins as soon as the world is connected |
 | `Listen(serverWorld, endpoint)`, `Connect(clientWorld, endpoint)` | `NetworkStreamDriver.Listen` / `Connect` |
 | `RequestStart(serverWorld)` | Starts the match on the next server update with whoever joined |
 | `RequestEnd(serverWorld, reason)` | Ends the match |
 | `TryGetServer(serverWorld, out server)`, `TryGetClient(clientWorld, out client)` | The running session objects |
 
 The same can be done with components: create `LockstepServerConfig { settings }` or
-`LockstepClientConfig { settings, joinData, waitForPrefabRegistry }`, create an entity with
+`LockstepClientConfig { settings, joinData, waitForActorRegistry }`, create an entity with
 `LockstepStartGameRequest` or `LockstepEndGameRequest { reason }`, and read the `LockstepServerStatus` singleton
 (`state`, `closedTicks`, `playerCount`) in the server world.
 
@@ -1290,11 +1436,13 @@ carries that entity's capture.
 with one MonoBehaviour *part* per component type that receives the component when it changes. Use it for what Entities
 Graphics does not draw well: animators, VFX, health bars, selection rings, world-space UI.
 
-A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VIEWS`. The bakers are in `Pragma.Lockstep.Views.Authoring`.
+A [module](#modules): turn it on with `PRAGMA_LOCKSTEP_VIEWS`. `EntityViewConfigAuthoring` is in
+`Pragma.Lockstep.Views.Authoring`.
 
 1. **Give entities a key.** `EntityViewKey` (a `FixedString32Bytes`, 1 to 29 bytes of UTF-8) names the view that shows
-   an entity. It is simulation data like any other: set it where the entity is created, or bake it on a registry prefab
-   with `EntityViewKeyAuthoring`. Changing it swaps the view.
+   an entity. It is simulation data like any other: give an actor a View part (the key is the actor's own unless the
+   part names another, and the editor previews the actor with that view), or set it where the entity is created.
+   Changing it swaps the view.
 
    ```csharp
    var knight = state.EntityManager.CreateEntity(_knightArchetype); // the archetype includes EntityViewKey
@@ -1450,18 +1598,11 @@ EntityViewManagerSystem.PoolFactory = world => new PragmaPoolEntityViewPool(pool
 
 `LockstepViewSystem` runs in presentation worlds and mirrors the simulation into rendered entities:
 
-1. Make prefabs with your rendering components, an `LockstepTransformAuthoring` (*Interpolate* on) and the authoring
-   components of your simulation data.
-2. Put a GameObject with `LockstepPrefabRegistryAuthoring` listing the prefabs into a subscene loaded by the client
-   (or local) world. The index in the list is the prefab id; only append to it once a game has shipped.
-3. Pass `waitForPrefabRegistry: true` (`JoinSession`, `LockstepOfflineConfig.waitForPrefabRegistry`) so the
-   simulation world is created only after the subscene has loaded.
-4. In the simulation, instantiate `SystemAPI.GetSingletonBuffer<LockstepPrefabElement>(true)[index].prefab`. The
-   copies in the simulation world carry `LockstepPrefabId`.
-
-For every simulation entity with a `LockstepPrefabId`, the view system instantiates the same registry prefab in the
-presentation world, adds `LockstepView { simulationEntity }`, writes the interpolated `LocalTransform` every frame and
-destroys the view when the simulation entity goes away. `TryGetView(simulationEntity, out view)` finds a view.
+For every simulation actor (`LockstepActor`), the view system instantiates the prefab of its type from the actor
+registry of the presentation world, adds `LockstepView { simulationEntity }`, writes the interpolated `LocalTransform`
+every frame and destroys the view when the actor goes away. `TryGetView(simulationEntity, out view)` finds a view. The
+prefab shows only what its parts gave it: a part that adds rendering components (and a Transform part with
+*Interpolate*) makes actors drawn this way; most games use GameObject views instead.
 
 ### Reading the simulation directly
 
@@ -1569,7 +1710,7 @@ Start from `LockstepClientSettings.Default`.
 ### `LockstepOfflineConfig`
 
 `Create<TInput>(tickRate)` fills `tickRate`, `maxPlayers = 1` and `inputSize`. The other fields are `seed`,
-`checksumInterval`, `startData`, `joinData` and `waitForPrefabRegistry`.
+`checksumInterval`, `startData`, `joinData` and `waitForActorRegistry`.
 
 ### `LockstepSimulationOptions`
 
@@ -1583,9 +1724,9 @@ Used when you create a `LockstepClient`, `LockstepSimulation` or `LockstepReplay
 | `Initialize` | none | Runs once before tick 0 (for example to copy content in); must do the same on every client |
 | `CanCreate` | none | Gate checked before the world is created; frames keep buffering meanwhile |
 
-`LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, waitForPrefabRegistry)` builds the options the
-built-in systems use: they copy the prefab registry and the scene entities of the presentation world into the
-simulation world.
+`LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, waitForActorRegistry)` builds the options the
+built-in systems use: they copy the actor registry and the scene entities (placed actors) of the presentation world
+into the simulation world.
 
 ## Desync detection and debugging
 
@@ -1628,8 +1769,8 @@ Keep simulation singletons on ordinary entities so they are covered.
    }
    ```
 
-   *Log state hashes* in the debug window prints the same list for a running client. When the simulation
-   instantiates registry prefabs, pass the options the game uses
+   *Log state hashes* in the debug window prints the same list for a running client. When the simulation spawns
+   actors, pass the options the game uses
    (`LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, false)`) so the registry is copied in.
 3. Look for the usual causes in the systems that write that component: float math, `Entity` values used as data,
    hash map iteration, parallel writes, state outside components, local-only branches.
@@ -1692,7 +1833,7 @@ session.Dispose();           // unregisters the clients
 
 For checks without a presentation, `LockstepReplayPlayer` simulates the frames directly: call `player.Update(deltaTime)`
 every frame (`Speed` scales playback) and present `player.Simulation.World` with `player.InterpolationAlpha`, or
-`SimulateToEnd()`. When the simulation instantiates registry prefabs, create the player with the options the game uses:
+`SimulateToEnd()`. When the simulation spawns actors, create the player with the options the game uses:
 `new LockstepReplayPlayer(replay, LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, false))`.
 
 A replay plays back only with the same build of the simulation: the same systems in the same order, and the same
@@ -1744,8 +1885,9 @@ public void TwoClients_StayInSync()
 ```
 
 - Pass `new LockstepSimulationOptions { AutoDiscoverSystems = false, AdditionalSystems = new[] { typeof(MySystem) } }`
-  to the clients to test a few systems in isolation. A simulation that instantiates registry prefabs needs a registry
-  in tests too: create one in `LockstepSimulationOptions.Initialize`.
+  to the clients to test a few systems in isolation. A simulation that spawns actors needs a registry in tests too:
+  build one from a catalog with `LockstepActorUtility.CreateRegistry` in a presentation world and pass
+  `LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, false)`.
 - Compare `a.LocalChecksums` with `b.LocalChecksums` for a per-tick assertion.
 - Keep a replay of a real match as a test asset and assert that `SimulateToEnd()` returns -1: it fails as soon as a
   change alters the simulation, which also tells you that old replays stopped working.
@@ -1822,14 +1964,15 @@ that form and relays the bytes without decoding them.
 | `Core/Lockstep/Runtime/Simulation/Components` | The simulation components and singletons (`LockstepTime`, `LockstepPlayer`, `LockstepCommand`...) |
 | `Core/Lockstep/Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries |
 | `Core/Lockstep/Runtime/Transforms` | `LockstepTransform`, `LockstepTransformPrevious`, transform history |
-| `Core/Lockstep/Runtime/Client` | Local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem` |
-| `Core/Lockstep/Authoring` | `Pragma.Lockstep.Authoring`: bakers of transforms, the prefab registry, scene entities and entity ids |
-| `Core/Lockstep/Editor` | `Pragma.Lockstep.Editor`: the modules page, the debug window |
+| `Core/Lockstep/Runtime/Client` | Local input, `LockstepWorlds`, offline mode, `LockstepViewSystem` |
+| `Core/Lockstep/Runtime/Actors` | `ActorDefinition`, `ActorCatalog`, `ActorPart` and the core parts, `ActorAuthoring`, `LockstepActors`, `LockstepActorUtility`; the actor components in `Components` |
+| `Core/Lockstep/Authoring` | `Pragma.Lockstep.Authoring`: `ActorCatalogAuthoring` and the actor bakers |
+| `Core/Lockstep/Editor` | `Pragma.Lockstep.Editor`: the actor inspectors, the modules page, the debug window |
 | `Core/Netcode/Runtime` | `Pragma.Lockstep.Netcode`: the RPC, server and client systems, `LockstepNetcode`; config, status and request components in `Components` |
-| `Modules/Navigation` | `Runtime`: `Pragma.Lockstep.Navigation`; `Authoring`: `Pragma.Lockstep.Navigation.Authoring` |
-| `Modules/Vision` | `Runtime`: `Pragma.Lockstep.Vision`; `Authoring`: `Pragma.Lockstep.Vision.Authoring` |
+| `Modules/Navigation` | `Runtime`: `Pragma.Lockstep.Navigation`, its parts in `Parts` |
+| `Modules/Vision` | `Runtime`: `Pragma.Lockstep.Vision`, its parts in `Parts` |
 | `Modules/Stats` | `Runtime`: `Pragma.Lockstep.Stats` |
-| `Modules/Views` | `Runtime`: `Pragma.Lockstep.Views`; `Authoring`: `Pragma.Lockstep.Views.Authoring` |
+| `Modules/Views` | `Runtime`: `Pragma.Lockstep.Views`, the `ViewPart`; `Authoring`: `Pragma.Lockstep.Views.Authoring`; `Editor`: `Pragma.Lockstep.Views.Editor`, the view previews |
 | `Utils/Runtime` | `Pragma.Lockstep.Utils`: `FixedDictionary4096Bytes`, `OptionalValue` |
 | `Utils/Editor` | `Pragma.Lockstep.Utils.Editor`: drawers of fixed lists and fixed strings |
 | `Utils/Physics` | `Pragma.Lockstep.Utils.Physics`: `CollisionMatrixToFilter` |
@@ -1872,13 +2015,15 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dotsloc
 | "The input set on the client is N bytes but the session input size is M bytes" | `InputSize` does not match the struct written with `LockstepLocalInput.Set` |
 | The match never starts | `MinPlayersToStart` is higher than the number of players; call `RequestStart` |
 | Nothing moves although the session runs | The gameplay systems are not in `LockstepSimulationSystemGroup`, or no system writes `LockstepLocalInput` |
-| Entities Graphics copies do not appear | No `LockstepPrefabRegistryAuthoring` in the presentation world, the entity was not instantiated from the registry, or the simulation started before the subscene loaded (`waitForPrefabRegistry`) |
+| Entities Graphics copies do not appear | No actor registry in the presentation world, the entity is not an actor, its type's prefab has no rendering components, or the simulation started before the subscene loaded (`waitForActorRegistry`) |
+| An actor type is missing or has no tags | It is not in the catalog the registry was built from, its key is empty or too long, or the catalog uses more than 128 tags (the catalog inspector lists the errors) |
+| A placed actor's view does not show in the editor | The Views module is off, the actor has no View part, no `EntityViewConfig` asset binds its key, or previews are turned off (*Tools > Pragma > Lockstep > Actor View Previews*) |
 | GameObject views do not appear | The entity has no `EntityViewKey`, no catalog binds its key (keys are case-sensitive), or the catalog was baked into a subscene that did not load into this world: register it with `EntityViewConfigProvider` |
-| A map object is missing from the simulation | It has no `LockstepSceneEntityAuthoring`, it sits in another subscene than the registry, or the session started without `waitForPrefabRegistry` |
+| A map object is missing from the simulation | It has no `ActorAuthoring` or no definition, its subscene had not loaded when the session started (`waitForActorRegistry`), or its definition has no valid key |
 | A GameObject view misses a component | No `EntityViewUpdateSystem<T>` subclass for that type, or the part sits under a nested `EntityView` |
 | A GameObject view does not move | No `TransformComponentView` on it, or the entity has no `LockstepTransform`; without `LockstepTransformPrevious` it moves in steps |
 | Agents do not move | The agent has no `LockstepTransform` or `LockstepNavWaypoint` buffer, its speed is zero, or the destination was set after `LockstepNavSystemGroup` updated (it starts on the next tick) |
-| Agents walk through an obstacle | The obstacle is not in the simulation world (a static map object needs `LockstepSceneEntityAuthoring`), lies outside the grid, or is thinner than a cell with an agent radius of zero |
+| Agents walk through an obstacle | The obstacle is not in the simulation world (a static map object must be a placed actor), lies outside the grid, or is thinner than a cell with an agent radius of zero |
 | Agents stop short of the destination | `isPathPartial`: the destination is blocked or walled in, and the path ends at the closest reachable point |
 | A stat keeps its old value | The modifier names another stat or a resource (resources take `LockstepStatChange`s), the change names an attribute, the receiver lacks the grant's `LockstepStatTarget` or a `LockstepStatGrantor` naming the granting entity, or it was added after `LockstepStatSystem` updated (it applies from the next tick) |
 | A capped resource stays empty or ignores its cap | The entity has no attribute of the `cap` type, so the resource is uncapped; bake the cap attribute in the same buffer |

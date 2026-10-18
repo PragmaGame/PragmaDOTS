@@ -12,7 +12,7 @@ namespace Pragma.Lockstep.Netcode
         public LockstepClientSettings settings;
         /// <summary>Game-defined data that reaches the simulation in <see cref="LockstepPlayer.joinData"/>.</summary>
         public FixedList64Bytes<byte> joinData;
-        /// <summary>Wait until a prefab registry exists in the client world before creating the simulation.</summary>
-        public bool waitForPrefabRegistry;
+        /// <summary>Wait until an actor registry exists in the client world before creating the simulation.</summary>
+        public bool waitForActorRegistry;
     }
 }

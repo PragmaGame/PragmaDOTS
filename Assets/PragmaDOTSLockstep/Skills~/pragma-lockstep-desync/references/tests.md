@@ -148,7 +148,8 @@ public unsafe void SameFrames_GiveTheSameState()
 ```
 
 Record the replay from a real match (`client.ExportReplay()` or the debug window). Pass the game's
-`LockstepSimulationOptions` to both simulations when the simulation needs the prefab registry.
+`LockstepSimulationOptions` to both simulations when the simulation spawns actors (build the registry from the
+catalog with `LockstepActorUtility.CreateRegistry` in a presentation world).
 
 ## Golden replay
 

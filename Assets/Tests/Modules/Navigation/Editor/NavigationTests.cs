@@ -1480,14 +1480,14 @@ namespace Pragma.Lockstep.Tests
             return agent;
         }
 
-        // Local avoidance with the default settings, as a LockstepNavAvoidanceAuthoring bakes it.
+        // Local avoidance with the default settings, as a NavAvoidancePart builds it.
         private static void CreateAvoidance(EntityManager entityManager)
         {
             var avoidance = entityManager.CreateEntity(typeof(LockstepNavAvoidance));
             entityManager.SetComponentData(avoidance, LockstepNavAvoidance.Default);
         }
 
-        // The agent takes part in avoidance, as LockstepNavAgentAuthoring bakes it.
+        // The agent takes part in avoidance, as a NavAgentPart builds it.
         private static Entity WithVelocity(EntityManager entityManager, Entity agent)
         {
             entityManager.AddComponent<LockstepNavVelocity>(agent);

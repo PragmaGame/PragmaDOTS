@@ -41,7 +41,7 @@ namespace Pragma.Lockstep.Tests
                     TestUtility.Step(a);
                     TestUtility.Step(b);
                     Assert.AreEqual(a.ComputeChecksum(), b.ComputeChecksum());
-                    Assert.AreEqual(1, TestUtility.Count<LockstepPrefabRegistry>(entityManager), "the registry is still created");
+                    Assert.AreEqual(1, TestUtility.Count<LockstepActorRegistry>(entityManager), "the registry is still created");
                 }
             }
         }

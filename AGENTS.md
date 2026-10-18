@@ -16,14 +16,14 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 | Path | Contents |
 |------|----------|
 | `Assets/PragmaDOTSLockstep/Core/Mathematics` | `Pragma.Lockstep.Mathematics` (`Runtime`): `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid`. No Entities dependency. `Pragma.Lockstep.Mathematics.Editor` (`Editor`): fixed-point drawers |
-| `Assets/PragmaDOTSLockstep/Core/Lockstep/Runtime` | `Pragma.Lockstep`, the core assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components`. `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, prefab registry copy, `LockstepViewSystem`. `Spatial`: `LockstepSpatialIndex` |
-| `Assets/PragmaDOTSLockstep/Core/Lockstep/Authoring` | `Pragma.Lockstep.Authoring`: bakers of the core (transforms, prefab registry, scene entities, entity ids) |
-| `Assets/PragmaDOTSLockstep/Core/Lockstep/Editor` | `Pragma.Lockstep.Editor`: *Project Settings > Pragma > Lockstep* (module defines), *Window > Pragma > Lockstep Sessions* |
+| `Assets/PragmaDOTSLockstep/Core/Lockstep/Runtime` | `Pragma.Lockstep`, the core assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components`. `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`. `Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the core parts (`Parts`), `ActorAuthoring`, the builders, `LockstepActors`, `LockstepActorUtility` (registry building and copying), components in `Actors/Components`. `Spatial`: `LockstepSpatialIndex` |
+| `Assets/PragmaDOTSLockstep/Core/Lockstep/Authoring` | `Pragma.Lockstep.Authoring`: `ActorCatalogAuthoring` and the actor bakers (catalog into registry, `ActorAuthoring` into scene entity) |
+| `Assets/PragmaDOTSLockstep/Core/Lockstep/Editor` | `Pragma.Lockstep.Editor`: the actor inspectors (`Actors`), *Project Settings > Pragma > Lockstep* (module defines), *Window > Pragma > Lockstep Sessions* |
 | `Assets/PragmaDOTSLockstep/Core/Netcode/Runtime` | `Pragma.Lockstep.Netcode`: the RPC and the Netcode server and client systems; config, status and start/end request components in `Components` |
-| `Assets/PragmaDOTSLockstep/Modules/Navigation` | `PRAGMA_LOCKSTEP_NAVIGATION`. `Pragma.Lockstep.Navigation` (`Runtime`): grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math) and the navigation systems. `Pragma.Lockstep.Navigation.Authoring` (`Authoring`) |
-| `Assets/PragmaDOTSLockstep/Modules/Vision` | `PRAGMA_LOCKSTEP_VISION`. `Pragma.Lockstep.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem` and the `LockstepVision` queries. `Pragma.Lockstep.Vision.Authoring` (`Authoring`) |
+| `Assets/PragmaDOTSLockstep/Modules/Navigation` | `PRAGMA_LOCKSTEP_NAVIGATION`. `Pragma.Lockstep.Navigation` (`Runtime`): grid, obstacles, agents, `LockstepPathfinder` (A* and string pulling in integer math), the navigation systems and the actor parts (`Parts`) |
+| `Assets/PragmaDOTSLockstep/Modules/Vision` | `PRAGMA_LOCKSTEP_VISION`. `Pragma.Lockstep.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and the actor parts (`Parts`) |
 | `Assets/PragmaDOTSLockstep/Modules/Stats` | `PRAGMA_LOCKSTEP_STATS`. `Pragma.Lockstep.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
-| `Assets/PragmaDOTSLockstep/Modules/Views` | `PRAGMA_LOCKSTEP_VIEWS`. `Pragma.Lockstep.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`. `Pragma.Lockstep.Views.Authoring` (`Authoring`) |
+| `Assets/PragmaDOTSLockstep/Modules/Views` | `PRAGMA_LOCKSTEP_VIEWS`. `Pragma.Lockstep.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`, `ViewPart`. `Pragma.Lockstep.Views.Authoring` (`Authoring`): `EntityViewConfigAuthoring`. `Pragma.Lockstep.Views.Editor` (`Editor`): the actor view previews |
 | `Assets/PragmaDOTSLockstep/Utils` | `Pragma.Lockstep.Utils` (`Runtime`): `FixedDictionary4096Bytes`, `OptionalValue`. `Pragma.Lockstep.Utils.Editor` (`Editor`): fixed list and fixed string drawers. `Pragma.Lockstep.Utils.Physics` (`Physics`, only with `com.unity.physics`): `CollisionMatrixToFilter` |
 | `Assets/PragmaDOTSLockstep/Skills~` | Claude Code skills shipped with the package (gameplay, sessions, desync); Unity skips the folder. Read them before writing simulation code |
 | `Assets/Tests/Core/Editor` | `Pragma.Lockstep.Tests.Editor`: the EditMode suite of the core (not shipped); helpers and test components in `Support` |
@@ -62,10 +62,16 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   framer fragments larger messages. Connections are tracked by entity, not by `NetworkId`.
 - **Modules.** Navigation, vision, stats and views compile only with their define (`defineConstraints`), all off in a
   new project; this project turns every one on in Player Settings (through *Project Settings > Pragma > Lockstep*).
-  A module depends on the core only, never on another module, so every subset compiles; its bakers live in its own
-  `Authoring` assembly. The core never references a module. `Utils` is the lowest layer: it references neither the
+  A module depends on the core only, never on another module, so every subset compiles; its actor parts live in its
+  runtime assembly. The core never references a module. `Utils` is the lowest layer: it references neither the
   core nor Entities. A compiled module's systems join every simulation world and `DefaultSimulationHash`, which is
   why modules are opt-in.
+- **Actors are the authoring model.** Content is `ActorDefinition` assets with parts (`[SerializeReference]`
+  `ActorPart`s); new authoring data is a part, not a MonoBehaviour with a baker. A part's `Build` runs through
+  `IActorBuilder` both while a subscene bakes (`BakerActorBuilder`) and at run time (`EntityManagerActorBuilder`), so
+  it must be deterministic from its data alone (`FixedPoint` fields; terrains are sampled in fixed point). The registry
+  (`LockstepActorRegistry`) is built in the presentation world and copied into the simulation like the scene
+  entities; placed actors get their type by key in the copy. Renaming a part class needs `[MovedFrom]`.
 - **No managed components** (deprecated in Entities 6.6): running sessions are found through the static
   `LockstepWorlds` registry keyed by `World.SequenceNumber`.
 - **The presentation never writes to the simulation world**, not even a tag or a cleanup component: it would move the
@@ -134,7 +140,8 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
 
 - The EditMode suites: `Assets/Tests/Core/Editor` (core), `Assets/Tests/Modules/<Module>/Editor` (each module; the
   vision suite also needs navigation, its session moves the sources with agents) and `Assets/Tests/Utils/Editor`. They
-  cover math accuracy and Burst equality, golden results, serialization,
+  cover math accuracy and Burst equality, golden results, serialization, actors (inheritance, the catalog and its
+  registry, placed actors and overrides, the module parts, a session spawning by key and tag),
   checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session), stats (formula,
   non-stacking modifiers, sources, timed modifiers, resources and caps, changes, grants, enum ids in Burst, change

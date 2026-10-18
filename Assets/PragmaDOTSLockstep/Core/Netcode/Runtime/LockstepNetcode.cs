@@ -15,13 +15,13 @@ namespace Pragma.Lockstep.Netcode
         }
 
         /// <summary>Makes a client world join the lockstep session of the server it is (or will be) connected to.</summary>
-        public static void JoinSession(World clientWorld, in LockstepClientSettings settings, in FixedList64Bytes<byte> joinData = default, bool waitForPrefabRegistry = false)
+        public static void JoinSession(World clientWorld, in LockstepClientSettings settings, in FixedList64Bytes<byte> joinData = default, bool waitForActorRegistry = false)
         {
             SetSingleton(clientWorld.EntityManager, new LockstepClientConfig
             {
                 settings = settings,
                 joinData = joinData,
-                waitForPrefabRegistry = waitForPrefabRegistry,
+                waitForActorRegistry = waitForActorRegistry,
             });
         }
 

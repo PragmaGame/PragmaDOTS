@@ -69,7 +69,7 @@ namespace Pragma.Lockstep
             _network.SetTime(now);
             _server = new LockstepServer(serverSettings, _network.ServerTransport);
             _network.AttachServer(_server);
-            var options = LockstepClientWorldUtility.CreateSimulationOptions(World, config.waitForPrefabRegistry);
+            var options = LockstepClientWorldUtility.CreateSimulationOptions(World, config.waitForActorRegistry);
             _client = new LockstepClient(clientSettings, _network.CreateClientTransport(LOCAL_CONNECTION_ID), options);
             _network.AttachClient(LOCAL_CONNECTION_ID, _client);
             LockstepWorlds.RegisterClient(World, _client);

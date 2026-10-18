@@ -5,13 +5,14 @@ using Unity.Transforms;
 namespace Pragma.Lockstep
 {
     /// <summary>
-    /// Mirrors the simulation into the presentation world: for every simulation entity with a
-    /// <see cref="LockstepPrefabId"/> it instantiates the registry prefab with the same index, writes an interpolated
+    /// Mirrors the simulation into the presentation world: for every simulation actor (<see cref="LockstepActor"/>) it
+    /// instantiates the prefab of its type from the actor registry of the presentation world, writes an interpolated
     /// <c>LocalTransform</c> from <see cref="LockstepTransform"/> every frame, and destroys the view when the simulation entity goes away.
     /// </summary>
     /// <remarks>
-    /// The view prefab is the same baked prefab the simulation instantiates, with its rendering components; in the
-    /// presentation world its gameplay components are inert copies. Views are keyed by entity (index and version), so a
+    /// The view prefab is the prefab of the actor type in the presentation world, with whatever rendering components its
+    /// parts gave it; its gameplay components are inert copies there. Most games show actors with GameObject views
+    /// instead. Views are keyed by entity (index and version), so a
     /// recycled simulation entity gets a fresh view.
     /// </remarks>
     [WorldSystemFilter(WorldSystemFilterFlags.Presentation)]
@@ -39,7 +40,7 @@ namespace Pragma.Lockstep
             _alive = new NativeHashSet<Entity>(256, Allocator.Persistent);
             _stale = new NativeList<Entity>(64, Allocator.Persistent);
             _registryQuery = new EntityQueryBuilder(Allocator.Temp)
-                .WithAll<LockstepPrefabRegistry, LockstepPrefabElement>()
+                .WithAll<LockstepActorRegistry, LockstepActorType>()
                 .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities)
                 .Build(this);
         }
@@ -67,20 +68,20 @@ namespace Pragma.Lockstep
             {
                 DestroyAllViews();
                 _simulationWorld = simulation.World;
-                _simulationQuery = _simulationWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepPrefabId>());
+                _simulationQuery = _simulationWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepActor>());
             }
 
             if (_registryQuery.CalculateEntityCount() == 0)
             {
                 return;
             }
-            var registry = EntityManager.GetBuffer<LockstepPrefabElement>(_registryQuery.GetSingletonEntity(), true).ToNativeArray(Allocator.Temp);
+            var registry = EntityManager.GetBuffer<LockstepActorType>(_registryQuery.GetSingletonEntity(), true).ToNativeArray(Allocator.Temp);
 
             var simulationManager = _simulationWorld.EntityManager;
             var lastTick = simulation.Tick - 1;
             var alpha = client.InterpolationAlpha;
             var entities = _simulationQuery.ToEntityArray(Allocator.Temp);
-            var prefabIds = _simulationQuery.ToComponentDataArray<LockstepPrefabId>(Allocator.Temp);
+            var actors = _simulationQuery.ToComponentDataArray<LockstepActor>(Allocator.Temp);
 
             _alive.Clear();
             for (var i = 0; i < entities.Length; i++)
@@ -88,12 +89,12 @@ namespace Pragma.Lockstep
                 var simulationEntity = entities[i];
                 if (!_views.TryGetValue(simulationEntity, out var view))
                 {
-                    var prefabId = prefabIds[i].value;
-                    if (prefabId < 0 || prefabId >= registry.Length || registry[prefabId].prefab == Entity.Null)
+                    var type = actors[i].type;
+                    if (type < 0 || type >= registry.Length || registry[type].prefab == Entity.Null)
                     {
                         continue;
                     }
-                    view = EntityManager.Instantiate(registry[prefabId].prefab);
+                    view = EntityManager.Instantiate(registry[type].prefab);
                     EntityManager.AddComponentData(view, new LockstepView { simulationEntity = simulationEntity });
                     _views.Add(simulationEntity, view);
                     _createdAtTick[simulationEntity] = lastTick;

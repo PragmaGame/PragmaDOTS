@@ -3,7 +3,7 @@ using Unity.Entities;
 
 namespace Pragma.Lockstep.Tests
 {
-    /// <summary>Spawns registry prefab 0 on tick 3, moves it along x every tick and destroys it on tick 30.</summary>
+    /// <summary>Spawns actor type 0 on tick 3, moves it along x every tick and destroys it on tick 30.</summary>
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]
     public partial struct TestSpawnSystem : ISystem
     {
@@ -12,7 +12,7 @@ namespace Pragma.Lockstep.Tests
             var tick = SystemAPI.GetSingleton<LockstepTime>().tick;
             if (tick == 3)
             {
-                var prefab = SystemAPI.GetSingletonBuffer<LockstepPrefabElement>(true)[0].prefab;
+                var prefab = SystemAPI.GetSingletonBuffer<LockstepActorType>(true)[0].prefab;
                 var spawned = state.EntityManager.Instantiate(prefab);
                 state.EntityManager.AddComponent<TestSpawnedTag>(spawned);
                 state.EntityManager.SetComponentData(spawned, LockstepTransform.FromPosition(new FixedVector3(10, 0, 0)));

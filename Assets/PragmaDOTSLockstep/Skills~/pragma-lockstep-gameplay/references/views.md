@@ -1,7 +1,7 @@
 # GameObject views reference
 
-Namespace `Pragma.Lockstep.Views` (assembly `Pragma.Lockstep.Views`, module `PRAGMA_LOCKSTEP_VIEWS`); the authoring
-components are in the namespace `Pragma.Lockstep.Authoring`, assembly `Pragma.Lockstep.Views.Authoring`. A port of ECV (Entity Component View) that never writes to the simulation world.
+Namespace `Pragma.Lockstep.Views` (assembly `Pragma.Lockstep.Views`, module `PRAGMA_LOCKSTEP_VIEWS`);
+`EntityViewConfigAuthoring` is in the namespace `Pragma.Lockstep.Authoring`, assembly `Pragma.Lockstep.Views.Authoring`. A port of ECV (Entity Component View) that never writes to the simulation world.
 
 ## Contents
 
@@ -16,9 +16,10 @@ components are in the namespace `Pragma.Lockstep.Authoring`, assembly `Pragma.Lo
 ## Setup
 
 1. **Key.** `EntityViewKey { FixedString32Bytes value }` on the simulated entity, 1 to 29 bytes of UTF-8, case-sensitive.
-   Set it where the entity is created (`new EntityViewKey("Knight")` or a `const string`, both fine in Burst) or bake
-   `EntityViewKeyAuthoring` on a registry prefab. It is simulation state, part of the hash: set it the same way on every
-   client. Changing it swaps the view.
+   Give an actor a View part (`ViewPart`: the key is the actor's own unless the part names another, and the editor
+   previews placed actors with the view), or set it where the entity is created (`new EntityViewKey("Knight")` or a
+   `const string`, both fine in Burst). It is simulation state, part of the hash: set it the same way on every client.
+   Changing it swaps the view.
 2. **Prefab.** `EntityView` on the root, `TransformComponentView` to follow the interpolated `LockstepTransform`, one
    part per component type or dynamic buffer to show.
 3. **Update system.** `public partial class HealthViewUpdateSystem : EntityViewUpdateSystem<Health> { }` per

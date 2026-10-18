@@ -62,7 +62,7 @@ Related skills: `pragma-lockstep-gameplay` (how to write simulation code correct
    ```
 
    For a running client, *Window > Pragma > Lockstep Sessions > Log state hashes* prints the same list (with the
-   tick). `options` must copy the prefab registry when the game uses it:
+   tick). `options` must copy the actor registry when the game spawns actors:
    `LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, false)`.
 5. **Find the writer.** Search the systems that write the diverging component (and anything they read) for the
    causes below. If the component is derived from another one, follow the data back.

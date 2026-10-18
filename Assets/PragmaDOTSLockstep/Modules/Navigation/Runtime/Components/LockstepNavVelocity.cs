@@ -6,7 +6,7 @@ namespace Pragma.Lockstep.Navigation
     /// <summary>
     /// How fast and where an agent walks on the XZ plane, in world units per second. An agent with it (and a
     /// <see cref="LockstepNavAgent.radius"/>) takes part in local avoidance while the world has a
-    /// <see cref="LockstepNavAvoidance"/>; <c>LockstepNavAgentAuthoring</c> bakes it.
+    /// <see cref="LockstepNavAvoidance"/>; <see cref="NavAgentPart"/> adds it.
     /// </summary>
     public struct LockstepNavVelocity : IComponentData
     {

@@ -117,7 +117,7 @@ namespace Pragma.Lockstep.Netcode
                 settings.Simulate = false;
             }
 
-            var options = LockstepClientWorldUtility.CreateSimulationOptions(World, config.waitForPrefabRegistry);
+            var options = LockstepClientWorldUtility.CreateSimulationOptions(World, config.waitForActorRegistry);
             _client = new LockstepClient(settings, _transport, options);
             LockstepWorlds.RegisterClient(World, _client);
             _client.Join(config.joinData);

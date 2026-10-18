@@ -27,6 +27,8 @@ server never simulates, and the bandwidth depends on the number of players, not 
   grants to all of its units; recalculated only where something changed.
 - GameObject views adapted from ECV: pooled view prefabs per entity key, per-component parts fed when their component
   changes, interpolated transforms, a pool each project can replace.
+- Actors: units, buildings and map objects described in assets (a key, tags, a parent, parts), spawned by key from a
+  catalog, placed on maps with overrides, previewed in the editor with their views, baked or built at run time.
 - Modules: navigation, vision, stats and views compile only when their scripting define is on
   (*Project Settings > Pragma > Lockstep*); the core and the utilities (`FixedDictionary4096Bytes`, `OptionalValue`,
   fixed list and string inspectors) are always there.

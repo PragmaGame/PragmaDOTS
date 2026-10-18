@@ -34,7 +34,7 @@ Deeper reference:
 var config = LockstepOfflineConfig.Create<GameInput>(tickRate: 30); // tickRate, maxPlayers = 1, inputSize
 config.seed = 0;                     // 0 picks a random seed
 config.checksumInterval = 0;         // nobody to compare with
-config.waitForPrefabRegistry = true; // when the simulation instantiates registry prefabs
+config.waitForActorRegistry = true;  // when a subscene bakes the actor catalog
 world.EntityManager.CreateSingleton(config);
 ```
 
@@ -209,7 +209,7 @@ Clients follow the pace through `LockstepClient.PlaybackSpeed`. Several worlds c
 
 For checks without presentation, `LockstepReplayPlayer` simulates directly: `player.Update(deltaTime)` each frame with
 `player.Simulation.World` and `player.InterpolationAlpha` (`Speed` scales playback), or `SimulateToEnd()`. Pass the same
-`LockstepSimulationOptions` the game uses when the simulation needs the prefab registry. Replays need the same
+`LockstepSimulationOptions` the game uses when the simulation spawns actors. Replays need the same
 simulation build.
 
 ## Troubleshooting
@@ -225,6 +225,7 @@ simulation build.
 | "input set on the client is N bytes but the session input size is M" | `InputSize` != `UnsafeUtility.SizeOf<TInput>()` of the struct written to `LockstepLocalInput` |
 | Starts but nothing reacts to input | No system in `LockstepInputSystemGroup` writes `LockstepLocalInput`, or gameplay systems are outside `LockstepSimulationSystemGroup` |
 | Disconnects when unfocused | `Application.runInBackground = false` |
-| Entities Graphics copies missing | No registry in the presentation world, or `waitForPrefabRegistry` off while the subscene loads late |
+| Entities Graphics copies missing | No actor registry in the presentation world, or `waitForActorRegistry` off while the subscene loads late |
+| Actors missing from the simulation | The catalog subscene had not loaded when the simulation was created (`waitForActorRegistry`), or the run-time content (`LockstepActorUtility.CreateRegistry`, `CreatePlaced`) was built after the session started |
 | GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` |
 | Desync errors | Use the `pragma-lockstep-desync` skill |

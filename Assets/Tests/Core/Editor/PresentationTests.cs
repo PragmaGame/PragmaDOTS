@@ -18,8 +18,7 @@ namespace Pragma.Lockstep.Tests
                 var prefab = entityManager.CreateEntity(typeof(Prefab), typeof(LocalTransform), typeof(LockstepTransform), typeof(LockstepTransformPrevious));
                 entityManager.SetComponentData(prefab, LocalTransform.Identity);
                 entityManager.SetComponentData(prefab, LockstepTransform.Identity);
-                var registry = entityManager.CreateEntity(typeof(LockstepPrefabRegistry), typeof(LockstepPrefabElement));
-                entityManager.GetBuffer<LockstepPrefabElement>(registry).Add(new LockstepPrefabElement { prefab = prefab });
+                TestUtility.CreateRegistry(entityManager, prefab);
                 var viewSystem = world.GetOrCreateSystemManaged<LockstepViewSystem>();
 
                 var settings = LockstepServerSettings.Default;
@@ -71,7 +70,7 @@ namespace Pragma.Lockstep.Tests
                         }
                     }
                     Assert.IsTrue(sawView);
-                    Assert.AreEqual(1, TestUtility.Count<LockstepPrefabRegistry>(client.Simulation.World.EntityManager), "the registry was copied into the simulation");
+                    Assert.AreEqual(1, TestUtility.Count<LockstepActorRegistry>(client.Simulation.World.EntityManager), "the registry was copied into the simulation");
                 }
                 finally
                 {
