@@ -13,8 +13,11 @@ reliable, ordered channel. So when two clients disagree, the frames are not the 
 
 Do not look for "lost packets" or "network lag" as the cause; look for nondeterminism.
 
-Related skills: `pragma-lockstep-gameplay` (how to write simulation code correctly), `pragma-lockstep-sessions`
-(settings, replays, debug window). `references/tests.md` holds determinism test templates.
+The types below are in namespace and assembly `Pragma.Dots.Lockstep` (the Lockstep module, define
+`PRAGMA_DOTS_LOCKSTEP`) unless noted.
+
+Related skills: `pragma-lockstep-gameplay` (how to write simulation code correctly), `pragma-dots-actors` (parts and
+placed actors), `pragma-lockstep-sessions` (settings, replays, debug window). `references/tests.md` holds determinism test templates.
 
 ## How detection works
 
@@ -23,7 +26,8 @@ Related skills: `pragma-lockstep-gameplay` (how to write simulation code correct
 - On disagreement the server raises `DesyncDetectedEvent(LockstepDesyncReport { tick, slotMask })`; every client
   raises `DesyncedEvent(tick, isLocalClientAffected)` and logs
   `[Lockstep] Desync detected at tick T (slots mask 0x..), including this client.`. With two players there is no
-  majority, so both are flagged. `StopOnDesync` stops the simulation.
+  majority, so both are flagged. With `LockstepClientSettings.StopOnDesync` (off by default) the client stops
+  simulating.
 - The hash covers every entity (by traversal position) and every unmanaged component field, including enabled bits.
   `Entity` fields are hashed as the position of their target, so entity ids never matter. Not hashed: padding,
   pointers, blob asset references, managed / shared / chunk components, components on system entities,
@@ -37,10 +41,13 @@ Related skills: `pragma-lockstep-gameplay` (how to write simulation code correct
 
 1. **Collect.** The tick, which clients were flagged, the builds they run, and a replay (`client.ExportReplay()`, the
    debug window, or `server.ExportReplay()`).
-2. **Same build?** `ValidateSimulationHash` only compares the *list* of simulation systems (and the protocol version).
-   A changed system body, a different asset or a different config file passes that check and desyncs. Make sure both
-   machines run the same build and the same content. Builds with different modules (`PRAGMA_DOTS_*` defines set
-   on some build targets only) fail that check: *Project Settings > Pragma > DOTS* sets them on every target.
+2. **Same build?** `ValidateSimulationHash` (a server setting, on by default) only compares
+   `LockstepSimulation.DefaultSimulationHash`: the *list* of simulation systems and the protocol version. A changed
+   system body, a different asset or a different config file passes that check and desyncs. Make sure both machines
+   run the same build and the same content. Builds with different modules (`PRAGMA_DOTS_*` defines set on some build
+   targets only): a missing Lockstep, Navigation, Vision or Stats module fails that check; a missing Views module
+   passes it and desyncs, because the View part's `EntityViewKey` is simulation state. *Project Settings > Pragma >
+   DOTS* sets the defines on every target.
 3. **Narrow the window.** Reproduce with a small `ChecksumInterval` (1-10) so the first bad tick is close to the cause.
 4. **Find the component.** On each machine, re-simulate the same replay to the reported tick and compare the
    per-type hashes; the type whose hash differs is the one that diverged:
@@ -62,8 +69,8 @@ Related skills: `pragma-lockstep-gameplay` (how to write simulation code correct
    ```
 
    For a running client, *Window > Pragma > Lockstep Sessions > Log state hashes* prints the same list (with the
-   tick). `options` must copy the actor registry when the game spawns actors:
-   `LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, false)`.
+   tick). `options` must copy the actor registry and the placed actors when the game uses actors (spawned by key or
+   placed on the map): `LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, false)`.
 5. **Find the writer.** Search the systems that write the diverging component (and anything they read) for the
    causes below. If the component is derived from another one, follow the data back.
 6. **Reproduce in one process.** Two clients in an EditMode test (`references/tests.md`) already diverge for bugs
@@ -85,26 +92,29 @@ Related skills: `pragma-lockstep-gameplay` (how to write simulation code correct
 | Parallel `EntityCommandBuffer` without a proper sort key | Playback order depends on threads | `[ChunkIndexInQuery]` (or another deterministic key) as the sort key |
 | Unstable sort with equal keys | Ties may come out in a different order after other changes | Add a tie-breaker (`LockstepEntityId`, slot) |
 | `static` fields, system fields carrying state, managed singletons, caches, components on a system entity | Shared by all worlds of the process or not hashed | Components and singletons on ordinary entities of the simulation world |
-| `SystemAPI.Time`, `UnityEngine.Time`, `DateTime`, `Stopwatch` | Local clocks differ | `LockstepTime`, tick counters |
-| `UnityEngine.Random`, `System.Random`, `Unity.Mathematics.Random` seeded locally | Different seeds and sequences | `LockstepRandom` (by `ref`) or an `FixedRandom` in a component |
+| `SystemAPI.Time` (float), `UnityEngine.Time`, `DateTime`, `Stopwatch` (local clocks) | Float rounding, clocks differ | `LockstepTime`, tick counters |
+| `UnityEngine.Random`, `System.Random`, `Unity.Mathematics.Random` seeded locally | Different seeds and sequences | `LockstepRandom` (by `ref`) or a `FixedRandom` in a component |
 | `if (slot == localSlot)`, camera, screen, platform, quality checks | Different on every machine | Move to the presentation |
 | Presentation or UI writing into the simulation world | Only one client changes | Send a command |
-| Reading other worlds, GameObjects, Unity Physics, NavMesh, Animator from the simulation | Local, float-based state | Only simulation data and `FixedPoint` code; `Pragma.Dots.Navigation` for paths |
+| Reading other worlds, GameObjects, Unity Physics, NavMesh, Animator from the simulation | Local, float-based state | Only simulation data and `FixedPoint` code; the Navigation module (`PRAGMA_DOTS_NAVIGATION`: `LockstepPathfinder`, agents) for paths |
 | Runtime-loaded config (ScriptableObject edited locally, JSON, PlayerPrefs) | Different values per machine | Bake it, or send it as start data |
 | `#if UNITY_EDITOR` / platform defines in simulation code | Different code per platform | Same code everywhere |
 | `float.Parse`, `ToString` round trips | Culture and float formatting | `FixedPoint.Parse` |
 | Uninitialized memory (`NativeArrayOptions.UninitializedMemory`, `stackalloc` read before write) | Garbage differs | Clear before use |
 | An exception in a system on one client | The rest of that system's update is skipped there | Fix the exception; check the console of every client |
+| An actor part whose `Build` reads floats, the scene, time or randomness | Placed actors and prefabs differ per machine before tick 0 | Build only from the part's `FixedPoint` fields and the builder |
 
 ## Tools
 
 | Tool | Use |
 |---|---|
-| `LockstepServer.DesyncDetectedEvent`, `LockstepClient.DesyncedEvent`, `IsDesynced`, `DesyncTick` | Detection |
+| `LockstepServer.DesyncDetectedEvent`, `LockstepClient.DesyncedEvent`, `IsDesynced`, `DesyncTick` | Detection; in a Netcode or offline game reach the objects with `LockstepWorlds.TryGetServer` / `TryGetClient(world, out ...)` |
+| `LockstepServer.ProtocolViolationEvent` | A client sent malformed data (not a desync, but often confused with one) |
 | `client.LocalChecksums` | Every hash this client computed, by tick |
-| `LockstepChecksum.Compute(entityManager)`, `ComputePerType(entityManager)` | Whole-world and per-component hashes |
+| `LockstepChecksum.Compute(entityManager)`, `ComputePerType(entityManager)`, `LockstepSimulation.ComputeChecksum()` | Whole-world and per-component hashes |
 | *Window > Pragma > Lockstep Sessions* | Session state, *Export replay*, *Log state hashes* |
-| `LockstepReplay`, `LockstepReplayPlayer.SimulateToEnd()` | Re-simulate a match; first tick that differs from the recorded checksums (a client's own hashes, or the majority hashes in a server export) |
+| `LockstepReplay` (`Checksums` by tick), `new LockstepReplayPlayer(replay, options)`, `SimulateToEnd()`, `FirstMismatchTick` | Re-simulate a match; first tick that differs from the recorded checksums (a client's own hashes, or the majority hashes in a server export) |
+| `LockstepReplaySession`, `LockstepReplayHost.MismatchEvent` | Watch a replay through ordinary clients; a client whose state differs from the recording is reported |
 | `LockstepSimulation` + `replay.Frames.TryGet` | Step a replay tick by tick and inspect the world |
 | `[LockstepChecksumIgnore]` | Exclude debug-only data from the hash (never to hide a real divergence) |
 

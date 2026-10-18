@@ -1,9 +1,18 @@
 # Determinism test templates
 
-EditMode tests (NUnit, Unity Test Framework). The test assembly references `Pragma.Dots.Lockstep`,
-`Pragma.Dots.Mathematics` (and `Pragma.Dots.Actors` when it builds actors), `Unity.Entities`, `Unity.Collections` and your game assembly, and allows unsafe code
-for the replay templates. Simulations created in tests auto-discover every system of
-`LockstepSimulationSystemGroup`, so the whole game simulation runs.
+EditMode tests (NUnit, Unity Test Framework). The test assembly:
+
+- runs on the Editor platform, with `defineConstraints` `UNITY_INCLUDE_TESTS` and `PRAGMA_DOTS_LOCKSTEP` (plus the
+  defines of the other modules it uses), so it does not break compiling while a module is off;
+- references `Pragma.Dots.Lockstep`, `Pragma.Dots.Mathematics` (and `Pragma.Dots.Actors` when it builds actors, the
+  module assemblies it uses), `Unity.Entities`, `Unity.Collections`, `UnityEngine.TestRunner`,
+  `UnityEditor.TestRunner` and your game assembly, with `nunit.framework.dll` under `overrideReferences`;
+- allows unsafe code for the replay templates;
+- carries `[assembly: DisableAutoCreation]` in an `AssemblyInfo.cs` when it declares systems, so test systems join
+  simulations only through `AdditionalSystems`.
+
+Simulations created in tests auto-discover every system of `LockstepSimulationSystemGroup` (the game's and those of
+every compiled module, except assemblies marked `[DisableAutoCreation]`), so the whole game simulation runs.
 
 ## Contents
 
@@ -119,8 +128,11 @@ public class DeterminismTests
 }
 ```
 
-Add `client.AddCommand(...)` calls in the loop to cover commands, and add a fourth client later in the run to cover
-late join.
+Add `client.AddCommand(...)` calls in the loop to cover commands (`AddCommand(payload, nativeArrayOfData)` for
+commands with data), add a fourth client later in the run to cover late join, and `network.DetachClient(id)` to
+cover a disconnect. `network.SetTime(now)` stamps packets sent outside `Deliver` (joins before the loop). Assert on
+`client.IsDesynced` and `DesyncTick` as well; `server.ExportReplay()` and `LockstepReplay.Read` record a replay
+inside the test.
 
 ## Two simulations from the same frames
 
@@ -131,7 +143,7 @@ every tick. Fast, precise (the first bad tick), and independent of the network c
 [Test]
 public unsafe void SameFrames_GiveTheSameState()
 {
-    var bytes = System.IO.File.ReadAllBytes("Assets/Tests/Replays/match-01.lockstep");
+    var bytes = System.IO.File.ReadAllBytes("Assets/Tests/Replays/match-01.lockstep"); // a replay you recorded
     using (var replay = LockstepReplay.Read(bytes))
     using (var a = new LockstepSimulation(replay.Config))
     using (var b = new LockstepSimulation(replay.Config))
@@ -147,9 +159,10 @@ public unsafe void SameFrames_GiveTheSameState()
 }
 ```
 
-Record the replay from a real match (`client.ExportReplay()` or the debug window). Pass the game's
-`LockstepSimulationOptions` to both simulations when the simulation spawns actors (build the registry from the
-catalog with `ActorUtility.CreateRegistry` in a presentation world).
+Record the replay from a real match (`client.ExportReplay()` or the debug window). When the game uses actors, pass
+the options it uses to both simulations: build the content in a presentation world
+(`ActorUtility.CreateRegistry(world.EntityManager, catalog)`, plus `ActorUtility.CreatePlaced` for the map's actors),
+then `LockstepClientWorldUtility.CreateSimulationOptions(world, false)`.
 
 ## Golden replay
 
@@ -160,9 +173,9 @@ the change is intended, re-record the replay.
 [Test]
 public void GoldenReplay_StillMatches()
 {
-    var bytes = System.IO.File.ReadAllBytes("Assets/Tests/Replays/match-01.lockstep");
+    var bytes = System.IO.File.ReadAllBytes("Assets/Tests/Replays/match-01.lockstep"); // a replay you recorded
     using (var replay = LockstepReplay.Read(bytes))
-    using (var player = new LockstepReplayPlayer(replay))
+    using (var player = new LockstepReplayPlayer(replay)) // (replay, options) when the game uses actors
     {
         Assert.AreEqual(-1, player.SimulateToEnd(), "the simulation diverges from the recording at this tick");
     }
@@ -177,7 +190,7 @@ Create the clients or simulations with explicit systems to test one mechanic wit
 var options = new LockstepSimulationOptions
 {
     AutoDiscoverSystems = false,
-    AdditionalSystems = new[] { typeof(AvatarSpawnSystem), typeof(AvatarMoveSystem) },
+    AdditionalSystems = new[] { typeof(MySpawnSystem), typeof(MyMoveSystem) }, // the systems under test
 };
 var client = new LockstepClient(LockstepClientSettings.Default, network.CreateClientTransport(id), options);
 ```

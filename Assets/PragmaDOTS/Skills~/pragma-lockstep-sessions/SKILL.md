@@ -11,6 +11,11 @@ sends its input, receives the frames and steps its own simulation world with the
 through `ILockstepTransport`, so the same session runs over Netcode for Entities, over an in-process loopback
 (offline mode, tests) or over a transport of your own.
 
+The lockstep module is opt-in: turn on *Lockstep (PRAGMA_DOTS_LOCKSTEP)* in *Project Settings > Pragma > DOTS* (off
+in a new project) and reference `Pragma.Dots.Lockstep`; nothing below compiles without it. The Netcode part
+(`LockstepNetcode`, the config, request and status components) is namespace and assembly
+`Pragma.Dots.Lockstep.Netcode`, compiled only when `com.unity.netcode` 6.6.0 or later is installed.
+
 Deeper reference:
 
 - `references/settings.md` - every setting with defaults, the latency formula, bandwidth notes.
@@ -25,7 +30,7 @@ Deeper reference:
 | Single player, quick iteration, tutorials | Offline: `LockstepOfflineConfig` in a client or local world |
 | A player hosts and others join | Netcode server world + client world in the host process; client worlds elsewhere |
 | Dedicated server | Server world only (server build); clients connect |
-| Load tests | Thin clients (Multiplayer Play Mode) |
+| Load tests | Thin client worlds (Netcode PlayMode Tools: *Num Thin Clients*, or `ClientServerBootstrap.CreateThinClientWorld`) |
 | Steam, a relay, WebSockets | Custom `ILockstepTransport` around `LockstepServer` / `LockstepClient` |
 
 ## Offline
@@ -39,12 +44,16 @@ world.EntityManager.CreateSingleton(config);
 ```
 
 `LockstepOfflineSystem` (client and local worlds) runs an in-process server and client over `LockstepLoopbackNetwork`:
-the complete protocol, no network. Destroy the singleton to end the session. With Netcode installed and the automatic
-bootstrap disabled, `World.DefaultGameObjectInjectionWorld` is a local world and works for this.
+the complete protocol, no network. Destroy the singleton to end the session. Without Netcode the default world is a
+local world and runs it; with Netcode, `World.DefaultGameObjectInjectionWorld` is a local world once the automatic
+bootstrap is disabled. `LockstepWorlds.TryGetClient` and `TryGetServer` on that world return both sides.
 
 ## Netcode for Entities
 
 ```csharp
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Lockstep.Netcode;
+
 // Host: server and client worlds in this process.
 Application.runInBackground = true; // Netcode connections need updates while unfocused
 var settings = LockstepServerSettings.Default;
@@ -62,18 +71,20 @@ LockstepNetcode.Connect(client, NetworkEndpoint.LoopbackIpv4.WithPort(7979));
 
 // Join from another machine.
 var remote = ClientServerBootstrap.CreateClientWorld("Client");
-LockstepNetcode.JoinSession(remote, LockstepClientSettings.Default, LockstepBytes.ToFixedList64(new CharacterChoice { id = 2 }));
+LockstepNetcode.JoinSession(remote, LockstepClientSettings.Default, LockstepBytes.ToFixedList64(new CharacterChoice { id = 2 }),
+    waitForActorRegistry: true); // when a subscene bakes the actor catalog
 LockstepNetcode.Connect(remote, NetworkEndpoint.Parse(address, 7979));
 ```
 
-- `HostSession` / `JoinSession` only create the `LockstepServerConfig` / `LockstepClientConfig` singletons that
-  `LockstepNetcodeServerSystem` / `LockstepNetcodeClientSystem` react to; creating those components directly is
-  equivalent (useful from subscenes or your own systems).
+- `HostSession` / `JoinSession` create or overwrite the `LockstepServerConfig` / `LockstepClientConfig` singletons
+  that `LockstepNetcodeServerSystem` / `LockstepNetcodeClientSystem` react to. The systems read them when a session
+  starts, so new settings take effect only after the config is removed and created again. Creating the components
+  yourself is equivalent (from a subscene, with a baker of your own).
 - The client joins as soon as its world is connected (`NetworkId` exists) and leaves when the config or the
   connection goes away.
-- **Netcode.** The package does not install Netcode for Entities: add `com.unity.netcode` to the project, and
-  `Pragma.Dots.Lockstep.Netcode` (`LockstepNetcode`, the Netcode systems) compiles. Offline mode, replays and custom
-  transports work without it.
+- **Netcode.** The package does not install Netcode for Entities: add `com.unity.netcode` (6.6.0 or later) to the
+  project, and with the Lockstep module on, `Pragma.Dots.Lockstep.Netcode` (`LockstepNetcode`, the Netcode systems)
+  compiles. Offline mode, replays and custom transports work without it.
 - **Bootstrap.** Netcode's automatic bootstrap creates client/server worlds at start (in the editor per the PlayMode
   Tools). Either configure those worlds, or add `OverrideAutomaticNetcodeBootstrap` (*Disable*) to the scene or write a
   `ClientServerBootstrap` subclass, and create worlds on demand as above.
@@ -83,29 +94,31 @@ LockstepNetcode.Connect(remote, NetworkEndpoint.Parse(address, 7979));
   build target: a Linux Server target without `PRAGMA_DOTS_NAVIGATION` refuses Windows clients built with it.
   *Project Settings > Pragma > DOTS* writes them to every target.
 - **Thin clients.** `LockstepNetcodeClientSystem` runs in thin client worlds too and forces `Simulate = false`. They
-  still need a `LockstepClientConfig`. They send input, never simulate, never report checksums.
+  still need a `LockstepClientConfig`, never simulate and never report checksums. `LockstepInputSystemGroup` does not
+  run there, so they send an empty input unless a system of theirs (`WorldSystemFilterFlags.ThinClientSimulation`)
+  gets the client with `LockstepWorlds.TryGetClient` and calls `SetInput` / `AddCommand`.
 - Keep `TickRate` at or below Netcode's `ClientServerTickRate.SimulationTickRate`: the server closes lockstep ticks
   inside its own update.
 
 ## Match flow
 
 ```
-Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> countdown (StartDelaySeconds)
-      --> Running (tick 0, 1, ...) --(RequestEnd | server.EndGame)--> Ended
+Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running: countdown of StartDelaySeconds,
+      then tick 0, 1, ... --(RequestEnd | server.EndGame)--> Ended
 ```
 
 | Moment | Server side | Client side |
 |---|---|---|
 | Joined, waiting | `server.State == Lobby`, `PlayerCount` | `client.State == Lobby`, `LocalSlot` |
-| Start | `RequestStart(serverWorld)` or `server.StartGame(now)` | Simulation world created during the countdown; `StartedEvent` |
+| Start | `RequestStart(serverWorld)` or `server.StartGame(now)`: `State` is `Running` at once, `GetTickPosition(now)` is negative during the countdown | The start message arrives during the countdown: `Running`, `StartedEvent`, the simulation world is created |
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
 | Leave | Announced in a frame; the slot frees up | `client.Leave()`, or the connection/world goes away |
-| End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)` | `EndedEvent`; the remaining frames are still simulated |
+| End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent`; the remaining frames are still simulated. The reason does not reach the clients. Ending in the lobby only closes the server (later joins get `GameEnded`): lobby clients are not told |
 | Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded` |
 
-Component equivalents in the server world: an entity with `LockstepStartGameRequest`, an entity with
-`LockstepEndGameRequest { reason }`, and the `LockstepServerStatus` singleton (`state`, `closedTicks`,
-`playerCount`) for UI.
+With Netcode (`Pragma.Dots.Lockstep.Netcode`), the component equivalents in the server world are an entity with
+`LockstepStartGameRequest`, an entity with `LockstepEndGameRequest { reason }`, and the `LockstepServerStatus`
+singleton (`state`, `closedTicks`, `playerCount`) for UI.
 
 Late-join loading screen: show `client.SimulatedTicks / (float)client.ConfirmedTicks` while
 `client.BufferedTicks` is large; re-simulation speed is bounded by `MaxTicksPerUpdate` and
@@ -117,20 +130,26 @@ Late-join loading screen: show `client.SimulatedTicks / (float)client.ConfirmedT
   `client.Join(joinData)`); the simulation reads `LockstepPlayer.GetJoinData<T>()`.
 - **Start data** (126 bytes): per match, `LockstepServerSettings.StartData = LockstepBytes.ToFixedList128(rules)`;
   the simulation reads `LockstepSessionInfo.GetStartData<T>()`.
-- **Seed**: `LockstepServerSettings.Seed` (0 picks one at start); the simulation reads `LockstepSessionInfo.seed`.
+- **Seed**: `LockstepServerSettings.Seed` (0 picks one at start; `server.Config.Seed` is the final one); the
+  simulation reads `LockstepSessionInfo.seed`.
+- Limits (`LockstepProtocol`): `MAX_PLAYERS` 64, `MAX_INPUT_SIZE` 128, `MAX_JOIN_DATA_SIZE` 62,
+  `MAX_START_DATA_SIZE` 126, `MAX_COMMANDS_PER_TICK` 32 per player (the rest move to later ticks).
 
 ## Reading session state
 
 ```csharp
 if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 {
-    // client.State, LocalSlot, SimulatedTicks, ConfirmedTicks, RoundTripTime (NaN until measured), JitterTicks,
-    // IsDesynced, DesyncTick, Simulation (null before the start and on non-simulating clients)
+    // client.State, LocalSlot, JoinTick, RejectReason, Config, SimulatedTicks, ConfirmedTicks, InterpolationAlpha,
+    // RoundTripTime (NaN until measured), JitterTicks, IsDesynced, DesyncTick,
+    // Simulation (null before the start and on non-simulating clients; also LockstepWorlds.TryGetSimulation)
 }
-if (LockstepWorlds.TryGetServer(serverWorld, out var server))
+if (LockstepWorlds.TryGetServer(serverWorld, out var server)) // a server world, or the offline world
 {
-    // server.State, PlayerCount, ClosedTicks, LateInputCount, VerifiedChecksumCount, IsSlotInUse(slot)
+    // server.State, PlayerCount, ClosedTicks, StartTime, GetTickPosition(now), LateInputCount, VerifiedChecksumCount,
+    // IsSlotInUse(slot), TryGetPlayerSlot(connectionId, out slot)
 }
+// Every session of the process: LockstepWorlds.GetClients(list), GetServers(list).
 ```
 
 Subscribe to `client.StartedEvent`, `DesyncedEvent`, `EndedEvent`, `RejectedEvent` and `server.DesyncDetectedEvent`,
@@ -164,6 +183,8 @@ public sealed unsafe class MyTransport : ILockstepTransport
 }
 
 // Server: one id per peer.
+var server = new LockstepServer(settings, serverTransport); // validates the settings
+LockstepWorlds.RegisterServer(world, server);                // for the debug window
 server.OnConnected(peerId);
 server.OnPacket(peerId, data, length, now);
 server.OnDisconnected(peerId);
@@ -171,15 +192,20 @@ server.Update(now);                      // every frame
 
 // Client.
 var client = new LockstepClient(LockstepClientSettings.Default, transport, LockstepClientWorldUtility.CreateSimulationOptions(world, false));
-LockstepWorlds.RegisterClient(world, client); // so LockstepViewSystem and the debug window find it
+LockstepWorlds.RegisterClient(world, client); // so the presentation (LockstepViewSystem, GameObject views) and the debug window find it
 client.Join();
 client.OnPacket(data, length, now);
-client.Update(now);                     // every frame; push input with client.SetInput first
+// Every frame: hand over what the input systems wrote (a query over LockstepLocalInput and LockstepCommand),
+// or call client.SetInput / AddCommand yourself, then update.
+LockstepClientWorldUtility.PushLocalInput(world.EntityManager, localInputQuery, client);
+client.Update(now);
 ```
 
 Requirements: reliable, ordered, exactly-once delivery per connection; packets up to `MaxPacketSize` (the package
 fragments larger messages); `now` from one monotonic clock in seconds per side. Dispose the server and clients and
-unregister them (`LockstepWorlds.UnregisterClient`) when the session ends.
+unregister them (`LockstepWorlds.UnregisterClient` / `UnregisterServer`) when the session ends. For local tests and
+bots, `LockstepLoopbackNetwork` (`ServerTransport`, `CreateClientTransport(id)`, `AttachServer`, `AttachClient`,
+`DetachClient`, `Deliver(now)`, `Latency`, `Jitter`) is a ready in-process transport.
 
 ## Replays
 
@@ -212,14 +238,15 @@ Clients follow the pace through `LockstepClient.PlaybackSpeed`. Several worlds c
 
 For checks without presentation, `LockstepReplayPlayer` simulates directly: `player.Update(deltaTime)` each frame with
 `player.Simulation.World` and `player.InterpolationAlpha` (`Speed` scales playback), or `SimulateToEnd()`. Pass the same
-`LockstepSimulationOptions` the game uses when the simulation spawns actors. Replays need the same
-simulation build.
+`LockstepSimulationOptions` the game uses when the simulation uses actors (`WorldName`, `AutoDiscoverSystems`,
+`AdditionalSystems`, `Initialize`, `CanCreate`; `LockstepClientWorldUtility.CreateSimulationOptions` builds the
+game's). Replays need the same simulation build.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| `TryGetClient` returns false | The world is not connected yet (the session starts once Netcode assigned a `NetworkId`): wrong address or port, server not listening |
+| `TryGetClient` returns false | No `LockstepClientConfig` / `JoinSession` in that world, or the world is not connected yet (the session starts once Netcode assigned a `NetworkId`): wrong address or port, server not listening |
 | Client stays `Joining` | Server world has no `LockstepServerConfig`: the server drops the packets |
 | `SimulationMismatch` | Client and server built from different code (system list differs) |
 | `GameInProgress` | Match already running and `AllowLateJoin` is off |
@@ -230,5 +257,6 @@ simulation build.
 | Disconnects when unfocused | `Application.runInBackground = false` |
 | Entities Graphics copies missing | No actor registry in the presentation world, or `waitForActorRegistry` off while the subscene loads late |
 | Actors missing from the simulation | The catalog subscene had not loaded when the simulation was created (`waitForActorRegistry`), or the run-time content (`ActorUtility.CreateRegistry`, `CreatePlaced`) was built after the session started |
-| GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` |
+| GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` (Views module) |
+| Lobby clients wait forever after the host ended the match | `EndGame` in the lobby does not tell them: leave or disconnect them yourself |
 | Desync errors | Use the `pragma-lockstep-desync` skill |

@@ -19,7 +19,7 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxInputLeadTicks` | 0 | Inputs further ahead are ignored; 0 = four seconds (`EffectiveMaxInputLeadTicks`), at most 4096 |
 | `FeedbackIntervalTicks` | 4 | Ticks between timing feedback messages per client |
 | `MaxSendBytesPerUpdate` | 32 768 | Frame bytes per connection per update (late-join bursts) |
-| `MaxPacketSize` | 1024 | Packet size limit; larger messages are fragmented. At least 64 |
+| `MaxPacketSize` | 1024 | Packet size limit; larger messages are fragmented. At least 64. Netcode caps it at 1024 (the RPC capacity); larger values apply only to custom transports |
 | `ValidateSimulationHash` | true | Reject clients whose `LockstepSimulation.DefaultSimulationHash` differs |
 | `StartData` | empty | `FixedList128Bytes<byte>` (126 bytes) for match parameters |
 
@@ -30,13 +30,13 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `Simulate` | true | False for bots and thin clients (no simulation, no checksums) |
 | `InputMarginTicks` | 1.5 | Target arrival margin of input before its deadline; late inputs add up to 4 ticks automatically, decaying back |
 | `PlayoutDelayTicks` | 1 | Frames kept in reserve before display; 2 × measured jitter is added |
-| `MaxPlayoutDelayTicks` | 10 | Cap of the playout delay |
+| `MaxPlayoutDelayTicks` | 10 | Cap of the playout delay; it never cuts `PlayoutDelayTicks` itself |
 | `MaxTicksPerUpdate` | 60 | Most ticks simulated in one update while catching up |
 | `MaxSimulationMillisecondsPerUpdate` | 16 | Time budget per update while catching up; at least one tick runs |
 | `PingIntervalSeconds` | 0.5 | Round-trip measurement interval |
 | `RecordReplay` | true | Keep all frames for `ExportReplay` |
 | `StopOnDesync` | false | Stop simulating after a desync report |
-| `MaxPacketSize` | 1024 | Packet size limit |
+| `MaxPacketSize` | 1024 | Packet size limit (0 or less means 1024); Netcode caps it at 1024 |
 
 The offline mode uses `InputMarginTicks = 0.5` and `PlayoutDelayTicks = 0.5`, since the loopback has no latency.
 
@@ -46,13 +46,13 @@ The offline mode uses `InputMarginTicks = 0.5` and `PlayoutDelayTicks = 0.5`, si
 `checksumInterval`, `startData`, `joinData`, `waitForActorRegistry`. The offline server starts as soon as the local
 player joins (no countdown, no late join).
 
-## `LockstepClientConfig` (Netcode client worlds)
+## `LockstepClientConfig` (Netcode client worlds; `Pragma.Dots.Lockstep.Netcode`, only with com.unity.netcode)
 
 `settings` (`LockstepClientSettings`), `joinData` (`FixedList64Bytes<byte>`), `waitForActorRegistry`.
 
-## `LockstepServerConfig` (Netcode server worlds)
+## `LockstepServerConfig` (Netcode server worlds; `Pragma.Dots.Lockstep.Netcode`, only with com.unity.netcode)
 
-`settings` (`LockstepServerSettings`). Removing it shuts the session down.
+`settings` (`LockstepServerSettings`). Removing it shuts the session down (`LockstepEndReason.ServerShutdown`).
 
 ## Latency
 
@@ -60,7 +60,7 @@ player joins (no countdown, no late join).
 input delay ≈ RTT
             + 1 / TickRate                                   (the server closes tick T when its clock reaches T + 1)
             + (InputMarginTicks + automatic extra margin) / TickRate
-            + min(PlayoutDelayTicks + 2 × jitter, MaxPlayoutDelayTicks) / TickRate
+            + min(PlayoutDelayTicks + 2 × jitter, max(PlayoutDelayTicks, MaxPlayoutDelayTicks)) / TickRate
             + one rendered frame
 ```
 

@@ -1,7 +1,7 @@
 # Simulation-side API reference
 
-Namespace `Pragma.Dots.Lockstep` (assembly `Pragma.Dots.Lockstep`) unless noted. Fields of components are public and
-camelCase; settings and options are PascalCase properties.
+Namespace `Pragma.Dots.Lockstep` (assembly `Pragma.Dots.Lockstep`, the Lockstep module: `PRAGMA_DOTS_LOCKSTEP`) unless
+noted. Fields of components are public and camelCase; settings and options are PascalCase properties.
 
 ## Contents
 
@@ -11,14 +11,14 @@ camelCase; settings and options are PascalCase properties.
 - Input and commands
 - Transforms
 - Entity ids
-- Prefab registry
+- Actors in the simulation
 - Navigation
 - Vision
 - Stats
 - Spatial index
 - Bytes helpers
 - Presentation-side access
-- Actor parts and authoring
+- Actor parts
 
 ## System group and order
 
@@ -56,7 +56,7 @@ yourself): `WorldName`, `AutoDiscoverSystems` (default true), `AdditionalSystems
 | `LockstepEntityIdCounter` | `uint last` |
 | `LockstepEntityIdMap` | `NativeHashMap<uint, Entity> map`, `TryGetEntity(uint, out Entity)`, `TryGetEntity(LockstepEntityId, out Entity)`; ignored by the checksum |
 | `LockstepFrameData` (buffer) | `byte value`: the raw frame of the current tick (rarely needed) |
-| `ActorRegistry` + `ActorType`, `ActorTagName` (buffers) | The actor registry, copied from the presentation world when the simulation is created; empty when it had none yet. Read it with `ActorLookup` |
+| `ActorRegistry` + `ActorType`, `ActorTagName` (buffers; `Pragma.Dots.Actors`, the core) | The actor registry, copied from the presentation world when the simulation is created; empty when it had none yet. Read it with `ActorLookup` |
 
 ## Player entities
 
@@ -92,7 +92,7 @@ Client (presentation world):
 | `bool Is<T>()`, `bool TryGet<T>(out T)`, `T Get<T>()` | Decode the payload in the simulation |
 | `NativeArray<T> GetData<T>(DynamicBuffer<LockstepCommandData>)` | The data as `T` elements: a view valid until the buffer changes; trailing bytes short of a `T` are ignored |
 | `int DataLength` | Data size in bytes, 0 without data |
-| `static int TypeHashOf<T>()` | Stable 32-bit hash of the type's full name |
+| `static int TypeHashOf<T>()` | Stable 32-bit hash of the assembly-qualified type name: renaming the struct, its namespace or its assembly changes it |
 | `int typeHash`, `byte size` | Raw fields |
 
 `LockstepCommandData` (buffer, `byte value`): the data of the commands of the same entity, back to back, each
@@ -105,7 +105,7 @@ moves to later ticks), `MAX_JOIN_DATA_SIZE` 62, `MAX_START_DATA_SIZE` 126.
 
 | Type | Members |
 |---|---|
-| `LockstepTransform` | `FixedVector3 position`, `FixedQuaternion rotation`, `FixedPoint scale`; `Identity`, `FromPosition`, `FromPositionRotation`, `Forward`, `Up`, `Right`, `TransformPoint`, `InverseTransformPoint`, `TransformDirection`, `ToLocalTransform()` (render only) |
+| `LockstepTransform` | `FixedVector3 position`, `FixedQuaternion rotation`, `FixedPoint scale`; `Identity`, `FromPosition`, `FromPositionRotation`, `FromPose(in FixedPose, FixedPoint scale)`, `Forward`, `Up`, `Right`, `TransformPoint`, `InverseTransformPoint`, `TransformDirection`, `ToLocalTransform()` (render only) |
 | `LockstepTransformPrevious` | `position`, `rotation`, `scale`, `capturedTickPlusOne`, `IsCapturedAt(int tick)`; written at the start of every tick |
 | `LockstepTransformExtensions.Interpolate(in LockstepTransform, in LockstepTransformPrevious, int lastSimulatedTick, float alpha)` | `LocalTransform` for rendering; current value when the capture is not from `lastSimulatedTick` |
 | `simulationManager.TryGetInterpolated(Entity, int lastSimulatedTick, float alpha, int shownSinceTick, out LocalTransform)` | Reads both components and interpolates; the current value until the tick after `shownSinceTick` (when the view appeared); false without `LockstepTransform` |
@@ -118,35 +118,26 @@ moves to later ticks), `MAX_JOIN_DATA_SIZE` 62, `MAX_START_DATA_SIZE` 126.
 | `LockstepEntityIdMap` | Singleton (on a system entity, so use `SystemAPI.GetSingleton`, or a query with `EntityQueryOptions.IncludeSystems`). Rebuilt at the end of every tick: an entity created on tick T resolves from tick T + 1 |
 | `EntityIdPart` | Gives an actor a `LockstepEntityId` |
 
-## Actors
+## Actors in the simulation
 
-Namespace and assembly `Pragma.Dots.Actors` (the core), bakers in `Pragma.Dots.Actors.Authoring`; the parts of a module
-are in its namespace.
+Actors are core types (`Pragma.Dots.Actors`; the `pragma-dots-actors` skill and its `references/api.md` list them all).
+What the lockstep module adds:
 
 | Type | Notes |
 |---|---|
-| `ActorDefinition` (ScriptableObject) | `Key` (1 to 29 bytes of UTF-8, unique in a catalog), `Parent`, `OwnTags`, `OwnParts`; `GetTags(list)` and `GetParts(list)` with the inherited ones (an own part replaces the parent's part of its type), `GetLineage`, `TryGetKey`, `TryCreateName` |
-| `ActorPart` | `[Serializable]` base of the parts: `Build(IActorBuilder)`, `DrawGizmos(in ActorGizmoContext)`. `[ActorPartMenu("Group/Name")]` places it in the part menu, `[DefaultActorPart]` in every new definition. One part of each type per actor |
-| `ActorComponentPart<T>`, `ActorBufferPart<T>` | Add one component / one buffer with values from the inspector; offered for types with `[ActorComponent("Group/Name")]` (which must be `[Serializable]`) |
-| `IActorBuilder` | `Key`, `IsPlaced`, `Placement` (`FixedPose`), `PlacementScale` (X is the uniform scale of the Transform part), `HasPart<T>()`, `AddComponent`, `AddBuffer` (fill before adding anything else), `SetComponentEnabled`, `DependsOn` |
-| `ActorParts.Override(parts, overrides)` | The merge rule, for placement data of your own |
-| `ActorCatalog` (ScriptableObject) | `Actors` by type index (append only once shipped), `IndexOf(key)`, `GetTags(list)` (the tag table, ordinal), `Validate(errors)`; at most 128 tags |
-| `Actor { FixedString32Bytes key; int type }` | On every actor's root entity; `type` -1 for a key the registry lacks |
-| `ActorRegistry` + `ActorType { key, Entity prefab, ActorTagSet tags }` + `ActorTagName { name }` (buffers) | The registry, copied into every simulation world under the same indices |
-| `ActorLookup` | `Get(ref SystemState)`, `TryGet(EntityManager, out)`, `TypeCount`, `TryGetType(key, out type)`, `GetKey`, `GetPrefab`, `GetTags`, `TryGetTag(name, out ActorTag)`, `GetTagName`, `HasTag(type or Actor, tag)`, `Instantiate(EntityManager / EntityCommandBuffer / ParallelWriter, type)`. Reads the buffers in place: get it again after a structural change |
-| `ActorTagSet` | `Contains`, `Overlaps`, `ContainsAll`, `Add` |
-| `ActorUtility` | `CreateRegistry(EntityManager, catalog)`, `CreatePlaced(EntityManager, definition, FixedPose placement, FixedVector3 scale, overrides, order)` / `CreatePlaced(EntityManager, ActorAuthoring, order)` (run-time content, no subscene), `Build`, `HasRegistry`, `ResolveTypes(EntityManager)` (the types of placed actors by key, without lockstep) |
-| `LockstepActorUtility` (`Pragma.Dots.Lockstep`) | `CopyRegistry`, `CopyPlacedActors`: what `LockstepClientWorldUtility.CreateSimulationOptions` does before tick 0 |
-| `PlacedActor { ulong order }` | On placed actors: copied into every simulation world before tick 0 in this order; references to anything outside the placed actors (actor prefabs included) become `Entity.Null` |
+| `ActorLookup.Get(ref state)` | The registry of the simulation world: `TryGetType(key, out type)`, `TryGetTag(name, out tag)`, `HasTag(type or Actor, tag)`, `Instantiate(EntityManager, type)`, `Instantiate(EntityCommandBuffer, type)`, `Instantiate(ParallelWriter, sortKey, type)`. Get it again after a structural change |
+| `LockstepActorUtility` | `CopyRegistry(source, destination)`, `CopyPlacedActors(source, destination)`: what `LockstepClientWorldUtility.CreateSimulationOptions` does before tick 0 |
+| `PlacedActor { ulong order }` | Placed actors are copied into every simulation world before tick 0 in this order, typed by key; references to anything outside the placed actors (actor prefabs included) become `Entity.Null` |
+| `TransformPart`, `EntityIdPart` | The lockstep parts: `LockstepTransform` from the placement (*Interpolate*, on by default, adds `LockstepTransformPrevious`), `LockstepEntityId` |
 
 Spawning: `var actors = ActorLookup.Get(ref state); if (actors.TryGetType("rifleman", out var type)) { var e =
-actors.Instantiate(state.EntityManager, type); }`, then set its `LockstepTransform`. The registry always exists in
-simulation worlds made by the built-in systems; it is empty when a baking subscene had not loaded, so start the session
-with `waitForActorRegistry`.
+actors.Instantiate(state.EntityManager, type); }`, then set its `LockstepTransform` (a prefab stands at the identity).
+The registry always exists in simulation worlds made by the built-in systems; it is empty when a baking subscene had
+not loaded, so start the session with `waitForActorRegistry`.
 
 ## Navigation
 
-Namespace and assembly `Pragma.Dots.Navigation`.
+Namespace and assembly `Pragma.Dots.Navigation`: the Navigation module (`PRAGMA_DOTS_NAVIGATION`, needs Lockstep).
 
 | Type | Members |
 |---|---|
@@ -163,7 +154,7 @@ Namespace and assembly `Pragma.Dots.Navigation`.
 | `LockstepNavSystemGroup` | In `LockstepSimulationSystemGroup`: `LockstepNavObstacleSystem` (first; keeps the clearance), `LockstepNavPathSystem` (groups requests, one search per group, paths in parallel), `LockstepNavAvoidanceSystem` (picks avoiding velocities, with a `LockstepNavAvoidance`), `LockstepNavMoveSystem`, `LockstepNavSeparationSystem` (pushes overlapping agents apart; opposite walkers only sideways). Set destinations before it |
 | `LockstepNavPathMap` | The grid as one agent plans on it: `grid`, `cells`, `clearance` (`GetClearance` of its radius), `crowd` (standing agents per cell, empty for none), `crowdCost`; `new LockstepNavPathMap(grid, cells, clearance = 1)`, `IsPassable(cell)`. In a job, mark the field `[ReadOnly]` and create every array |
 | `LockstepPathfinder` | `new LockstepPathfinder(cellCount, allocator)`, `FindPath(grid, cells, ...)` or `FindPath(map, start, destination, NativeList<FixedVector3> or DynamicBuffer<LockstepNavWaypoint>)` returns `LockstepPathStatus` (`Failed`, `Complete`, `Partial`); a group: `SearchGroup(map, goalCell, startCells)` (one search back from the goal to all starts), `GetChain(startCell, chain)`, `FollowChain(map, start, destination, chain, waypoints)` (`Failed` when the chain does not lead there: plan alone); `TryGetStartCell`, `TryGetEndCell`; `Dispose()`. Keeps scratch memory; one per thread |
-| `LockstepNavigation` | `IsWalkable(grid, cells, cell or position)`, `GetClearance(grid, radius)` (1 up to the agent radius, one more per cell size larger, rounded), `IsPassable(grid, cells, cell or position, clearance)`, `UpdateClearance(grid, cells)` (after stamping cells yourself), `HasLineOfSight(grid, cells, from, to[, clearance])` (exact, corners count both sides), `TryFindNearestWalkable(grid, cells, cell, out nearest)`, `TryFindNearestPassable(grid, cells, cell, clearance, out nearest)`, `TryStep(grid, cells, from, step[, clearance], out position)` (the passable part of a step: whole, X or Z), `GetStepClearance`, `IsClear(grid, cells, footprint)` (every cell the footprint would block is inside the grid and walkable: where a building may go), `Covers(grid, footprint, cell)` and `GetCoverage(grid, footprint, out min, out max)` (the cells a footprint blocks, outside the grid too, for footprints not stamped yet), `Stamp(grid, cells, footprint, count)` for previews and tests; ground: `HasHeights(grid, heights)`, `GetHeight(grid, heights, xz)` (bilinear, the edge beyond the grid), `ToGround(grid, heights, position)` (unchanged without heights), `IsSteep(grid, heights, cell)` |
+| `LockstepNavigation` | `IsWalkable(grid, cells, cell or position)`, `GetClearance(grid, radius)` (1 up to the agent radius, one more per cell size larger, rounded), `IsPassable(grid, cells, cell or position, clearance)`, `UpdateClearance(grid, cells)` (after stamping cells yourself), `HasLineOfSight(grid, cells, from, to)` (`FixedVector3` or XZ) and `HasLineOfSight(grid, cells, fromXz, toXz, clearance)` (exact, corners count both sides), `TryFindNearestWalkable(grid, cells, cell, out nearest)`, `TryFindNearestPassable(grid, cells, cell, clearance, out nearest)`, `TryStep(grid, cells, from, step[, clearance], out position)` (the passable part of a step: whole, X or Z), `GetStepClearance`, `IsClear(grid, cells, footprint)` (every cell the footprint would block is inside the grid and walkable: where a building may go), `Covers(grid, footprint, cell)` and `GetCoverage(grid, footprint, out min, out max)` (the cells a footprint blocks, outside the grid too, for footprints not stamped yet), `Stamp(grid, cells, footprint, count)` for previews and tests; ground: `HasHeights(grid, heights)`, `GetHeight(grid, heights, xz)` (bilinear, the edge beyond the grid), `ToGround(grid, heights, position)` (unchanged without heights), `IsSteep(grid, heights, cell)` |
 
 Read the cells with `SystemAPI.GetSingletonBuffer<LockstepNavCell>(true).AsNativeArray()` and the grid with
 `SystemAPI.GetSingleton<LockstepNavGrid>()`.
@@ -174,7 +165,7 @@ outside), `GetCellMin`, `GetCellCenter`, `ClampToGrid`.
 
 ## Vision
 
-Namespace and assembly `Pragma.Dots.Vision`.
+Namespace and assembly `Pragma.Dots.Vision`: the Vision module (`PRAGMA_DOTS_VISION`, needs Lockstep).
 
 | Type | Members |
 |---|---|
@@ -189,7 +180,9 @@ against vision ("attack only what you see") reads the planes the previous tick l
 
 ## Stats
 
-Namespace and assembly `Pragma.Dots.Stats`.
+Namespace and assembly `Pragma.Dots.Stats`: the Stats module (`PRAGMA_DOTS_STATS`, needs Lockstep). It has no actor
+part: a part of the game builds the buffers (`builder.AddBuffer<LockstepStat>()`, filled at once, then the empty
+`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrantor`, `LockstepStatTarget`).
 
 | Type | Members |
 |---|---|
@@ -237,37 +230,8 @@ grant ending on tick T + D was applied on ticks T to T + D - 1 when added on tic
 | `LockstepViewSystem` (presentation worlds) | Mirrors actors as copies of their type's prefab (Entities Graphics); `LockstepView { Entity simulationEntity }`, `TryGetView`, `ViewCount` |
 | `EntityViewManager.TryGet(World, out manager)` (`Pragma.Dots.Views`) | GameObject views of the entities with an `EntityViewKey`: `TryGetView`, `Attach`, `Detach`, `ForceUpdate`; see `views.md` |
 
-## Actor parts and authoring
+## Actor parts
 
-Parts, by menu path (module in brackets):
-
-- *Transform* (`TransformPart`, Lockstep) - `LockstepTransform` from the placement and the X of its scale (identity on
-  a type's prefab); *Interpolate* adds `LockstepTransformPrevious`.
-- *Entity Id* (`EntityIdPart`, Lockstep) - `LockstepEntityId`.
-- *Navigation/Grid* (`NavGridPart`, Navigation) - the navigation grid of a map (size centred on the placement, cell size,
-  agent radius) and its ground: a `TerrainData` covering the grid exactly, its world Y and the steepest walkable slope in
-  degrees, sampled in fixed point. Selecting the placed actor previews the cells obstacles and steep ground block.
-- *Navigation/Obstacle* (`NavObstaclePart`) - a box whose X and Z block the grid; moves with the actor when it has a
-  Transform part, otherwise keeps the pose of the placement (non-uniform scale included).
-- *Navigation/Agent* (`NavAgentPart`) - `LockstepNavAgent` (speed, angular speed and turn-in-place angle in degrees,
-  stopping distance, radius), its waypoint buffer and `LockstepNavVelocity`; needs a Transform part.
-- *Navigation/Avoidance* (`NavAvoidancePart`) - the `LockstepNavAvoidance` singleton of a map; leave it out to turn
-  avoidance off.
-- *Vision/Grid* (`VisionGridPart`, Vision) - the vision grid of a map (size centred on the placement, cell size: how fine
-  the fog edge is).
-- *Vision/Source* (`VisionSourcePart`) - `LockstepVisionSource` with a radius and slot -1 (set it to the owner's slot in
-  gameplay); needs a Transform part.
-- *View* (`ViewPart`, Views) - `EntityViewKey`: the actor's key unless the part names another; the editor previews the
-  placed actor with that view.
-
-MonoBehaviours, namespace `Pragma.Dots.Actors` unless noted:
-
-- `ActorAuthoring` - a placed actor: definition plus overriding parts at the GameObject's pose; bakes into a
-  `PlacedActor`. `GetParts`, `GetPlacement`, `GetPlacementScale`.
-- `Pragma.Dots.Actors.Authoring.ActorCatalogAuthoring` - bakes an `ActorCatalog` into the registry; put it in a subscene of
-  the client/local world.
-- `Pragma.Dots.Views.Authoring.EntityViewConfigAuthoring` (Views) - bakes an `EntityViewConfig` catalog into the
-  presentation world (not for servers).
-
-For data of your own, write a part rather than a baker: the same part serves subscenes and run-time content, and the
-inspector edits it in the definition.
+The parts of every module, by menu path, and the authoring components are listed in the `pragma-dots-actors` skill
+(`references/api.md`). For data of your own, write a part rather than a baker: the same part serves subscenes and
+run-time content, and the inspector edits it in the definition.

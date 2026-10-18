@@ -12,8 +12,8 @@ namespace Pragma.Dots.Navigation
     /// <remarks>
     /// The cells are laid out as a <see cref="FixedGrid"/> (<see cref="Layout"/>): cell (x, y) starts at world X
     /// <c>origin.x + x * cellSize</c> and world Z <c>origin.y + y * cellSize</c>, and positions map to cells with integer
-    /// math, so every client puts a position into the same cell. Bake the grid with <c>LockstepNavGridAuthoring</c> into
-    /// the subscene of the map, or create the entity in code before tick 0; <see cref="LockstepNavObstacleSystem"/> sizes
+    /// math, so every client puts a position into the same cell. Give the map's actor a <see cref="NavGridPart"/>
+    /// (placed in the subscene of the map), or create the entity in code before tick 0; <see cref="LockstepNavObstacleSystem"/> sizes
     /// the cell buffer.
     /// </remarks>
     public struct LockstepNavGrid : IComponentData

@@ -8,7 +8,7 @@ The development project of the Unity package `com.pragma.dots` (Pragma DOTS): bu
 Entities. The core (fixed-point math, actors, utilities) is always compiled; deterministic lockstep (with a Netcode for
 Entities transport), navigation, vision, stats and GameObject views are opt-in modules. The package is
 `Assets/PragmaDOTS` and is consumed through a git URL with `?path=Assets/PragmaDOTS`; everything else in the project
-(tests, the sample, research notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 6000.6, Entities 6.6, Netcode for Entities 6.6).
+(tests, research notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 6000.6, Entities 6.6, Netcode for Entities 6.6).
 
 The package is unreleased: backward compatibility is not required yet, prefer clean renames over compatibility shims.
 
@@ -27,11 +27,10 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 | `Assets/PragmaDOTS/Modules/Vision` | `PRAGMA_DOTS_VISION`, needs Lockstep. `Pragma.Dots.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and the actor parts (`Parts`) |
 | `Assets/PragmaDOTS/Modules/Stats` | `PRAGMA_DOTS_STATS`, needs Lockstep. `Pragma.Dots.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
 | `Assets/PragmaDOTS/Modules/Views` | `PRAGMA_DOTS_VIEWS`, needs Lockstep. `Pragma.Dots.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`, `ViewPart`. `Pragma.Dots.Views.Authoring` (`Authoring`): `EntityViewConfigAuthoring`. `Pragma.Dots.Views.Editor` (`Editor`): the actor view previews |
-| `Assets/PragmaDOTS/Skills~` | Claude Code skills shipped with the package (gameplay, sessions, desync); Unity skips the folder. Read them before writing simulation code |
+| `Assets/PragmaDOTS/Skills~` | Claude Code skills shipped with the package (actors, gameplay, sessions, desync); Unity skips the folder. Read them before writing content or simulation code |
 | `Assets/Tests/Core/Editor` | `Pragma.Dots.Tests.Editor`: the EditMode suite of the core (not shipped): `Mathematics`, `Utils`, `Actors`; test components and parts in `Support` |
 | `Assets/Tests/Modules/<Module>/Editor` | `Pragma.Dots.<Module>.Tests.Editor`: the suite of a module, compiled only with its define; the lockstep suite (`Pragma.Dots.Lockstep.Tests.Editor`) keeps the session and frame helpers and test components in `Support` |
 | `Assets/Tests/Modules/Views/Runtime` | `Pragma.Dots.Views.Tests.Runtime`: MonoBehaviours the view tests add to GameObjects; Unity refuses components from Editor assemblies |
-| `Assets/Examples` | *Lockstep Arena* sample (not shipped); its systems run in every simulation world of this project |
 | `documentation.md`, `mebecs_research.md`, `photon_research.md` | Design notes and the research they are based on |
 
 ## Architecture invariants
@@ -167,7 +166,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   refuses scripts from Editor assemblies ("Can't add script behaviour ... because it is an editor script").
 - Settings and configs are structs with properties: never mutate a struct-typed property in place
   (`config.StartData.Add(x)` changes a copy and compiles silently); build a local and assign it.
-- The Netcode integration test disables `LockstepInputSystemGroup` in its worlds, so the sample's input system does
+- The Netcode integration test disables `LockstepInputSystemGroup` in its worlds, so input systems of the project do
   not interfere.
 - Name tests `Subject_ExpectedBehaviour`. New behaviour gets a test; protocol and simulation changes get a session
   test with latency and jitter.
@@ -175,7 +174,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
 ## Documentation
 
 Keep in sync with code changes: the package README (API, defaults, behaviour), the root README, the CHANGELOG, the
-sample README, the skills in `Skills~` (they quote API names, defaults and limits) and `documentation.md`
+the skills in `Skills~` (they quote API names, defaults and limits) and `documentation.md`
 (design decisions).
 
 ## Git

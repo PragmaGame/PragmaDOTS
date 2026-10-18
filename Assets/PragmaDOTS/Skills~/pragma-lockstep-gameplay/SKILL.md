@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-gameplay
-description: Write deterministic gameplay for the lockstep module of Pragma DOTS (com.pragma.dots, Pragma.Dots.Lockstep) - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, actors (ActorDefinition, ActorPart, ActorCatalog, ActorAuthoring, ActorLookup: types by key, tags, parts, map placement, spawning), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
+description: Write deterministic gameplay with Pragma DOTS (com.pragma.dots) - the Lockstep module (Pragma.Dots.Lockstep) and the Navigation, Vision, Stats and Views modules built on it, with the core fixed-point math and actors - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, spawning actors by key inside the simulation (ActorLookup, LockstepTransform), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
 ---
 
 # Gameplay with Pragma DOTS lockstep
@@ -12,49 +12,57 @@ desynced for good. Treat the rules below as correctness requirements, not style.
 
 Deeper reference:
 
-- `references/simulation-api.md` - every simulation-side type, singleton and helper.
+- `references/simulation-api.md` - every simulation-side type, singleton and helper of the lockstep, navigation,
+  vision and stats modules.
 - `references/fixed-point.md` - `FixedPoint` semantics, `FixedMath`, vectors, quaternions, `FixedRandom`.
 - `references/views.md` - GameObject views: keys, parts, update systems, catalogs, the manager, pools.
 - The package README: `Assets/PragmaDOTS/README.md` in the package repository, or
   `Library/PackageCache/com.pragma.dots@*/README.md` in a project that installed it.
-- The `pragma-lockstep-desync` skill when something already diverged; `pragma-lockstep-sessions` for networking.
+- The `pragma-dots-actors` skill for content: definitions, parts, the catalog, placed actors.
+- The `pragma-lockstep-desync` skill when something already diverged; `pragma-lockstep-sessions` for networking and
+  for running a session offline.
 
 ## Modules
 
-Lockstep, navigation, vision, stats and GameObject views are modules: each compiles only with its scripting define
-(`PRAGMA_DOTS_LOCKSTEP`, `PRAGMA_DOTS_NAVIGATION`, `PRAGMA_DOTS_VISION`, `PRAGMA_DOTS_STATS`, `PRAGMA_DOTS_VIEWS`), all
-off after installation; the last four require lockstep. If a `Pragma.Dots.Lockstep` or `Pragma.Dots.Navigation` type
-(or another module's) "could not be found", the module is off: turn it on in *Project Settings > Pragma > DOTS*, which
-writes the define to every build target. Never add the define to
-one target only: builds with different modules run different simulation systems and refuse each other. A module's
-actor parts are in its runtime assembly.
+The core is always compiled and knows nothing of lockstep: `Pragma.Dots.Mathematics` (fixed-point math),
+`Pragma.Dots.Actors` (+ `.Authoring`) and `Pragma.Dots.Utils`. Everything else is a module that compiles only with its
+scripting define, all off after installation:
+
+| Module | Define | Assembly to reference | Needs |
+|---|---|---|---|
+| Lockstep | `PRAGMA_DOTS_LOCKSTEP` | `Pragma.Dots.Lockstep`; `Pragma.Dots.Lockstep.Netcode` only with `com.unity.netcode` installed | |
+| Navigation | `PRAGMA_DOTS_NAVIGATION` | `Pragma.Dots.Navigation` | Lockstep |
+| Vision | `PRAGMA_DOTS_VISION` | `Pragma.Dots.Vision` | Lockstep |
+| Stats | `PRAGMA_DOTS_STATS` | `Pragma.Dots.Stats` | Lockstep |
+| Views | `PRAGMA_DOTS_VIEWS` | `Pragma.Dots.Views` (+ `.Authoring`) | Lockstep |
+
+When a package type "could not be found", either its module is off (turn it on in *Project Settings > Pragma > DOTS*,
+which writes the define to every build target and turns Lockstep on with the modules that need it) or the game's
+assembly definition lacks the reference. Never set a define on one target only: a build without Lockstep, Navigation,
+Vision or Stats has other simulation systems and the server refuses it; a build without Views is accepted but desyncs,
+because the View part's `EntityViewKey` is simulation state. A module's actor parts are in its runtime assembly.
 
 ## Actors
 
-Units, buildings, projectiles and map objects are actors: an `ActorDefinition` asset (key such as "rifleman", tags
-such as "unit" and "player", a parent to inherit from, and parts), spawned by key from the `ActorCatalog` and placed on
-maps with `ActorAuthoring`. They are in the core (namespace and assembly `Pragma.Dots.Actors`); the lockstep module
-adds the Transform and Entity Id parts and copies the registry and the placed actors into the simulation. Prefer them
-to hand-built archetypes and to bakers of your own:
+Units, buildings, projectiles and map objects are actors (`ActorDefinition` assets with a key, tags, a parent and
+parts; core assembly `Pragma.Dots.Actors`). The `pragma-dots-actors` skill covers writing them; inside the simulation:
 
-- **A component of the game** becomes a part without code: `[Serializable, ActorComponent("Combat/Health")]` on the
-  struct (public fields, `FixedPoint` rather than `float`); the part menu lists it as `ActorComponentPart<T>` (or
-  `ActorBufferPart<T>` for buffer elements).
-- **A part with logic** derives from `ActorPart` (`[Serializable]`, optional `[ActorPartMenu("Combat/Weapon")]`) and
-  overrides `Build(IActorBuilder builder)`: `builder.AddComponent`, `AddBuffer` (fill it before adding anything else),
-  `SetComponentEnabled`, `HasPart<T>()`, `Key`, `IsPlaced`, `Placement` (a `FixedPose`), `PlacementScale`,
-  `DependsOn(asset)`. The same
-  `Build` runs at bake time and at run time: keep `FixedPoint` fields, read only the part's data and the builder.
-  Reference other actors by `ActorDefinition` field and store their key. Never rename a part class without
-  `[MovedFrom]`: its data is serialized by reference.
+- The registry and the placed actors of the presentation world are copied into every simulation world before tick 0
+  (`LockstepClientWorldUtility.CreateSimulationOptions`). The registry is empty when a baking subscene had not loaded
+  when the simulation was created: start the session with `waitForActorRegistry`.
 - **Spawning**: `var actors = ActorLookup.Get(ref state); actors.TryGetType("rifleman", out var type);
-  actors.Instantiate(state.EntityManager, type)` (or a command buffer), then set its `LockstepTransform`. Read
-  `ActorLookup` again after a structural change. Look keys and tags up once and keep the indices.
+  actors.Instantiate(state.EntityManager, type)` (or a command buffer), then set its `LockstepTransform`
+  (`LockstepTransform.FromPosition`, `FromPose`): a prefab stands at the identity. Read `ActorLookup` again after a
+  structural change. Look keys and tags up once and keep the indices.
 - **Tags**: `actors.TryGetTag("unit", out var unit)`, then `actors.HasTag(actorComponent, unit)` (a bit test) for
   rules such as "only units capture points". `Actor { key, type }` is on every actor's root entity.
-- **Map content** is placed with `ActorAuthoring` in the map subscene (definition plus overriding parts); it is a
-  placed actor (`PlacedActor`) the simulation starts with. Without subscenes, `ActorUtility.CreateRegistry(entityManager,
-  catalog)` and `CreatePlaced(...)` build the same content at run time on every client.
+- **Map content** is placed with `ActorAuthoring`: a placed actor (`PlacedActor`) the simulation starts with, in the
+  same order and archetypes on every client. References between placed actors survive the copy; references to
+  anything else become `Entity.Null`, so name other types by key.
+- The lockstep module brings the *Transform* (`LockstepTransform`; *Interpolate*, on by default, adds
+  `LockstepTransformPrevious`) and *Entity Id* (`LockstepEntityId`) parts, both in every new definition.
+- Game data is a part: `[Serializable, ActorComponent("Combat/Health")]` on a component with `FixedPoint` fields, or
+  an `ActorPart` whose `Build` is deterministic from its own fields.
 
 ## Where code goes
 
@@ -80,8 +88,9 @@ simulation at all; a presentation system inside the group would run in the simul
 4. **Structural changes.** Never create or destroy entities while iterating a `SystemAPI.Query`: record into a
    lockstep command buffer or collect into a `NativeList` and apply after the loop.
 5. **Presentation.** Read the new state from the presentation side (views, UI, effects).
-6. **Verify.** Compile, run the session offline, and run the determinism tests (see `pragma-lockstep-desync`): at
-   least two clients in one process with checksums on.
+6. **Verify.** Compile, run the session offline (`LockstepOfflineConfig.Create<TInput>(tickRate)`, see
+   `pragma-lockstep-sessions`), and run the determinism tests (see `pragma-lockstep-desync`): at least two clients in
+   one process with checksums on.
 
 ## The simulation API you need most
 
@@ -115,8 +124,9 @@ ids.TryGetEntity(targetId, out var target);
 ```
 
 Order inside the group: `LockstepFrameApplySystem` -> `LockstepTransformHistorySystem` ->
-`LockstepBeginSimulationEntityCommandBufferSystem` -> your systems -> `LockstepEndSimulationEntityCommandBufferSystem`
--> `LockstepEntityIdSystem`.
+`LockstepBeginSimulationEntityCommandBufferSystem` -> your systems, `LockstepNavSystemGroup` and `LockstepStatSystem`
+(default slot: order yours against them) -> `LockstepVisionSystem` (`OrderLast`) ->
+`LockstepEndSimulationEntityCommandBufferSystem` -> `LockstepEntityIdSystem`.
 
 ## Players
 
@@ -256,13 +266,15 @@ foreach (var (player, commands, commandData) in
 1. **No `float`, `double`, `Mathf` or `Unity.Mathematics` float math in anything that changes state.** Floating point
    results differ between CPUs, compilers and Burst modes. Use `FixedPoint` and `FixedMath`; build constants from integers and
    fractions (`FixedPoint.FromFraction(7, 2)`), not from float literals computed at runtime.
-2. **Time and randomness come from the simulation.** `LockstepTime` (or tick counters), `LockstepRandom` or an
-   `FixedRandom` stored in a component. `SystemAPI.Time`, `UnityEngine.Random` and `System.Random` differ per machine.
+2. **Time and randomness come from the simulation.** `LockstepTime` (or tick counters), `LockstepRandom` or a
+   `FixedRandom` stored in a component. `SystemAPI.Time` is float; `UnityEngine.Time`, `UnityEngine.Random` and
+   `System.Random` differ per machine.
 3. **All state lives in simulation components.** The checksum only sees components, so a divergence in a system
    field goes unnoticed until it corrupts something else; statics are shared by every world of the process (a second
    client in a test, a replay running next to the game); managed objects and components on system entities are not
    hashed at all. Systems must be stateless between ticks (caching an `EntityArchetype` or a query is fine); put
-   singleton state on an ordinary entity, not on `state.SystemHandle`.
+   singleton state on an ordinary entity, not on `state.SystemHandle`. A cache that is rebuilt from the state every
+   tick may carry `[LockstepChecksumIgnore]` (on the type or a field) to stay out of the hash.
 4. **`Entity` values are never data.** Entities allocates entity ids from one store shared by every world of the
    process, so the same simulated entity has different `Index`/`Version` on every client. Never sort by an `Entity`,
    hash it, seed randomness with it, iterate a hash map keyed by it, or send it in a command. Use `LockstepEntityId`
@@ -279,27 +291,28 @@ foreach (var (player, commands, commandData) in
 |---|---|
 | `float`, `double`, `Mathf.*`, `math.sin` | `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath.Sin` |
 | `SystemAPI.Time.DeltaTime`, `Time.time` | `LockstepTime.deltaTime`, `LockstepTime.tick`, tick counters |
-| `UnityEngine.Random`, `System.Random` | `LockstepRandom.value`, an `FixedRandom` in a component |
+| `UnityEngine.Random`, `System.Random` | `LockstepRandom.value`, a `FixedRandom` in a component |
 | `Entity` in commands, sort keys, seeds, hash keys | `LockstepEntityId.value` |
 | A `FixedList` of ids in a command payload, orders split into chunks | Command data: `LockstepCommand.Create(payload, data, dataBuffer)`, `GetData<T>` |
 | `LocalTransform` for gameplay | `LockstepTransform` |
-| Unity Physics queries for gameplay | Own `FixedPoint` collision code |
+| Unity Physics queries for gameplay | Own `FixedPoint` collision code, `LockstepSpatialIndex` for what is near |
 | NavMesh, `NavMeshAgent` | `LockstepNavAgent` on the `LockstepNavGrid` (`Pragma.Dots.Navigation`) |
 | `static` counters, system fields with state | Singleton components on ordinary entities |
 | Iterating a hash map | Iterate a query or a buffer sorted by a deterministic key |
 
 ## Useful patterns
 
-- **Per-slot lookup:** build `new NativeArray<Entity>(info.maxPlayers, Allocator.Temp)` from a query, then index by
-  slot. Query order is the same everywhere.
+- **Per-slot lookup:** `SystemAPI.GetSingletonBuffer<LockstepPlayerSlot>()[slot].player` is the player entity of a
+  slot (`Entity.Null` when free). For your own per-slot data, fill a `NativeArray` of `info.maxPlayers` from a query
+  and index it by slot.
 - **Cooldowns:** `int cooldownTicks`, decremented every tick; seconds become ticks with `seconds * time.tickRate`.
 - **Distance checks:** compare `FixedMath.DistanceSquared(a, b) < radius * radius` for small coordinates; `LengthSquared` overflows
   above about 46 000 per component, use `FixedMath.Length`/`Distance` for large worlds.
 - **Nearest of many (targets, neighbours):** build a `LockstepSpatialIndex` from the positions of the tick once and
   query it (`Query(center, radius)`: the points in the cells around, in the same order everywhere); check the distance,
   widen the radius by the largest body, and break ties by the point's index.
-- **Spawning many entities from a query:** collect the spawn data in a `NativeList` (as the sample's `Shot` struct)
-  and create them after the loop, or use the end-of-tick command buffer.
+- **Spawning many entities from a query:** collect the spawn data (position, direction, owner) in a `NativeList` of
+  a small struct and create them after the loop, or use the end-of-tick command buffer.
 - **Per-entity random streams:** `FixedRandom.CreateFromIndex(info.seed, lockstepEntityId.value)` stored in a component,
   created once `LockstepEntityId.IsAssigned` (the tick after creation; on the creation tick every id is still 0).
 - **One-shot effects for the presentation:** append `{ tick, kind, position }` to a singleton buffer in the
@@ -308,8 +321,8 @@ foreach (var (player, commands, commandData) in
 
 ## Navigation
 
-Units that walk around obstacles use `Pragma.Dots.Navigation` (module `PRAGMA_DOTS_NAVIGATION`, assembly
-reference `Pragma.Dots.Navigation`; actor parts under *Navigation*):
+Units that walk around obstacles use the Navigation module (`PRAGMA_DOTS_NAVIGATION`, needs Lockstep; namespace and
+assembly `Pragma.Dots.Navigation`; actor parts under *Navigation*):
 
 - **Grid.** One `LockstepNavGrid` per simulation world, from a *Navigation/Grid* part (`NavGridPart`) on the map's
   placed actor: size, cell size, agent radius (that of the common units). Its `LockstepNavCell` buffer counts the
@@ -322,7 +335,7 @@ reference `Pragma.Dots.Navigation`; actor parts under *Navigation*):
   since Y now depends on the ground.
 - **Obstacles.** `NavObstaclePart`: on an actor with a Transform part the rectangle follows it (buildings); on a
   placed actor without one the pose of the placement is kept. Cells are blocked while the entity exists; destroying it
-  releases them on the next tick.
+  releases them in the next navigation update.
 - **Agents.** `NavAgentPart` (speed, angular speed in degrees, the angle beyond which it turns on the spot
   before it walks — a tracked vehicle, stopping distance, body radius). Gameplay calls
   `agent.ValueRW.SetDestination(target)` from a system with `[UpdateBefore(typeof(LockstepNavSystemGroup))]` and reads
@@ -330,8 +343,8 @@ reference `Pragma.Dots.Navigation`; actor parts under *Navigation*):
   yourself; call `Stop()` first.
 - **Groups.** Send the agents of one order with `SetDestination(place, groupGoal)` — each to its own place around the
   point of the order, `groupGoal` the point: the order costs one search for all of them (`LockstepNavPathSystem` groups
-  the requests of a tick by goal cell and body clearance). `agent.pace` keeps an agent to the pace of the group it walks
-  with (the slowest member's speed; 0 — its own); `WalkSpeed` is what it walks at.
+  the requests of a tick by goal cell and body clearance). Set `agent.pace` yourself to keep an agent to the pace of the
+  group it walks with (the slowest member's speed; 0 walks at its own); `WalkSpeed` is what it walks at.
 - **Large bodies.** A radius larger than the grid's agent radius needs clearance (`LockstepNavigation.GetClearance`):
   paths, steps and pushes keep such an agent (a vehicle) to cells with room for its body. Spawn it on such a cell
   (`IsPassable` with its clearance, `TryFindNearestPassable`), and give a weapon that strikes from its centre a reach
@@ -356,12 +369,13 @@ reference `Pragma.Dots.Navigation`; actor parts under *Navigation*):
 
 ## Vision
 
-What each player slot sees is simulation state (`Pragma.Dots.Vision`, module `PRAGMA_DOTS_VISION`, assembly
-reference `Pragma.Dots.Vision`; actor parts under *Vision*), so rules may depend on it and every client agrees:
+What each player slot sees is simulation state (the Vision module: `PRAGMA_DOTS_VISION`, needs Lockstep; namespace and
+assembly `Pragma.Dots.Vision`; actor parts under *Vision*), so rules may depend on it and every client agrees:
 
 - **Grid.** One `LockstepVisionGrid` per simulation world, from a `VisionGridPart` (size, cell size) on the map's
-  placed actor. `LockstepVisionSystem` runs last in the tick and fills one plane of `LockstepVisionCell`s per slot
-  of the session from scratch. Without a grid nothing is hidden.
+  placed actor. `LockstepVisionSystem` runs at the end of the tick (`OrderLast`, before the end-of-tick command
+  buffer, so sources created through that buffer see from the next tick) and fills one plane of `LockstepVisionCell`s
+  per slot of the session from scratch. Without a grid nothing is hidden.
 - **Sources.** `VisionSourcePart` on whatever sees (units, buildings); it starts with slot -1: set `slot` to the
   owner's slot where the entity gets it, and copy a sight stat into `radius` with a change-filtered job, as with speed.
 - **Queries.** `LockstepVision.IsVisible(grid, cells, slot, position.Xz, radius)` (a body is seen by its edge),
@@ -375,11 +389,12 @@ reference `Pragma.Dots.Vision`; actor parts under *Vision*), so rules may depend
 ## Stats
 
 Numbers that upgrades, research, abilities, auras or cover change (max health, speed, damage, range), and amounts that
-gameplay spends and refills (health, morale, energy, money), are stats of `Pragma.Dots.Stats` (module
-`PRAGMA_DOTS_STATS`, assembly reference `Pragma.Dots.Stats`), not fields that systems patch by hand:
+gameplay spends and refills (health, morale, energy, money), are stats of the Stats module (`PRAGMA_DOTS_STATS`, needs
+Lockstep; namespace and assembly `Pragma.Dots.Stats`), not fields that systems patch by hand:
 
-- **Data.** The game names its stats with an enum (0 = none); the factories and helpers take the enum itself. An entity
-  bakes a `LockstepStat` buffer of attributes (`LockstepStat.Attribute(type, baseValue)`) and resources
+- **Data.** The game names its stats with an enum (0 = none); the factories and helpers take the enum itself. The
+  module has no actor part: an `ActorPart` of the game builds the buffers (`builder.AddBuffer<LockstepStat>()`, filled
+  at once, then the others). An entity has a `LockstepStat` buffer of attributes (`LockstepStat.Attribute(type, baseValue)`) and resources
   (`LockstepStat.Resource(type, amount)`, or `Resource(type, capAttribute, LockstepStatCapPolicy.KeepRatio)`, which
   starts full), plus the empty buffers it takes part in: `LockstepStatModifier`, `LockstepStatChange`,
   `LockstepStatGrantor`, `LockstepStatTarget`.
@@ -400,7 +415,8 @@ gameplay spends and refills (health, morale, energy, money), are stats of `Pragm
   `stats.TryGetValue(type, out value)` in systems with `[UpdateAfter(typeof(LockstepStatSystem))]`. Apply a stat to
   another component (agent speed) in an `IJobEntity` with `[WithChangeFilter(typeof(LockstepStat))]` and
   `in DynamicBuffer<LockstepStat>`: the stat system writes stats only when they change, and a read-write access would
-  make it recalculate them every tick. Views show stats with an `EntityBufferView<LockstepStat>` part.
+  make it recalculate them every tick. Views show stats with a part derived from `EntityBufferView<LockstepStat>` and
+  `public partial class StatViewUpdateSystem : EntityBufferViewUpdateSystem<LockstepStat> { }`.
 - **Base values.** `stats.TrySetBase` for permanent changes of an attribute (a level up); the value follows in the next
   update.
 
@@ -423,13 +439,15 @@ if (LockstepWorlds.TryGetClient(presentationWorld, out var client) && client.Sim
 }
 ```
 
-- Entities need `LockstepTransformPrevious` to interpolate (add it, or tick *Interpolate* on the actor's Transform part).
-- GameObject views (`Pragma.Dots.Views`, module `PRAGMA_DOTS_VIEWS`, ported from ECV) are the usual way to
+- Entities need `LockstepTransformPrevious` to interpolate: actors with a Transform part have it (*Interpolate*, on by
+  default); add it yourself to entities built by hand.
+- GameObject views (the Views module: `PRAGMA_DOTS_VIEWS`, needs Lockstep; `Pragma.Dots.Views`) are the usual way to
   show units: give the actor a View part (`ViewPart`: `EntityViewKey` = its key; the editor previews the actor with
   the view) or set an `EntityViewKey` where the entity is created, make a prefab with `EntityView`,
   `TransformComponentView` and one part per
   component type (`EntityComponentViewUnmanaged<T>` reacts to changes only), add
-  `public partial class XViewUpdateSystem : EntityViewUpdateSystem<X> { }` per type, and bind keys to prefabs in an
+  `public partial class XViewUpdateSystem : EntityViewUpdateSystem<X> { }` per type (`EntityBufferViewUpdateSystem<X>`
+  for buffers), and bind keys to prefabs in an
   `EntityViewConfig` (baked with `EntityViewConfigAuthoring`, or `EntityViewConfigProvider` when worlds are created on
   demand). Views come from a pool each project can replace (`EntityViewManagerSystem.PoolFactory`). See
   `references/views.md`.

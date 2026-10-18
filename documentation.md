@@ -139,7 +139,7 @@ the clients diverge. The port keeps the shape and replaces everything that wrote
   pool, and the root's methods are private: a part told by anyone else that its entity is gone would restore its pooled
   state while still on screen.
 - **A key in the simulation.** ECV keys views by `EntityIdentifier`, part of another framework. `EntityViewKey` is
-  ordinary simulation data, so entities created in code (the sample) get views as well as baked prefabs, and changing
+  ordinary simulation data, so entities created in code get views as well as baked prefabs, and changing
   the key swaps the view.
 - **No managed components.** They are deprecated in Entities 6.6: the catalog is an unmanaged buffer with
   `UnityObjectRef<GameObject>`, and the index lives in the system, found with `EntityViewManager.TryGet(world)`.
@@ -217,7 +217,7 @@ milliseconds. The input clock here is steered by how early the server actually r
 also accounts for server load and asymmetric routes.
 
 **Physics, prediction culling, the Photon server plugin** (Quantum). Out of scope: the request was a lockstep layer for
-Entities and Netcode for Entities. Gameplay collisions are written with `FixedPoint` (the sample does). Navigation
+Entities and Netcode for Entities. Gameplay collisions are written with `FixedPoint`. Navigation
 came later, for DawnOfWar, as a grid of its own rather than Quantum's navmesh (decision 11).
 
 ## Decisions specific to Unity DOTS

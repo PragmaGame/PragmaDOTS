@@ -11,7 +11,7 @@ namespace Pragma.Dots.Navigation
     /// </summary>
     /// <remarks>
     /// The heights are static: <see cref="LockstepNavObstacleSystem"/> reads them when it builds the cells, on the first
-    /// navigation update. <c>LockstepNavGridAuthoring</c> bakes them from a terrain.
+    /// navigation update. <see cref="NavGridPart"/> samples them from a terrain.
     /// </remarks>
     [InternalBufferCapacity(0)]
     public struct LockstepNavHeight : IBufferElementData

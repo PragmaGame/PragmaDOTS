@@ -20,7 +20,7 @@ namespace Pragma.Dots.Views.Editor
     /// <remarks>
     /// The preview is never saved. It is a child of the placed actor, except in an open subscene: baking would take the
     /// child for content of the map, so the preview lives hidden in a scene that is not baked and follows the actor there.
-    /// Picking the preview selects the actor. Turn previews off with <i>Tools > Pragma > Lockstep > Actor View Previews</i>.
+    /// Picking the preview selects the actor. Turn previews off with <i>Tools > Pragma > DOTS > Actor View Previews</i>.
     /// </remarks>
     [InitializeOnLoad]
     internal static class ActorViewPreview

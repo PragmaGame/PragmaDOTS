@@ -22,7 +22,7 @@ namespace Pragma.Dots.Lockstep
         public Action<World> Initialize { get; set; }
 
         /// <summary>
-        /// Optional gate checked before the world is created, for example "the prefab registry subscene has loaded".
+        /// Optional gate checked before the world is created, for example "the actor registry subscene has loaded".
         /// Frames keep buffering while it returns false; the client catches up afterwards.
         /// </summary>
         public Func<bool> CanCreate { get; set; }

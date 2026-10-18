@@ -120,7 +120,6 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simulation world (its `LockstepEntityId` for commands).
 - `LockstepTransformExtensions.TryGetInterpolated`: reads and interpolates the transform of a simulation entity with the
   rule both view systems use.
-- The sample shows its avatars and projectiles with GameObject views.
 - Placed actors: the actors placed on a map (`ActorAuthoring`), which every simulation world starts with
   (buildings, resource nodes, spawn markers). `LockstepClientWorldUtility.CreateSimulationOptions` copies them, with
   their linked entities, after the actor registry and before tick 0, in an order baked from the objects' identities
@@ -158,6 +157,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entity have next to their `LockstepCommand` buffer; `LockstepCommand.GetData<T>(dataBuffer)` reads it as a view and
   `DataLength` gives its size. Outside ECS, `LockstepClient.AddCommand(payload, data)`. Large commands are fragmented on
   the wire and reach every client in one tick.
+- The `pragma-dots-actors` Claude Code skill: content as actors, in any Entities game.
 
 ### Changed
 

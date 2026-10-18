@@ -10,7 +10,7 @@ namespace Pragma.Dots.Navigation
     /// around is short (<see cref="LockstepNavPathSystem"/>). Without it agents plan and walk their paths as if they were
     /// alone, exactly as they do without avoidance; remove it to turn avoidance off.
     /// </summary>
-    /// <remarks>Bake it with <c>LockstepNavAvoidanceAuthoring</c>, or add it from your own match settings.</remarks>
+    /// <remarks>Give the map's actor a <c>NavAvoidancePart</c>, or add it from your own match settings.</remarks>
     public struct LockstepNavAvoidance : IComponentData
     {
         /// <summary>The most neighbours an agent avoids at once.</summary>

@@ -13,8 +13,8 @@ namespace Pragma.Dots.Vision
     /// <see cref="LockstepVisionSystem"/> fills the planes again on every tick from the <see cref="LockstepVisionSource"/>s:
     /// vision is state of the simulation, the same on every client, so gameplay may depend on it (a player orders attacks
     /// only on what it sees) and the presentation draws the fog of war from it. The cells are laid out as a
-    /// <see cref="FixedGrid"/> (<see cref="Layout"/>). Bake the grid with <c>LockstepVisionGridAuthoring</c> into the subscene
-    /// of the map, or create the entity in code before tick 0. Without a grid nothing is hidden: there is no fog.
+    /// <see cref="FixedGrid"/> (<see cref="Layout"/>). Give the map's actor a <see cref="VisionGridPart"/> (placed in the
+    /// subscene of the map), or create the entity in code before tick 0. Without a grid nothing is hidden: there is no fog.
     /// </remarks>
     public struct LockstepVisionGrid : IComponentData
     {

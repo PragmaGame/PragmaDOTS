@@ -1,7 +1,8 @@
 # GameObject views reference
 
-Namespace `Pragma.Dots.Views` (assembly `Pragma.Dots.Views`, module `PRAGMA_DOTS_VIEWS`);
-`EntityViewConfigAuthoring` is in the namespace and assembly `Pragma.Dots.Views.Authoring`. A port of ECV (Entity Component View) that never writes to the simulation world.
+Namespace `Pragma.Dots.Views` (assembly `Pragma.Dots.Views`): the Views module, `PRAGMA_DOTS_VIEWS`, which needs the
+Lockstep module. `EntityViewConfigAuthoring` is in the namespace and assembly `Pragma.Dots.Views.Authoring`, the actor
+view previews in `Pragma.Dots.Views.Editor`. GameObject views that never write to the simulation world.
 
 ## Contents
 
@@ -24,8 +25,14 @@ Namespace `Pragma.Dots.Views` (assembly `Pragma.Dots.Views`, module `PRAGMA_DOTS
    part per component type or dynamic buffer to show.
 3. **Update system.** `public partial class HealthViewUpdateSystem : EntityViewUpdateSystem<Health> { }` per
    component type, `public partial class StatViewUpdateSystem : EntityBufferViewUpdateSystem<LockstepStat> { }` per
-   buffer element type, in any assembly (its presentation filter keeps it out of simulation worlds).
+   buffer element type (`LockstepStat` is the Stats module's), in any assembly (its presentation filter keeps it out
+   of simulation worlds).
 4. **Catalog.** An `EntityViewConfig` asset binding keys to prefabs, baked or registered at runtime (below).
+
+The manager shows the session of its world, found through `LockstepWorlds.TryGetClient(world)`: Netcode, offline
+and replay sessions register themselves, a client of your own needs `LockstepWorlds.RegisterClient(world, client)`.
+Interpolation needs `LockstepTransformPrevious` on the entity: the actor's Transform part adds it (*Interpolate*, on
+by default); without it a view moves in steps.
 
 ## Parts
 
@@ -49,18 +56,22 @@ must live in runtime (non-Editor) assemblies.
   (`PresentationSystemGroup`, after `EntityViewManagerSystem`). It pushes the chunks whose `T` changed since its last
   push (change versions of the simulation world, so writes made outside systems such as `LockstepTime` count too) and
   every value to views spawned, attached or forced since then. Disabled components count as absent, and toggling an
-  enableable component of the query counts as a change. `ConfigureQuery(builder)` narrows the query (simulation
-  components only).
+  enableable component of the query counts as a change. Override
+  `protected override EntityQueryBuilder ConfigureQuery(EntityQueryBuilder builder) => builder.WithAll<X>();` to
+  narrow the query (simulation components only).
 - `TransformViewUpdateSystem` runs every frame: `LockstepTransform` and `LockstepTransformPrevious` blended with
-  `InterpolationAlpha` into a `LocalTransform`, for views with a `LocalTransform` part. A view snaps to the current
-  transform until one tick after it was bound.
+  `InterpolationAlpha` into a `LocalTransform`, for views with a `TransformComponentView` (or another
+  `LocalTransform` part). A view snaps to the current transform until one tick after it was bound. Without views,
+  `LockstepTransformExtensions.Interpolate` and `simulationManager.TryGetInterpolated(entity, lastTick, alpha,
+  shownSinceTick, out transform)` apply the same rule.
 
 ## Catalogs
 
 - `EntityViewConfig` (*Create > Pragma > DOTS > Entity View Config*): `EntityViewBinder { Key, View }` list;
   `SetBinders(...)` for configs built in code.
 - Baked: `EntityViewConfigAuthoring` in a subscene loaded by the client or local world bakes an `EntityViewRegistry`
-  entity with `EntityViewPrefabElement { key, UnityObjectRef<GameObject> prefab }`. Dedicated server builds bake nothing.
+  entity with `EntityViewPrefabElement { key, UnityObjectRef<GameObject> prefab }`. With Netcode for Entities installed,
+  dedicated server builds bake nothing; without it the catalog always bakes.
 - Runtime: `EntityViewConfigProvider` on a scene object, or `EntityViewConfigs.Add(config)` / `Remove(config)`. Needed
   when presentation worlds are created after the scene loaded (Netcode worlds made on demand): a subscene loads only
   into the worlds that exist when it is enabled.
@@ -93,7 +104,7 @@ first, then new entities get theirs. A new session returns every view.
 - `IEntityViewPool`: `EntityView Spawn(EntityView prefab)`, `void Release(EntityView view)`. The manager binds after
   `Spawn` and unbinds before `Release`; the pool only keeps instances.
 - Per project: `EntityViewManagerSystem.PoolFactory = world => ...` from the game's bootstrap (cleared when play mode
-  starts). The manager owns the result: views go back to it when the world is destroyed, then it is disposed if it is
+  starts; a factory that returns null falls back to the default pool). The manager owns the result: views go back to it when the world is destroyed, then it is disposed if it is
   `IDisposable`. To share one pool, return a thin wrapper per world.
 - Per world: `world.GetExistingSystemManaged<EntityViewManagerSystem>().Pool = pool`; the spawned views go back to the
   previous pool first and the caller keeps ownership.
@@ -101,7 +112,8 @@ first, then new entities get theirs. A new session returns every view.
   that world's views to the pool at once and spawns none until it is shown again, with the views of the current state.
 - Default `EntityViewPool(name, parent)`: inactive instances under one root object (kept across scene loads in play
   mode), `Prewarm(prefab, count)`, `InactiveCount`, `Dispose()` destroys every instance.
-- com.pragma.pool keeps `PrefabPoolObject`s: give each view prefab one next to its `EntityView` and adapt:
+- com.pragma.pool keeps `PrefabPoolObject`s: give each view prefab one next to its `EntityView` and adapt (the
+  `Spawn` and `Release` extensions need `using Pragma.Pool;`):
 
 ```csharp
 public sealed class PragmaPoolEntityViewPool : IEntityViewPool
@@ -132,12 +144,15 @@ EntityViewManagerSystem.PoolFactory = world => new PragmaPoolEntityViewPool(pool
 
 - Nothing in a view, a part or a view system may write to the simulation world, not even a tag: the entity would move
   to another archetype, which changes the chunk order, the state hash and the order `LockstepEntityId`s are assigned in.
-- Local state (selection, hover, fog of war visibility, "is mine") belongs to the presentation: compare `data.slot`
-  with `View.Client.LocalSlot`, keep selection on the view or in UI code, send changes as commands.
+- Local state (selection, hover, "is mine", which slot's fog to draw) belongs to the presentation: compare
+  `data.slot` with `View.Client.LocalSlot`, keep selection on the view or in UI code, send changes as commands. What a
+  slot sees is simulation state of the Vision module (`LockstepVision.IsVisible`); hiding the views is the
+  presentation's job.
 - `view.Entity` is valid only in this process and session. Commands refer to `LockstepEntityId`: read it with
   `view.TryGetData<LockstepEntityId>(out var id)`.
 - Parts run on the main thread for every push: keep `UpdateData` cheap and prefer `EntityComponentViewUnmanaged<T>`.
-- A view that misses a type has no `EntityViewUpdateSystem<T>`.
+- A view that misses a type has no `EntityViewUpdateSystem<T>` (or `EntityBufferViewUpdateSystem<T>`).
+- Turn the actor previews of the editor off with *Tools > Pragma > DOTS > Actor View Previews*.
 - Pooled instances keep what their parts changed: restore it in `BindBreak` or `Bind`. `IsAutoUpdateEnabled` comes back
   on by itself when a view is unbound.
 - Parts learn values, not absence: when `T` is removed or disabled the entity leaves the query and the part gets no

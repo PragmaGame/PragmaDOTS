@@ -6,7 +6,7 @@ namespace Pragma.Dots.Views
 {
     /// <summary>
     /// Catalog of GameObject views: which prefab shows the entities with a given <see cref="EntityViewKey"/>. It is kept
-    /// apart from the prefab registry on purpose: the registry lists simulation prefabs every client needs, this lists
+    /// apart from the actor registry on purpose: the registry lists simulation prefabs every client needs, this lists
     /// graphics only the presentation needs; the key is the only link between them.
     /// </summary>
     /// <remarks>
