@@ -13,10 +13,17 @@ namespace Pragma.Dots.Tests
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]
     public partial struct TestActorSystem : ISystem
     {
+        private EntityQuery _registry;
+
+        public void OnCreate(ref SystemState state)
+        {
+            _registry = ActorRegistryQuery.Create(ref state);
+        }
+
         public void OnUpdate(ref SystemState state)
         {
             var tick = SystemAPI.GetSingleton<LockstepTime>().tick;
-            var actors = ActorLookup.Get(ref state);
+            var actors = ActorRegistryQuery.Get(ref state, _registry);
             if (tick == 5 || tick == 6)
             {
                 var key = new FixedString32Bytes(tick == 5 ? "rifleman" : "tank");
@@ -24,7 +31,7 @@ namespace Pragma.Dots.Tests
                 {
                     var spawned = actors.Instantiate(state.EntityManager, type);
                     state.EntityManager.SetComponentData(spawned, LockstepTransform.FromPosition(new FixedVector3(tick, 0, 0)));
-                    actors = ActorLookup.Get(ref state);
+                    actors = ActorRegistryQuery.Get(ref state, _registry);
                 }
             }
 

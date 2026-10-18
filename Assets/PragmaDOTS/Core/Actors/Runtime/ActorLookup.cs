@@ -23,16 +23,14 @@ namespace Pragma.Dots.Actors
             _tags = tags.AsNativeArray();
         }
 
-        /// <summary>The registry of the world that runs <paramref name="state"/>.</summary>
+        /// <summary>
+        /// The registry of the world that runs <paramref name="state"/>. It builds the registry query where it is called:
+        /// a system that reads the registry on its updates creates the query in OnCreate with
+        /// <see cref="ActorRegistryQuery"/> instead.
+        /// </summary>
         public static ActorLookup Get(ref SystemState state)
         {
-            var query = new EntityQueryBuilder(Allocator.Temp)
-                .WithAll<ActorRegistry, ActorType, ActorTagName>()
-                .WithOptions(EntityQueryOptions.IncludeDisabledEntities)
-                .Build(ref state);
-            var registry = query.GetSingletonEntity();
-            var entityManager = state.EntityManager;
-            return new ActorLookup(entityManager.GetBuffer<ActorType>(registry, true), entityManager.GetBuffer<ActorTagName>(registry, true));
+            return ActorRegistryQuery.Get(ref state, ActorRegistryQuery.Build(ref state));
         }
 
         /// <summary>The registry of the world of <paramref name="entityManager"/>, if it has one.</summary>

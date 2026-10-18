@@ -149,7 +149,7 @@ reference.
 | `Pragma.Dots.Utils` | core | `FixedDictionary4096Bytes`, `OptionalValue` | any code |
 | `Pragma.Dots.Utils.Physics` | core, with `com.unity.physics` | `CollisionMatrixToFilter` | presentation code |
 | `Pragma.Dots.Utils.Entities` | core | `Signals`, `SignalCleanupSystem`, `BufferDictionary`, `EntityManagerExtensions` | simulation and presentation code |
-| `Pragma.Dots.Actors` | core | `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `ActorLookup`, `ActorUtility` and the actor components | simulation and presentation code |
+| `Pragma.Dots.Actors` | core | `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` and the actor components | simulation and presentation code |
 | `Pragma.Dots.Actors.Authoring` | core | `ActorCatalogAuthoring` and the bakers of the actor catalog and of placed actors | authoring code, if any |
 | `Pragma.Dots.Lockstep` | Lockstep | The protocol, the simulation world, its components, checksums, replays, offline mode, presentation helpers, the spatial index, the Transform and Entity Id actor parts and the copy of actors into the simulation | simulation and presentation code |
 | `Pragma.Dots.Lockstep.Netcode` | Lockstep, with `com.unity.netcode` | The Netcode for Entities RPC, the server and client systems, `LockstepNetcode` | bootstrap code |
@@ -306,6 +306,7 @@ are copied into every simulation world, and the module adds the Transform and En
 | `ActorAuthoring` | An actor placed on a map: a definition at the pose of the GameObject, with parts of its own that override the definition's |
 | `Actor` | On the root entity of every actor: `key` and `type` (the index in the registry; -1 for a key no type has) |
 | `ActorLookup` | The registry of a world: `TryGetType(key)`, `GetKey`, `GetPrefab`, `Instantiate`, `TryGetTag(name)`, `HasTag`, `GetTags` |
+| `ActorRegistryQuery` | The registry for a system that reads it on its updates: `Create` builds the query in `OnCreate` and requires it for the update, `Get` returns the `ActorLookup` through it in `OnUpdate` |
 | `PlacedActor` | On an actor placed on a map: `order`, its place among the placed actors, the same on every machine |
 | `ActorUtility` | Builds the registry and placed actors at run time (`CreateRegistry`, `CreatePlaced`); `ResolveTypes` gives placed actors the type of their key |
 | `LockstepActorUtility` | Lockstep: copies the registry and the placed actors into a simulation world (`CopyRegistry`, `CopyPlacedActors`), which the built-in systems do before tick 0 |
@@ -387,9 +388,17 @@ In a lockstep simulation, for instance:
 [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]
 public partial struct ReinforcementSystem : ISystem
 {
+    private EntityQuery _registry;
+
+    public void OnCreate(ref SystemState state)
+    {
+        // The system updates once the world has a registry.
+        _registry = ActorRegistryQuery.Create(ref state);
+    }
+
     public void OnUpdate(ref SystemState state)
     {
-        var actors = ActorLookup.Get(ref state);
+        var actors = ActorRegistryQuery.Get(ref state, _registry);
         if (!actors.TryGetType("rifleman", out var rifleman) || !actors.TryGetTag("unit", out var unit))
         {
             return;
@@ -399,7 +408,7 @@ public partial struct ReinforcementSystem : ISystem
         state.EntityManager.SetComponentData(spawned, LockstepTransform.FromPosition(new FixedVector3(10, 0, 0)));
 
         // Structural changes invalidate the registry read before them: read it again.
-        actors = ActorLookup.Get(ref state);
+        actors = ActorRegistryQuery.Get(ref state, _registry);
         foreach (var actor in SystemAPI.Query<RefRO<Actor>>())
         {
             if (actors.HasTag(actor.ValueRO, unit))
@@ -417,6 +426,10 @@ every update for brevity, and its string keys keep `OnUpdate` from compiling wit
 registry: the tag table is sorted by name, so a new tag can renumber the others. Keep them for the session, and store
 keys and tag names in saves, commands and replays. Instantiate with an
 `EntityCommandBuffer` too (`Instantiate(commandBuffer, type)`).
+
+The query of the registry is created in `OnCreate`: `ActorLookup.Get(ref state)` builds it where it is called, which in
+`OnUpdate` makes Entities look the query up on every update and warn once per system that it creates a query during
+OnUpdate. Outside systems, `ActorLookup.TryGet(entityManager, out var actors)` reads the registry of any world.
 
 ### Placing actors on a map
 
@@ -2248,7 +2261,7 @@ public partial struct SpellActiveState : ISystem
 |---|---|
 | `Core/Mathematics/Runtime` | `Pragma.Dots.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedPose`, `FixedMath`, `FixedRandom`, `FixedGrid` |
 | `Core/Mathematics/Editor` | `Pragma.Dots.Mathematics.Editor`: fixed-point drawers |
-| `Core/Actors/Runtime` | `Pragma.Dots.Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorUtility`; the actor components in `Components` |
+| `Core/Actors/Runtime` | `Pragma.Dots.Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility`; the actor components in `Components` |
 | `Core/Actors/Authoring` | `Pragma.Dots.Actors.Authoring`: `ActorCatalogAuthoring`, the actor bakers and the baking builder |
 | `Core/Actors/Editor` | `Pragma.Dots.Actors.Editor`: the actor inspectors |
 | `Core/Utils/Runtime` | `Pragma.Dots.Utils`: `FixedDictionary4096Bytes`, `OptionalValue`, `EnumId` |

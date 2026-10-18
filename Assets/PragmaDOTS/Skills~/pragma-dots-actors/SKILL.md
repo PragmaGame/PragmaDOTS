@@ -33,6 +33,7 @@ Deeper reference:
 | `ActorAuthoring` | Component (*Pragma/DOTS/Actor*): an actor placed on a map, a definition plus overriding parts at the GameObject's pose |
 | `Actor { key, type }` | On the root entity of every actor; `type` is the index in the registry, -1 for a key no type has |
 | `ActorLookup` | The registry of a world: types by key, prefabs, tags, `Instantiate` |
+| `ActorRegistryQuery` | The registry query of a system: `Create` in `OnCreate` (requires the registry for the update), `Get` in `OnUpdate` |
 | `PlacedActor { order }` | On actors placed on a map: their place among the placed actors, the same on every machine |
 | `ActorUtility` | The registry and placed actors at run time (`CreateRegistry`, `CreatePlaced`), `ResolveTypes` |
 
@@ -123,14 +124,17 @@ per definition of the catalog, under the catalog's indices, and the tag table.
 ```csharp
 public partial struct ReinforcementSystem : ISystem
 {
+    private EntityQuery _registry;
+
     public void OnCreate(ref SystemState state)
     {
-        state.RequireForUpdate<ActorRegistry>(); // ActorLookup.Get throws in a world without a registry
+        // The query of the registry, required for the update: reading it without a registry would throw.
+        _registry = ActorRegistryQuery.Create(ref state);
     }
 
     public void OnUpdate(ref SystemState state)
     {
-        var actors = ActorLookup.Get(ref state);
+        var actors = ActorRegistryQuery.Get(ref state, _registry);
         if (!actors.TryGetType("rifleman", out var rifleman) || !actors.TryGetTag("unit", out var unit))
         {
             return;
@@ -140,7 +144,7 @@ public partial struct ReinforcementSystem : ISystem
         // Place it: a prefab stands at the identity pose. With lockstep, set its LockstepTransform.
 
         // A structural change invalidates the buffers ActorLookup reads in place: get it again.
-        actors = ActorLookup.Get(ref state);
+        actors = ActorRegistryQuery.Get(ref state, _registry);
         foreach (var actor in SystemAPI.Query<RefRO<Actor>>())
         {
             if (actors.HasTag(actor.ValueRO, unit))
@@ -156,6 +160,9 @@ public partial struct ReinforcementSystem : ISystem
   test. `actors.GetTags(type)` gives an `ActorTagSet` (`Contains`, `Overlaps`, `ContainsAll`).
 - `ActorLookup` is a Burst-compatible struct: pass it to jobs. Spawn through command buffers with
   `Instantiate(commandBuffer, type)` or `Instantiate(parallelWriter, sortKey, type)`.
+- Create the registry query in `OnCreate` (`ActorRegistryQuery.Create`): `ActorLookup.Get(ref state)` builds it where it
+  is called, and in `OnUpdate` Entities looks it up on every update and warns once per system that it creates a query
+  during OnUpdate.
 - Outside systems: `ActorLookup.TryGet(entityManager, out var actors)`.
 
 ## Placed actors
@@ -227,7 +234,8 @@ up to the game; `FixedPoint` fields still keep part data exact.
 | Symptom | Likely cause |
 |---|---|
 | A type is missing or has no tags | Not in the catalog the registry was built from, an empty or too long key, or more than 128 tags (the catalog inspector lists the errors) |
-| `ActorLookup.Get` throws | The world has no registry yet: the catalog's subscene has not loaded (or `CreateRegistry` was not called); require `ActorRegistry` |
+| `ActorLookup.Get` throws | The world has no registry yet: the catalog's subscene has not loaded (or `CreateRegistry` was not called); create the query with `ActorRegistryQuery.Create`, which requires the registry |
+| "creates a query during OnUpdate" | `ActorLookup.Get(ref state)` in `OnUpdate`: create the query in `OnCreate` with `ActorRegistryQuery` |
 | A placed actor has type -1 | Its key is in no catalog, or `ResolveTypes` was not called (without lockstep) |
 | A part lost its values | Its class was renamed or moved without `[MovedFrom]`, or a component part's type is not `[Serializable]` |
 | A component is not in the part menu | The type lacks `[ActorComponent]` or `[Serializable]`, or is not unmanaged |
@@ -239,4 +247,5 @@ up to the game; `FixedPoint` fields still keep part data exact.
 - [ ] Part fields that reach simulation state are `FixedPoint`, integers, `bool` or fixed strings.
 - [ ] Other actors are referenced by definition and stored by key, never by `Entity`.
 - [ ] Renamed part classes carry `[MovedFrom]`; the catalog was only appended to after shipping.
-- [ ] Code that reads the registry requires `ActorRegistry` and gets `ActorLookup` again after structural changes.
+- [ ] A system that reads the registry creates its query in `OnCreate` (`ActorRegistryQuery`) and gets `ActorLookup`
+  again after structural changes.

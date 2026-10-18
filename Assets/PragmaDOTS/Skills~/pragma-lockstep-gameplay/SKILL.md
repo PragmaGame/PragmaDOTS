@@ -52,7 +52,8 @@ parts; core assembly `Pragma.Dots.Actors`). The `pragma-dots-actors` skill cover
 - The registry and the placed actors of the presentation world are copied into every simulation world before tick 0
   (`LockstepClientWorldUtility.CreateSimulationOptions`). The registry is empty when a baking subscene had not loaded
   when the simulation was created: start the session with `waitForActorRegistry`.
-- **Spawning**: `var actors = ActorLookup.Get(ref state); actors.TryGetType("rifleman", out var type);
+- **Spawning**: the registry query from `OnCreate` (`_registry = ActorRegistryQuery.Create(ref state)`), then
+  `var actors = ActorRegistryQuery.Get(ref state, _registry); actors.TryGetType("rifleman", out var type);
   actors.Instantiate(state.EntityManager, type)` (or a command buffer), then set its `LockstepTransform`
   (`LockstepTransform.FromPosition`, `FromPose`): a prefab stands at the identity. Read `ActorLookup` again after a
   structural change. Look keys and tags up once and keep the indices.
@@ -110,8 +111,9 @@ var buffer = SystemAPI.GetSingleton<LockstepEndSimulationEntityCommandBufferSyst
     .CreateCommandBuffer(state.WorldUnmanaged);
 
 // Actors of the catalog, by key (the registry is copied into every simulation world; empty if a baking subscene had
-// not loaded when the simulation was created, so start with waitForActorRegistry).
-var actors = ActorLookup.Get(ref state);
+// not loaded when the simulation was created, so start with waitForActorRegistry). The query of the registry comes
+// from OnCreate: _registry = ActorRegistryQuery.Create(ref state).
+var actors = ActorRegistryQuery.Get(ref state, _registry);
 if (actors.TryGetType("rifleman", out var rifleman))
 {
     var unit = actors.Instantiate(state.EntityManager, rifleman);

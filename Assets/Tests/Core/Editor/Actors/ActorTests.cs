@@ -121,6 +121,28 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void ActorRegistryQuery_RequiresTheRegistry_AndReadsItWithoutAQueryPerUpdate()
+        {
+            var catalog = Catalog(Definition("rifleman", null, new[] { "unit" }, Value(3)));
+
+            using (var world = new World("Actors"))
+            using (var spawned = world.EntityManager.CreateEntityQuery(typeof(Actor)))
+            {
+                var system = world.CreateSystem<TestRegistrySystem>();
+                system.Update(world.Unmanaged);
+                Assert.AreEqual(0, spawned.CalculateEntityCount(), "without a registry the system does not update");
+
+                ActorUtility.CreateRegistry(world.EntityManager, catalog);
+                system.Update(world.Unmanaged);
+                system.Update(world.Unmanaged);
+                Assert.AreEqual(2, spawned.CalculateEntityCount(), "a rifleman on every update");
+            }
+
+            // Entities warns about a query a system creates in OnUpdate.
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
         public void PlacedActors_GetTheTypeOfTheirKey_AndTheirOverrides()
         {
             var tower = Definition("tower", null, new[] { "building" }, Value(1), new TestActorPart());

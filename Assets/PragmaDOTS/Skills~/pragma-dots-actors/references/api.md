@@ -50,7 +50,9 @@ Namespace and assembly `Pragma.Dots.Actors` (the core, always compiled) unless n
 
 | API | Notes |
 |---|---|
-| `ActorLookup.Get(ref SystemState)` | The registry of the system's world; throws without one (`RequireForUpdate<ActorRegistry>()`) |
+| `ActorRegistryQuery.Create(ref SystemState)` | In `OnCreate`: the query of the registry of the system's world, required for its update; keep it |
+| `ActorRegistryQuery.Get(ref SystemState, EntityQuery)` | In `OnUpdate`: the `ActorLookup` through the query from `Create` |
+| `ActorLookup.Get(ref SystemState)` | The registry of the system's world, building the query where it is called (in `OnUpdate` Entities warns: use `ActorRegistryQuery`); throws without one |
 | `ActorLookup.TryGet(EntityManager, out ActorLookup)` | False without a registry |
 | `ActorLookup` members | `TypeCount`, `TagCount`, `TryGetType(key, out type)`, `GetKey(type)`, `GetPrefab(type)`, `GetTags(type)`, `TryGetTag(name, out ActorTag)`, `GetTagName(tag)`, `HasTag(type or in Actor, tag)`, `Instantiate(EntityManager, type)`, `Instantiate(EntityCommandBuffer, type)`, `Instantiate(EntityCommandBuffer.ParallelWriter, sortKey, type)`. Reads the buffers in place and is Burst-compatible: get it again after a structural change |
 | `ActorUtility.CreateRegistry(EntityManager, ActorCatalog)` | Builds the registry entity at run time, the same as the baked one |

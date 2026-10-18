@@ -128,13 +128,15 @@ What the lockstep module adds:
 
 | Type | Notes |
 |---|---|
-| `ActorLookup.Get(ref state)` | The registry of the simulation world: `TryGetType(key, out type)`, `TryGetTag(name, out tag)`, `HasTag(type or Actor, tag)`, `Instantiate(EntityManager, type)`, `Instantiate(EntityCommandBuffer, type)`, `Instantiate(ParallelWriter, sortKey, type)`. Get it again after a structural change |
+| `ActorRegistryQuery` | `Create(ref state)` in `OnCreate` (the registry query, required for the update), `Get(ref state, query)` in `OnUpdate`: the `ActorLookup` of the simulation world. `ActorLookup.Get(ref state)` builds the query where it is called (in `OnUpdate`, an Entities warning) |
+| `ActorLookup` | The registry: `TryGetType(key, out type)`, `TryGetTag(name, out tag)`, `HasTag(type or Actor, tag)`, `Instantiate(EntityManager, type)`, `Instantiate(EntityCommandBuffer, type)`, `Instantiate(ParallelWriter, sortKey, type)`. Get it again after a structural change |
 | `LockstepActorUtility` | `CopyRegistry(source, destination)`, `CopyPlacedActors(source, destination)`: what `LockstepClientWorldUtility.CreateSimulationOptions` does before tick 0 |
 | `PlacedActor { ulong order }` | Placed actors are copied into every simulation world before tick 0 in this order, typed by key; references to anything outside the placed actors (actor prefabs included) become `Entity.Null` |
 | `TransformPart`, `EntityIdPart` | The lockstep parts: `LockstepTransform` from the placement (*Interpolate*, on by default, adds `LockstepTransformPrevious`), `LockstepEntityId` |
 
-Spawning: `var actors = ActorLookup.Get(ref state); if (actors.TryGetType("rifleman", out var type)) { var e =
-actors.Instantiate(state.EntityManager, type); }`, then set its `LockstepTransform` (a prefab stands at the identity).
+Spawning: `var actors = ActorRegistryQuery.Get(ref state, _registry); if (actors.TryGetType("rifleman", out var type))
+{ var e = actors.Instantiate(state.EntityManager, type); }` with `_registry` from `ActorRegistryQuery.Create` in
+`OnCreate`, then set its `LockstepTransform` (a prefab stands at the identity).
 The registry always exists in simulation worlds made by the built-in systems; it is empty when a baking subscene had
 not loaded, so start the session with `waitForActorRegistry`.
 

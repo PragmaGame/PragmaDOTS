@@ -199,6 +199,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LockstepStats.Id` use it.
 - `LockstepClient.ServerTicks`: the ticks the server has closed, from its start and pong messages, for the progress
   of a late joiner.
+- `ActorRegistryQuery`: the actor registry for a system that reads it on its updates. `Create` builds the registry
+  query in `OnCreate` and requires it for the update, `Get` returns the `ActorLookup` through it in `OnUpdate`;
+  `ActorLookup.Get(ref state)` builds the query where it is called, which in `OnUpdate` costs a lookup per update and
+  an Entities warning.
 
 ### Changed
 
