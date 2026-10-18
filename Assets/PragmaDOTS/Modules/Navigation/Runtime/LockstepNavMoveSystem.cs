@@ -34,8 +34,9 @@ namespace Pragma.Dots.Navigation
         /// </summary>
         internal const long ARRIVAL_RAW = FixedPoint.ONE_RAW / 256;
 
-        // Shorter offsets give a coarse direction in fixed point, so the last bit of a segment never turns the agent.
-        private const long MIN_TURN_DISTANCE_RAW = FixedPoint.ONE_RAW / 64;
+        // Shorter offsets give a coarse direction in fixed point, so the last bit of a segment never turns the agent
+        // (nor is walked towards by avoidance).
+        internal const long MIN_TURN_DISTANCE_RAW = FixedPoint.ONE_RAW / 64;
 
         /// <summary>
         /// Where an agent facing as <paramref name="rotation"/> turns it has to turn on the spot before it walks on

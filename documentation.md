@@ -22,8 +22,8 @@ ECV, the view layer of the author's own DawnOfWar project, adapted to lockstep.
 
 ## Goals and constraints
 
-- Deterministic lockstep for **Unity Entities 6.6** on top of **Netcode for Entities 6.6**, not a custom ECS: gameplay
-  is written as ordinary `ISystem`s, components and bakers.
+- Deterministic lockstep for **Unity Entities 6.6**, with **Netcode for Entities 6.6** as its transport, not a custom
+  ECS: gameplay is written as ordinary `ISystem`s and components, and content as actors made of parts.
 - Netcode provides what it is good at (connections, handshake, transport, client/server/thin-client worlds); the
   lockstep protocol must not depend on it, so offline play, tests and other transports use the same code.
 - Bit-identical results in Mono, IL2CPP and Burst on every platform, without `float` anywhere in the simulation.
@@ -373,13 +373,15 @@ These came up while building on Entities; neither reference package deals with t
 15. **Modules behind scripting defines.** Unity compiles every assembly of a package whether a game references it or
     not, and every compiled system that carries the simulation filter joins every simulation world and enters
     `DefaultSimulationHash`. A game without navigation would still create the navigation systems (idle, but in the
-    hash and in the build). So navigation, vision, stats and views are modules whose assemblies have a
-    `defineConstraints` entry (`PRAGMA_DOTS_NAVIGATION`...), off by default: an unused module is not compiled. The
-    core (protocol, simulation, math, Netcode) and the utilities are always on, and modules depend on the core only,
-    so any subset compiles. Scripting defines are per build target, and a server and clients built with different
-    modules refuse each other through the simulation hash; the *Project Settings > Pragma > DOTS* page writes a
-    define to every build target at once and warns when a module is on for some targets only. Each module carries its
-    own authoring assembly, since one assembly of all the bakers could not compile without every module.
+    hash and in the build). So lockstep, navigation, vision, stats, views and state machines are modules whose
+    assemblies have a `defineConstraints` entry (`PRAGMA_DOTS_LOCKSTEP`, `PRAGMA_DOTS_NAVIGATION`...), off by default:
+    an unused module is not compiled. The core (math, actors, utilities) is always on; navigation, vision, stats and
+    views need lockstep and list both defines, state machines need only the core, and no module depends on another
+    one otherwise, so every allowed subset compiles. Scripting defines are per build target, and a server and clients
+    built with different modules refuse each other through the simulation hash; the *Project Settings > Pragma > DOTS*
+    page writes a define to every build target at once, with the modules a module needs or that need it, and warns
+    when a module is on for some targets only. A module's actor parts live in its runtime assembly, so no authoring
+    assembly has to know every module.
 16. **Utilities taken from PragmaCommonDOTS.** A few general types (`FixedDictionary4096Bytes`, `OptionalValue`, the
     fixed list and fixed string drawers, `CollisionMatrixToFilter`) moved here so that projects no longer need that
     package. They live in `Pragma.Dots.Utils`, the lowest layer, with no dependency on the core, so that they can

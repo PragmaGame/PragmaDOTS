@@ -26,10 +26,24 @@ namespace Pragma.Dots.Tests
         public double Time { get; private set; } = 10;
         public int Frame { get; private set; }
 
+        /// <summary>
+        /// The default client settings with a catch-up time budget the simulated time never reaches: how fast a late
+        /// joiner catches up depends on the ticks per update alone, not on the speed of the machine.
+        /// </summary>
+        public static LockstepClientSettings ClientSettings
+        {
+            get
+            {
+                var settings = LockstepClientSettings.Default;
+                settings.MaxSimulationMillisecondsPerUpdate = 10000f;
+                return settings;
+            }
+        }
+
         public LockstepClient AddClient(LockstepSimulationOptions options = null, LockstepClientSettings? settings = null, FixedList64Bytes<byte> joinData = default)
         {
             var connectionId = _nextConnectionId++;
-            var client = new LockstepClient(settings ?? LockstepClientSettings.Default, Network.CreateClientTransport(connectionId),
+            var client = new LockstepClient(settings ?? ClientSettings, Network.CreateClientTransport(connectionId),
                 options ?? TestUtility.Options(typeof(TestGameplaySystem)));
             Network.SetTime(Time);
             Network.AttachClient(connectionId, client);

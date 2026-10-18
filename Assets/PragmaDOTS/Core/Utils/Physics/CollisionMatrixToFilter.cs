@@ -38,7 +38,7 @@ namespace Pragma.Dots.Utils
         {
             if (layer < 0 || layer >= 32)
             {
-                Debug.LogWarning($"[Lockstep] Invalid layer {layer}.");
+                Debug.LogWarning($"[Utils] Invalid layer {layer}.");
                 return new CollisionFilter();
             }
 

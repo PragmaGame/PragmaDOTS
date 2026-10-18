@@ -159,7 +159,7 @@ namespace Pragma.Dots.Navigation
             var length = (float)(grid.cellSize * grid.height);
             if (Mathf.Abs(_terrain.size.x - width) > 0.01f || Mathf.Abs(_terrain.size.z - length) > 0.01f)
             {
-                Debug.LogWarning($"[Lockstep] The terrain '{_terrain.name}' is {_terrain.size.x} x {_terrain.size.z} but the navigation grid is {width} x {length}: " +
+                Debug.LogWarning($"[Navigation] The terrain '{_terrain.name}' is {_terrain.size.x} x {_terrain.size.z} but the navigation grid is {width} x {length}: " +
                                  "its heights are stretched over the grid.", _terrain);
             }
         }

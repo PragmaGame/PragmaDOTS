@@ -12,7 +12,8 @@ namespace Pragma.Dots.Actors
     /// </summary>
     /// <remarks>
     /// A definition with a parent inherits the parent's tags and parts: its own tags are added to them, and its own part
-    /// replaces the parent's part of the same type. The key is not inherited: every definition of a catalog is a type of
+    /// replaces the parent's part of the same type, or merges with it when the part is an <see cref="IMergeableActorPart"/>.
+    /// The key is not inherited: every definition of a catalog is a type of
     /// its own. A parent needs no key when only other definitions derive from it.
     /// </remarks>
     [CreateAssetMenu(fileName = "Actor", menuName = "Pragma/DOTS/Actor Definition")]
@@ -24,7 +25,7 @@ namespace Pragma.Dots.Actors
         [SerializeField, Tooltip("Unique name of the actor type, 1 to 29 bytes of UTF-8 (\"rifleman\"). Code, commands and views refer to the type by it.")]
         private string _key = string.Empty;
 
-        [SerializeField, Tooltip("The definition this one derives from: its tags and parts are inherited, own parts replace those of the same type.")]
+        [SerializeField, Tooltip("The definition this one derives from: its tags and parts are inherited, own parts replace those of the same type (mergeable parts merge with them).")]
         private ActorDefinition _parent;
 
         [SerializeField, Tooltip("Groups the actor belongs to (\"unit\", \"player\"), 1 to 29 bytes each; added to the parent's.")]

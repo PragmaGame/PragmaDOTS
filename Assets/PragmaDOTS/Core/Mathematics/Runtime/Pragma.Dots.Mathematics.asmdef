@@ -2,12 +2,11 @@
     "name": "Pragma.Dots.Mathematics",
     "rootNamespace": "Pragma.Dots.Mathematics",
     "references": [
-        "Unity.Mathematics",
-        "Unity.Burst"
+        "Unity.Mathematics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
-    "allowUnsafeCode": true,
+    "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,

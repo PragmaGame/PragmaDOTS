@@ -234,7 +234,7 @@ namespace Pragma.Dots.Views
             var view = Pool.Spawn(prefab);
             if (view == null)
             {
-                Debug.LogError($"[Lockstep] The view pool returned nothing for '{prefab.name}' (key '{key}').", prefab);
+                Debug.LogError($"[Views] The view pool returned nothing for '{prefab.name}' (key '{key}').", prefab);
                 return;
             }
             view.Prefab = prefab;
@@ -332,7 +332,7 @@ namespace Pragma.Dots.Views
                         var view = prefab != null ? prefab.GetComponent<EntityView>() : null;
                         if (view == null)
                         {
-                            Debug.LogError($"[Lockstep] The view prefab of key '{elements[i].key}' is missing or has no EntityView.", prefab);
+                            Debug.LogError($"[Views] The view prefab of key '{elements[i].key}' is missing or has no EntityView.", prefab);
                             continue;
                         }
                         AddPrefab(elements[i].key, view, prefab);
@@ -352,7 +352,7 @@ namespace Pragma.Dots.Views
                 {
                     if (binder.View == null || !EntityViewKey.TryCreate(binder.Key, out var key))
                     {
-                        Debug.LogError($"[Lockstep] {config.name}: the binder '{binder.Key}' needs a view and a key of 1 to 29 bytes.", config);
+                        Debug.LogError($"[Views] {config.name}: the binder '{binder.Key}' needs a view and a key of 1 to 29 bytes.", config);
                         continue;
                     }
                     AddPrefab(key.value, binder.View, config);
@@ -369,7 +369,7 @@ namespace Pragma.Dots.Views
             }
             if (existing != view)
             {
-                Debug.LogWarning($"[Lockstep] The view key '{key}' is bound twice: '{existing.name}' is used, '{view.name}' is ignored.", context);
+                Debug.LogWarning($"[Views] The view key '{key}' is bound twice: '{existing.name}' is used, '{view.name}' is ignored.", context);
             }
         }
 

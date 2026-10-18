@@ -156,8 +156,6 @@ namespace Pragma.Dots.Navigation
         [BurstCompile]
         private partial struct AvoidJob : IJobEntity
         {
-            // Shorter offsets give a coarse direction in fixed point: the last bit of a segment is not walked towards.
-            private const long MIN_TURN_DISTANCE_RAW = FixedPoint.ONE_RAW / 64;
             // A change of velocity from the last step costs an eighth of a turn away from the path of the same size.
             private const long CHANGE_SHARE_RAW = FixedPoint.ONE_RAW / 8;
             // The most a walking neighbour threatens: a little more than a right-angle turn costs (square root of two).
@@ -241,7 +239,7 @@ namespace Pragma.Dots.Navigation
                         preferred = offset / distance * FixedMath.Min(speed, distance / deltaTime);
                         isFound = true;
                     }
-                    else if (distance.rawValue > MIN_TURN_DISTANCE_RAW)
+                    else if (distance.rawValue > LockstepNavMoveSystem.MIN_TURN_DISTANCE_RAW)
                     {
                         preferred = offset / distance * speed;
                         isFound = true;

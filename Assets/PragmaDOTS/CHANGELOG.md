@@ -25,9 +25,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the Views module, placed actors are previewed with their views in the scene and in prefab mode
   (*Tools > Pragma > DOTS > Actor View Previews*).
 
-- Modules: lockstep, navigation, vision, stats and GameObject views compile only with their scripting define symbol
-  (`PRAGMA_DOTS_LOCKSTEP`, `PRAGMA_DOTS_NAVIGATION`, `PRAGMA_DOTS_VISION`, `PRAGMA_DOTS_STATS`, `PRAGMA_DOTS_VIEWS`),
-  all off after installation; navigation, vision, stats and views require lockstep. *Project Settings > Pragma > DOTS*
+- Modules: lockstep, navigation, vision, stats, GameObject views and state machines compile only with their scripting
+  define symbol (`PRAGMA_DOTS_LOCKSTEP`, `PRAGMA_DOTS_NAVIGATION`, `PRAGMA_DOTS_VISION`, `PRAGMA_DOTS_STATS`,
+  `PRAGMA_DOTS_VIEWS`, `PRAGMA_DOTS_STATE_MACHINES`), all off after installation; navigation, vision, stats and views
+  require lockstep, state machines only the core. *Project Settings > Pragma > DOTS*
   turns them on and off on every build target at once, with the modules they require or that require them, and warns
   when a module is on for some targets only. A module that is off is not compiled: its systems no longer join every
   simulation world and the simulation hash.
@@ -194,6 +195,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drops the data and raises `ProtocolViolationEvent`. `LockstepPacketFramer` takes a message size limit.
 - `LockstepClient.OnDisconnected()` and `LockstepEndReason.ConnectionLost`; `LockstepClientSettings.Validate()`, which
   the client calls.
+- `EnumId.Of(value)` (`Pragma.Dots.Utils`): an enum value of any size as an `int`, in Burst too; `StateMachine.Id` and
+  `LockstepStats.Id` use it.
+- `LockstepClient.ServerTicks`: the ticks the server has closed, from its start and pong messages, for the progress
+  of a late joiner.
 
 ### Changed
 
@@ -248,6 +253,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checksum reports only for ticks on the interval. A client sends at most 32 commands, and about 256 KB of them, per
   input message.
 - `MaxSendBytesPerUpdate` of zero takes the default (32 KB); it sent no frames at all.
+- `EntityView.IsHasHandler` and `IsHasHandlers` are `HasHandler` and `HasHandlers`. The views, navigation and
+  utilities log with `[Views]`, `[Navigation]` and `[Utils]` instead of `[Lockstep]`.
+- `Pragma.Dots.Mathematics` no longer references Burst nor allows unsafe code, neither of which it used.
+- The version is 0.2.0, and the first snapshot is 0.1.0 (it was 1.0.0): the package is not released yet.
 
 ### Fixed
 
@@ -306,7 +315,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LockstepClient.AddCommand(in LockstepCommand)`: use `AddCommand<T>(payload)`, `AddCommand<T, TData>(payload, data)`
   or the `LockstepCommand` buffer of the local input entity.
 
-## [1.0.0] - 2026-10-03
+## [0.1.0] - 2026-10-03
 
 ### Added
 

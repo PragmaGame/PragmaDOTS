@@ -16,7 +16,7 @@ namespace Pragma.Dots.Views
         {
             if (data is not TData typed)
             {
-                Debug.LogError($"[Lockstep] {GetType().Name} shows {typeof(TData).Name}, not {data?.GetType().Name ?? "null"}.");
+                Debug.LogError($"[Views] {GetType().Name} shows {typeof(TData).Name}, not {data?.GetType().Name ?? "null"}.");
                 return;
             }
             UpdateData(typed);

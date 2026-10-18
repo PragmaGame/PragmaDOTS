@@ -5,6 +5,7 @@
         "Pragma.Dots.Lockstep",
         "Pragma.Dots.Actors",
         "Pragma.Dots.Mathematics",
+        "Pragma.Dots.Utils",
         "Unity.Entities",
         "Unity.Collections",
         "Unity.Burst",

@@ -103,11 +103,11 @@ namespace Pragma.Dots.Views
         }
 
         /// <summary>True when every one of <paramref name="dataTypes"/> has a part.</summary>
-        public bool IsHasHandlers(params Type[] dataTypes)
+        public bool HasHandlers(params Type[] dataTypes)
         {
             for (var i = 0; i < dataTypes.Length; i++)
             {
-                if (!IsHasHandler(dataTypes[i]))
+                if (!HasHandler(dataTypes[i]))
                 {
                     return false;
                 }
@@ -116,7 +116,7 @@ namespace Pragma.Dots.Views
         }
 
         /// <summary>True when a part shows the component type <paramref name="type"/>.</summary>
-        public bool IsHasHandler(Type type)
+        public bool HasHandler(Type type)
         {
             EnsureInitialized();
             return _componentViews.ContainsKey(type);

@@ -214,8 +214,9 @@ up to the game; `FixedPoint` fields still keep part data exact.
 
 ## Editor
 
-- The definition inspector shows inherited tags and parts greyed (*Override* copies a part to change it; own parts have
-  *Remove*, overrides *Revert*).
+- The definition inspector shows inherited tags and parts greyed (*Override* copies a part to change it, or starts an
+  empty override of a mergeable part, which then lists only what it changes; own parts have *Remove*, overrides
+  *Revert*).
 - With the Views module, a placed actor with a View part shows its view in the scene and in prefab mode: its parts
   are built in a scratch world and fed to the view's parts, so the preview runs the game's view code. Previews are never
   saved; *Tools > Pragma > DOTS > Actor View Previews* turns them off.

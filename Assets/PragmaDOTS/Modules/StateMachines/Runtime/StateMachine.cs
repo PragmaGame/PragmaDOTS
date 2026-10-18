@@ -1,5 +1,5 @@
 using System;
-using Unity.Collections.LowLevel.Unsafe;
+using Pragma.Dots.Utils;
 
 namespace Pragma.Dots.StateMachines
 {
@@ -56,30 +56,17 @@ namespace Pragma.Dots.StateMachines
         public bool Exited<TState>(TState state) where TState : unmanaged, Enum => Exited(Id(state));
 
         /// <summary>
-        /// Asks for <paramref name="state"/> on the next update of the machine; a later request replaces it, and a request
-        /// for the current state (or <see cref="NONE"/>) changes nothing.
+        /// Asks for <paramref name="state"/> on the next update of the machine. The last request wins: a later one replaces
+        /// it, and a request for the current state (or <see cref="NONE"/>) cancels it; the current state is never entered
+        /// again.
         /// </summary>
         public void Request(int state) => next = state;
 
         /// <inheritdoc cref="Request(int)"/>
         public void Request<TState>(TState state) where TState : unmanaged, Enum => Request(Id(state));
 
-        /// <summary>The number a state of an enum is stored as: its value.</summary>
-        public static int Id<TState>(TState state) where TState : unmanaged, Enum
-        {
-            // An enum is its underlying integer, and its size is a constant to Burst.
-            switch (UnsafeUtility.SizeOf<TState>())
-            {
-                case 1:
-                    return UnsafeUtility.As<TState, byte>(ref state);
-                case 2:
-                    return UnsafeUtility.As<TState, ushort>(ref state);
-                case 8:
-                    return (int)UnsafeUtility.As<TState, long>(ref state);
-                default:
-                    return UnsafeUtility.As<TState, int>(ref state);
-            }
-        }
+        /// <summary>The number a state of an enum is stored as: its value (<see cref="EnumId.Of{TEnum}"/>).</summary>
+        public static int Id<TState>(TState state) where TState : unmanaged, Enum => EnumId.Of(state);
 
         public override string ToString()
         {

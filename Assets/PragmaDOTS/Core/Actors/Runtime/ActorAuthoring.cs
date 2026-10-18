@@ -34,7 +34,10 @@ namespace Pragma.Dots.Actors
             set => _definition = value;
         }
 
-        /// <summary>The parts of this placement alone; each one replaces the definition's part of its type.</summary>
+        /// <summary>
+        /// The parts of this placement alone; each one replaces the definition's part of its type, or merges with it when
+        /// the part is an <see cref="IMergeableActorPart"/>.
+        /// </summary>
         public IReadOnlyList<ActorPart> Overrides => _overrides;
 
         public void SetOverrides(params ActorPart[] overrides)

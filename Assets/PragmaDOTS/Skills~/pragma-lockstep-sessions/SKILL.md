@@ -120,9 +120,9 @@ With Netcode (`Pragma.Dots.Lockstep.Netcode`), the component equivalents in the 
 `LockstepStartGameRequest`, an entity with `LockstepEndGameRequest { reason }`, and the `LockstepServerStatus`
 singleton (`state`, `closedTicks`, `playerCount`) for UI.
 
-Late-join loading screen: show `client.SimulatedTicks / (float)client.ConfirmedTicks` while
-`client.BufferedTicks` is large; re-simulation speed is bounded by `MaxTicksPerUpdate` and
-`MaxSimulationMillisecondsPerUpdate`.
+Late-join loading screen: show `client.SimulatedTicks / (float)client.ServerTicks` (the ticks the server has closed,
+from its start and pong messages) while `client.BufferedTicks` is large; re-simulation speed is bounded by
+`MaxTicksPerUpdate` and `MaxSimulationMillisecondsPerUpdate`.
 
 ## Session data
 
@@ -140,7 +140,7 @@ Late-join loading screen: show `client.SimulatedTicks / (float)client.ConfirmedT
 ```csharp
 if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 {
-    // client.State, LocalSlot, JoinTick, RejectReason, EndReason, Config, SimulatedTicks, ConfirmedTicks, InterpolationAlpha,
+    // client.State, LocalSlot, JoinTick, RejectReason, EndReason, Config, SimulatedTicks, ConfirmedTicks, ServerTicks, InterpolationAlpha,
     // RoundTripTime (NaN until measured), JitterTicks, IsDesynced, DesyncTick,
     // Simulation (null before the start and on non-simulating clients; also LockstepWorlds.TryGetSimulation)
 }

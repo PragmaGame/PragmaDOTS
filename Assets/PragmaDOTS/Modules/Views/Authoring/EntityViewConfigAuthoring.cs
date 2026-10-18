@@ -33,7 +33,7 @@ namespace Pragma.Dots.Views.Authoring
 #endif
                 if (authoring._config == null)
                 {
-                    Debug.LogError($"[Lockstep] {nameof(EntityViewConfigAuthoring)} on '{authoring.name}' has no config.", authoring);
+                    Debug.LogError($"[Views] {nameof(EntityViewConfigAuthoring)} on '{authoring.name}' has no config.", authoring);
                     return;
                 }
                 DependsOn(authoring._config);
@@ -45,7 +45,7 @@ namespace Pragma.Dots.Views.Authoring
                 {
                     if (binder.View == null || !EntityViewKey.TryCreate(binder.Key, out var key))
                     {
-                        Debug.LogError($"[Lockstep] {authoring._config.name}: the binder '{binder.Key}' needs a view and a key of 1 to 29 bytes.", authoring._config);
+                        Debug.LogError($"[Views] {authoring._config.name}: the binder '{binder.Key}' needs a view and a key of 1 to 29 bytes.", authoring._config);
                         continue;
                     }
                     elements.Add(new EntityViewPrefabElement { key = key.value, prefab = binder.View.gameObject });

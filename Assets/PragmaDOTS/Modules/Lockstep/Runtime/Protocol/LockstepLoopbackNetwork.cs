@@ -14,7 +14,6 @@ namespace Pragma.Dots.Lockstep
         private sealed class Packet
         {
             public double deliveryTime;
-            public long sequence;
             public int connectionId;
             public bool toServer;
             public byte[] data;
@@ -49,7 +48,6 @@ namespace Pragma.Dots.Lockstep
         private readonly Dictionary<int, LockstepClient> _clients = new Dictionary<int, LockstepClient>();
         private readonly Random _random;
         private ILockstepServerEndpoint _server;
-        private long _sequence;
         private double _now;
 
         public LockstepLoopbackNetwork(int randomSeed = 1)
@@ -123,12 +121,12 @@ namespace Pragma.Dots.Lockstep
             var packet = new Packet
             {
                 deliveryTime = deliveryTime,
-                sequence = _sequence++,
                 connectionId = connectionId,
                 toServer = toServer,
                 data = data,
             };
-            // Keep the list sorted by delivery time; the sequence breaks ties in send order.
+            // Keep the list sorted by delivery time; a packet goes after the ones due at the same time, so ties keep the
+            // send order.
             var index = _inFlight.Count;
             while (index > 0 && _inFlight[index - 1].deliveryTime > deliveryTime)
             {

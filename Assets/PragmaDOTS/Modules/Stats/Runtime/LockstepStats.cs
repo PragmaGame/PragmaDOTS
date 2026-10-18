@@ -1,7 +1,7 @@
 using System;
 using Pragma.Dots.Mathematics;
+using Pragma.Dots.Utils;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace Pragma.Dots.Stats
@@ -12,22 +12,8 @@ namespace Pragma.Dots.Stats
     /// </summary>
     public static class LockstepStats
     {
-        /// <summary>The id a stat, target or other enum value is stored as: its numeric value.</summary>
-        public static int Id<TEnum>(TEnum value) where TEnum : unmanaged, Enum
-        {
-            // An enum is its underlying integer, and its size is a constant to Burst.
-            switch (UnsafeUtility.SizeOf<TEnum>())
-            {
-                case 1:
-                    return UnsafeUtility.As<TEnum, byte>(ref value);
-                case 2:
-                    return UnsafeUtility.As<TEnum, ushort>(ref value);
-                case 8:
-                    return (int)UnsafeUtility.As<TEnum, long>(ref value);
-                default:
-                    return UnsafeUtility.As<TEnum, int>(ref value);
-            }
-        }
+        /// <summary>The id a stat, target or other enum value is stored as: its numeric value (<see cref="EnumId.Of{TEnum}"/>).</summary>
+        public static int Id<TEnum>(TEnum value) where TEnum : unmanaged, Enum => EnumId.Of(value);
 
         /// <summary>
         /// The stat of <paramref name="type"/>, as of the last <see cref="LockstepStatSystem"/> update: its

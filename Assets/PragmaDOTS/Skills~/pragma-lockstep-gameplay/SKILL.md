@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-gameplay
-description: Write deterministic gameplay with Pragma DOTS (com.pragma.dots) - the Lockstep module (Pragma.Dots.Lockstep) and the Navigation, Vision, Stats and Views modules built on it, with the core fixed-point math and actors - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, spawning actors by key inside the simulation (ActorLookup, LockstepTransform), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), state machines whose states tick in parallel jobs (StateMachine, StateMachineSystemGroup, IStateMachine), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
+description: Write deterministic gameplay with Pragma DOTS (com.pragma.dots) - simulation systems of the Lockstep module and of the Navigation, Vision, Stats, Views and State Machines modules, with the core fixed-point math - input structs and commands, players joining and leaving, spawning actors by key (ActorLookup), LockstepEntityId references, grid pathfinding and agents, vision and fog of war, stats (modifiers, resources with caps, damage, grants), state machines whose states tick in parallel jobs, FixedPoint, FixedMath and FixedRandom, and presenting the simulation with interpolation and GameObject views (EntityView, view update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - or a state machine in any Entities world, even if the user never says "deterministic" or "lockstep".
 ---
 
 # Gameplay with Pragma DOTS lockstep
@@ -127,7 +127,7 @@ ids.TryGetEntity(targetId, out var target);
 
 Order inside the group: `LockstepFrameApplySystem` -> `LockstepTransformHistorySystem` ->
 `LockstepBeginSimulationEntityCommandBufferSystem` -> your systems, `LockstepNavSystemGroup` and `LockstepStatSystem`
-(default slot: order yours against them) -> `LockstepVisionSystem` (`OrderLast`) ->
+(default slot: order yours against them) -> `LockstepVisionSystem` and `LockstepSignalCleanupSystem` (`OrderLast`) ->
 `LockstepEndSimulationEntityCommandBufferSystem` -> `LockstepEntityIdSystem`.
 
 ## Players
@@ -454,8 +454,9 @@ namespace and assembly `Pragma.Dots.StateMachines`), not a set of flags:
   if (!m.Is(UnitState.Move)) return; if (m.Entered(UnitState.Move)) { enter } tick; m.Request(UnitState.Idle);`.
   `ticksInState` counts the ticks since the state was entered (0 on the transition): timers need no field of their own.
 - **Timing.** The group applies the requests at the start of its update, then runs its states: a request made by a
-  state takes effect on the next tick, one from a system before the group on this tick. The last request wins;
-  requesting the current state does nothing. Exit and enter run on the same tick, in the order of the state systems.
+  state takes effect on the next tick, one from a system before the group on this tick. The last request wins:
+  requesting the current state (or `NONE`) cancels a pending request, and the current state is never entered again.
+  Exit and enter run on the same tick, in the order of the state systems.
 - **Determinism.** In parallel jobs, write only the entity's own machine. Change other entities' machines (a stun in
   an area) single-threaded, or leave a component the target's own state reads. Several machines per entity: one
   component and one group each.

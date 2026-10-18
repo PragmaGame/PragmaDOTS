@@ -56,8 +56,9 @@ ghosts) uses it alone.
   subscenes or build at run time; the modules bring parts of their own.
 - **[Utilities](#utilities)** (`Pragma.Dots.Utils`, `Pragma.Dots.Utils.Entities`). `FixedDictionary4096Bytes` (a hash
   map that fits in a component), `OptionalValue`, inspectors for fixed lists and fixed strings and
-  `CollisionMatrixToFilter` for projects with Unity Physics, without an Entities dependency; signals (one-off events as
-  entities), buffers used as dictionaries of any size and `EntityManager` helpers on top of Entities.
+  `EnumId` (enum values as ints, in Burst too) without an Entities dependency, `CollisionMatrixToFilter` for projects
+  with Unity Physics; signals (one-off events as entities), buffers used as dictionaries of any size and
+  `EntityManager` helpers on top of Entities.
 
 ### The modules
 
@@ -298,7 +299,7 @@ are copied into every simulation world, and the module adds the Transform and En
 
 | Type | What it is |
 |---|---|
-| `ActorDefinition` | Asset (*Create > Pragma > DOTS > Actor Definition*): `Key` (unique, 1 to 29 bytes of UTF-8: "rifleman"), `Parent`, tags ("unit", "player") and parts. A derived definition inherits its parent's tags and parts; its own part replaces the parent's part of the same type. A new definition starts with the parts marked `[DefaultActorPart]`: with the lockstep module, a Transform and an Entity Id part |
+| `ActorDefinition` | Asset (*Create > Pragma > DOTS > Actor Definition*): `Key` (unique, 1 to 29 bytes of UTF-8: "rifleman"), `Parent`, tags ("unit", "player") and parts. A derived definition inherits its parent's tags and parts; its own part replaces the parent's part of the same type, or merges with it (stats, grants: `IMergeableActorPart`). A new definition starts with the parts marked `[DefaultActorPart]`: with the lockstep module, a Transform and an Entity Id part |
 | `ActorPart` | A piece of an actor that adds its components when the actor is built. An actor has one part of each type |
 | `ActorCatalog` | Asset (*Create > Pragma > DOTS > Actor Catalog*): the actor types; the index is the type. Only add at the end once a game has shipped. All its definitions share at most 128 tags |
 | `ActorCatalogAuthoring` | Bakes a catalog into the actor registry of the presentation world: a prefab entity per definition and the tag table. Put it in a subscene of the client (or local) world |
@@ -320,6 +321,7 @@ are copied into every simulation world, and the module adds the Transform and En
 | Vision/Source, Grid | Vision | See [Vision](#vision) |
 | View (`ViewPart`) | Views | `EntityViewKey`: the actor's key, unless the part names another; see [Views](#views) |
 | Stats, Stat Grants (subclasses of `StatsPart`, `StatGrantsPart`) | Stats | The stats of an actor, the grants it gives; see [Stats](#stats) |
+| State machines (subclasses of `StateMachinePart`) | State Machines | The machine component and its initial state; see [State machines](#state-machines) |
 
 New definitions start with Unity's transform (Local Transform); with the lockstep module they start with its Transform
 and Entity Id parts instead, since the lockstep Transform replaces the Unity one (`[DefaultActorPart(Replaces = ...)]`).
@@ -410,7 +412,10 @@ public partial struct ReinforcementSystem : ISystem
 ```
 
 `ActorLookup` reads the registry in place and is Burst-compatible; pass it to jobs. Look keys and tags up once and keep
-the type indices and `ActorTag` handles: a check is then an array read and a bit test. Instantiate with an
+the type indices and `ActorTag` handles: a check is then an array read and a bit test (the example looks them up on
+every update for brevity, and its string keys keep `OnUpdate` from compiling with Burst). Both are positions in the
+registry: the tag table is sorted by name, so a new tag can renumber the others. Keep them for the session, and store
+keys and tag names in saves, commands and replays. Instantiate with an
 `EntityCommandBuffer` too (`Instantiate(commandBuffer, type)`).
 
 ### Placing actors on a map
@@ -1152,8 +1157,9 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 - **Running.** The server closes ticks on its clock. `client.StartedEvent` fires when the client enters `Running`.
 - **Late join.** With `AllowLateJoin` (default), a client joining a running match receives every frame from tick 0
   and re-simulates them within its catch-up budget (`MaxTicksPerUpdate`, `MaxSimulationMillisecondsPerUpdate`). Its
-  player enters the simulation at `client.JoinTick`. `client.SimulatedTicks` against `client.ConfirmedTicks` gives the
-  progress for a loading screen. The cost grows with the match length.
+  player enters the simulation at `client.JoinTick`. `client.SimulatedTicks` against `client.ServerTicks` (how many
+  ticks the server has closed, from its start and pong messages) gives the progress for a loading screen. The cost
+  grows with the match length.
 - **Leaving.** `client.Leave()`, removing the `LockstepClientConfig`, a dropped connection, or a disposed client
   world: the server announces the leave in a frame and the slot becomes free. A new config joins again over the same
   connection.
@@ -1175,7 +1181,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `LocalSlot`, `JoinTick` | The local player's slot (or -1) and the tick it enters the simulation |
 | `Config` | The `LockstepSessionConfig` sent by the server |
 | `Simulation` | The `LockstepSimulation` (null before the start and on clients that do not simulate) |
-| `ConfirmedTicks`, `SimulatedTicks`, `BufferedTicks` | Frame progress |
+| `ConfirmedTicks`, `SimulatedTicks`, `BufferedTicks`, `ServerTicks` | Frame progress; `ServerTicks` is how far the server is, for a loading screen |
 | `InterpolationAlpha` | Blend factor for rendering, in `[0, 1]` |
 | `PlaybackSpeed` | How fast the playout runs: 1 is real time, 0 holds the picture (replays) |
 | `RoundTripTime`, `JitterTicks` | Network measurements |
@@ -1541,13 +1547,13 @@ All messages are little-endian byte strings, versioned by `LockstepProtocol.VERS
 |---|---|---|
 | `JoinRequest` | client → server | Protocol version, simulation hash, flags (simulates), join data |
 | `JoinAccepted` / `JoinRejected` | server → client | Slot / reason |
-| `Start` | server → client | Session configuration, the client's slot and join tick, the server clock position |
+| `Start` | server → client | Session configuration, the client's slot and join tick, the server clock position and its closed ticks |
 | `Input` | client → server | Inputs of consecutive ticks; a repeat flag instead of unchanged bytes; commands |
 | `Frames` | server → client | Consecutive confirmed frames |
 | `InputFeedback` | server → client | How early the client's inputs arrive (1/256 tick), late drops |
 | `Checksum` | client → server | Tick and state hash |
 | `Desync` | server → client | Tick and slot mask |
-| `Ping` / `Pong` | client → server / server → client | Round-trip measurement |
+| `Ping` / `Pong` | client → server / server → client | Round-trip measurement; the pong also carries the server clock position and its closed ticks |
 | `Leave` | client → server | The player leaves |
 | `End` | server → client | End of the match and its reason |
 
@@ -2219,8 +2225,8 @@ public partial struct SpellActiveState : ISystem
   A request made by a state is applied on the next update of the machine: the requesting state finishes its own update,
   and the new one is entered and ticked on the next. Requests from systems that update before the group are applied in
   the same update. In a lockstep simulation the group updates once per tick.
-- **Transitions.** `Request` replaces an earlier request; a request of the current state (or of `NONE`) changes nothing,
-  the state is not entered again. On the update of a transition `ticksInState` is 0, `Entered(new)` and `Exited(old)`
+- **Transitions.** The last request of an update wins: `Request` replaces an earlier one, and a request of the current
+  state (or of `NONE`) cancels a pending one; the current state is never entered again. On the update of a transition `ticksInState` is 0, `Entered(new)` and `Exited(old)`
   are true and `previous` is the old state. A new machine enters its initial state on its first update.
 - **Enter and exit.** Both run on the update of the transition, in the order of the state systems: when the exit of
   one state and the enter of the next touch the same data, order the systems (`[UpdateBefore]`), or handle both states
@@ -2240,12 +2246,12 @@ public partial struct SpellActiveState : ISystem
 
 | Path | Contents |
 |---|---|
-| `Core/Mathematics/Runtime` | `Pragma.Dots.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid` |
+| `Core/Mathematics/Runtime` | `Pragma.Dots.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedPose`, `FixedMath`, `FixedRandom`, `FixedGrid` |
 | `Core/Mathematics/Editor` | `Pragma.Dots.Mathematics.Editor`: fixed-point drawers |
-| `Core/Actors/Runtime` | `Pragma.Dots.Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, the builders, `ActorLookup`, `ActorUtility`; the actor components in `Components` |
-| `Core/Actors/Authoring` | `Pragma.Dots.Actors.Authoring`: `ActorCatalogAuthoring` and the actor bakers |
+| `Core/Actors/Runtime` | `Pragma.Dots.Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorUtility`; the actor components in `Components` |
+| `Core/Actors/Authoring` | `Pragma.Dots.Actors.Authoring`: `ActorCatalogAuthoring`, the actor bakers and the baking builder |
 | `Core/Actors/Editor` | `Pragma.Dots.Actors.Editor`: the actor inspectors |
-| `Core/Utils/Runtime` | `Pragma.Dots.Utils`: `FixedDictionary4096Bytes`, `OptionalValue` |
+| `Core/Utils/Runtime` | `Pragma.Dots.Utils`: `FixedDictionary4096Bytes`, `OptionalValue`, `EnumId` |
 | `Core/Utils/Editor` | `Pragma.Dots.Utils.Editor`: drawers of fixed lists and fixed strings |
 | `Core/Utils/Physics` | `Pragma.Dots.Utils.Physics`: `CollisionMatrixToFilter` |
 | `Core/Utils/Entities` | `Pragma.Dots.Utils.Entities`: signals and their cleanup, `BufferDictionary`, `EntityManagerExtensions`; `SignalTag` in `Components` |
@@ -2261,7 +2267,7 @@ public partial struct SpellActiveState : ISystem
 | `Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`: the RPC, server and client systems, `LockstepNetcode`; config, status and request components in `Components` |
 | `Modules/Navigation` | `Runtime`: `Pragma.Dots.Navigation`, its parts in `Parts` |
 | `Modules/Vision` | `Runtime`: `Pragma.Dots.Vision`, its parts in `Parts` |
-| `Modules/Stats` | `Runtime`: `Pragma.Dots.Stats` |
+| `Modules/Stats` | `Runtime`: `Pragma.Dots.Stats`, its parts in `Parts` |
 | `Modules/Views` | `Runtime`: `Pragma.Dots.Views`, the `ViewPart`; `Authoring`: `Pragma.Dots.Views.Authoring`; `Editor`: `Pragma.Dots.Views.Editor`, the view previews |
 | `Modules/StateMachines` | `Runtime`: `Pragma.Dots.StateMachines`, the actor part base in `Parts` |
 | `Skills~` | Claude Code skills (Unity skips folders whose name ends with `~`) |
@@ -2279,7 +2285,8 @@ how to work with it:
 | `pragma-lockstep-desync` | Finding and preventing desyncs, determinism tests |
 
 The skills live in the package's `Skills~` folder. Claude Code loads project skills from `.claude/skills` in the
-project root, so copy them there once after installing (and again after updating the package):
+project root, so copy them there once after installing (and again after updating the package). A package installed
+from git sits in `Library/PackageCache`; for a local `file:` package, copy from its folder instead:
 
 ```bash
 # bash, from the project root

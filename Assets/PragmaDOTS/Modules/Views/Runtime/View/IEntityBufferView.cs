@@ -17,7 +17,7 @@ namespace Pragma.Dots.Views
 
         void IEntityComponentView.UpdateData(IComponentData data)
         {
-            Debug.LogError($"[Lockstep] {GetType().Name} shows the {typeof(TElement).Name} buffer, not {data?.GetType().Name ?? "null"}.");
+            Debug.LogError($"[Views] {GetType().Name} shows the {typeof(TElement).Name} buffer, not {data?.GetType().Name ?? "null"}.");
         }
     }
 }

@@ -220,7 +220,7 @@ namespace Pragma.Dots.Views.Editor
                 foreach (var componentType in types)
                 {
                     var type = TypeManager.GetType(componentType.TypeIndex);
-                    if (type == null || componentType.IsZeroSized || !view.IsHasHandler(type))
+                    if (type == null || componentType.IsZeroSized || !view.HasHandler(type))
                     {
                         continue;
                     }
@@ -241,7 +241,7 @@ namespace Pragma.Dots.Views.Editor
                         // A part written for bound views (one that reads View.Client, say) may not run in edit mode.
                         if (WarnedViews.Add(view))
                         {
-                            Debug.LogWarning($"[Lockstep] The preview of '{authoring.name}' could not show {type.Name}: {exception.InnerException?.Message ?? exception.Message}", authoring);
+                            Debug.LogWarning($"[Views] The preview of '{authoring.name}' could not show {type.Name}: {exception.InnerException?.Message ?? exception.Message}", authoring);
                         }
                     }
                 }

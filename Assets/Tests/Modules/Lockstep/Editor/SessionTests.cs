@@ -433,7 +433,7 @@ namespace Pragma.Dots.Tests
         [Test]
         public void ThinClient_WithoutReplay_KeepsNoFrames()
         {
-            var thin = LockstepClientSettings.Default;
+            var thin = SessionHarness.ClientSettings;
             thin.Simulate = false;
             thin.RecordReplay = false;
             using (var session = new SessionHarness(Settings(minPlayers: 1), latency: 0.03))
@@ -603,10 +603,10 @@ namespace Pragma.Dots.Tests
                 session.Run(3, VaryingInput);
                 // Replays the match from tick 0, many ticks per frame: the signals must not depend on the pace.
                 var late = session.AddClient(SignalOptions());
-                session.Run(3, VaryingInput);
+                session.Run(4, VaryingInput);
 
                 Assert.IsEmpty(session.Desyncs);
-                TestUtility.AssertSameChecksums(first, late, 10);
+                TestUtility.AssertSameChecksums(first, late, 20);
                 foreach (var client in new[] { first, late })
                 {
                     var entityManager = client.Simulation.World.EntityManager;
@@ -640,6 +640,61 @@ namespace Pragma.Dots.Tests
                 session.Run(0.5);
                 Assert.AreEqual(LockstepClientState.Rejected, extra.State);
                 Assert.AreEqual(LockstepJoinRejectReason.SessionFull, extra.RejectReason);
+            }
+        }
+
+        [Test]
+        public void LateJoin_WhenItIsOff_IsRejected()
+        {
+            var settings = Settings(minPlayers: 1);
+            settings.AllowLateJoin = false;
+            using (var session = new SessionHarness(settings, latency: 0.03))
+            {
+                session.AddClient();
+                session.Run(1, VaryingInput);
+                LogAssert.Expect(LogType.Warning, new Regex("GameInProgress"));
+                var late = session.AddClient();
+                session.Run(0.5, VaryingInput);
+                Assert.AreEqual(LockstepClientState.Rejected, late.State);
+                Assert.AreEqual(LockstepJoinRejectReason.GameInProgress, late.RejectReason);
+            }
+        }
+
+        [Test]
+        public void Join_FromAnotherProtocolOrBuild_IsRejected()
+        {
+            Assert.AreEqual(LockstepJoinRejectReason.ProtocolMismatch,
+                JoinWith((ushort)(LockstepProtocol.VERSION + 1), LockstepSimulation.DefaultSimulationHash));
+            Assert.AreEqual(LockstepJoinRejectReason.SimulationMismatch,
+                JoinWith(LockstepProtocol.VERSION, LockstepSimulation.DefaultSimulationHash ^ 1UL));
+        }
+
+        // A join request with the given version and simulation hash, as an older or a different build sends it.
+        private static LockstepJoinRejectReason JoinWith(ushort version, ulong simulationHash)
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 1)))
+            using (var client = new LockstepClient(SessionHarness.ClientSettings, session.Network.CreateClientTransport(5)))
+            {
+                session.Network.AttachClient(5, client);
+                using (var packet = new NativeList<byte>(32, Allocator.Temp))
+                {
+                    var writer = new LockstepByteWriter(packet);
+                    writer.WriteByte(0); // framer header: a complete message
+                    writer.WriteByte((byte)LockstepMessageType.JoinRequest);
+                    writer.WriteUShort(version);
+                    writer.WriteULong(simulationHash);
+                    writer.WriteByte((byte)LockstepJoinFlags.Simulates);
+                    writer.WriteByte(0);
+                    unsafe
+                    {
+                        session.Server.OnPacket(5, packet.GetUnsafePtr(), packet.Length, session.Time);
+                    }
+                }
+                LogAssert.Expect(LogType.Warning, new Regex("refused to join"));
+                session.Run(0.2);
+                Assert.AreEqual(LockstepClientState.Rejected, client.State);
+                Assert.AreEqual(0, session.Server.PlayerCount);
+                return client.RejectReason;
             }
         }
 

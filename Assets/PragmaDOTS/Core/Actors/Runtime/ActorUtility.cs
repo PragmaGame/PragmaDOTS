@@ -83,7 +83,7 @@ namespace Pragma.Dots.Actors
         /// </summary>
         /// <param name="placement">Where the actor stands.</param>
         /// <param name="placementScale">Its scale along its local axes.</param>
-        /// <param name="overrides">Parts that replace the definition's part of their type.</param>
+        /// <param name="overrides">Parts that replace the definition's part of their type (mergeable parts merge with it).</param>
         /// <param name="order">Where the actor goes among the placed actors: the same on every machine, unique per map.</param>
         public static Entity CreatePlaced(EntityManager entityManager, ActorDefinition definition, in FixedPose placement, FixedVector3 placementScale,
             IReadOnlyList<ActorPart> overrides, ulong order)

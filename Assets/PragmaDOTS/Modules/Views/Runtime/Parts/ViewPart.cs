@@ -38,7 +38,7 @@ namespace Pragma.Dots.Views
             }
             if (!EntityViewKey.TryCreate(_key, out var key))
             {
-                Debug.LogError($"[Lockstep] The view key '{_key}' of the actor '{actorKey}' must be 1 to 29 bytes of UTF-8; the actor's key is used.");
+                Debug.LogError($"[Views] The view key '{_key}' of the actor '{actorKey}' must be 1 to 29 bytes of UTF-8; the actor's key is used.");
                 return actorKey;
             }
             return key.value;

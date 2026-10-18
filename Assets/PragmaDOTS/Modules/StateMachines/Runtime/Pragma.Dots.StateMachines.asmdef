@@ -3,6 +3,7 @@
     "rootNamespace": "Pragma.Dots.StateMachines",
     "references": [
         "Pragma.Dots.Actors",
+        "Pragma.Dots.Utils",
         "Unity.Entities",
         "Unity.Collections",
         "Unity.Burst"

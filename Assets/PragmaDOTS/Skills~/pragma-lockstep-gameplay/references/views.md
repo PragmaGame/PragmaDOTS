@@ -41,7 +41,7 @@ by default); without it a view moves in steps.
 | `EntityComponentView<T>` | `UpdateData(T)` whenever the chunk holding the entity's `T` was written; may repeat a value |
 | `EntityComponentViewUnmanaged<T>` | `OnUpdateData(T)` only when the bytes changed; the cache is cleared on `Bind` |
 | `EntityBufferView<T>` | `UpdateData(DynamicBuffer<T>)` whenever the chunk holding the entity's buffer was written; read-only, valid during the call, may repeat the contents |
-| `TransformComponentView` | Applies a `LocalTransform`: world position, rotation, uniform scale |
+| `TransformComponentView` | Applies a `LocalTransform`: world position and rotation, and the uniform scale as the local scale (keep views unparented, or under an unscaled parent) |
 
 All parts derive from `EntityViewPart`. Virtual members: `Bind()` (the view got an entity), `BindBreak()` (it is about
 to lose it), `SetViewEnable(bool)` (default: `SetActive`). `View` is the root: `View.Entity`, `View.Client` (`LocalSlot` for "is this mine"). Several
@@ -91,7 +91,7 @@ must live in runtime (non-Editor) assemblies.
 
 `EntityView`: `Entity`, `Client`, `IsBound`, `IsAttached`, `IsAutoUpdateEnabled` (pauses the pushes, transform
 included; turning it on catches up), `Transform`, `GetComponentView<T>()`, `SetComponentViewEnable<T>(bool)`,
-`UpdateData<T>(T)`, `UpdateData(IComponentData)`, `IsHasHandler(Type)`, `IsHasHandlers(params Type[])`,
+`UpdateData<T>(T)`, `UpdateData(IComponentData)`, `HasHandler(Type)`, `HasHandlers(params Type[])`,
 `RefreshComponentViews()`, `TryGetData<T>(out T)` and `TryGetBuffer<T>(out DynamicBuffer<T>)` (read any component or
 buffer of the entity from the simulation world; false while unbound or when the entity lacks it), `UpdateBuffer<T>`.
 

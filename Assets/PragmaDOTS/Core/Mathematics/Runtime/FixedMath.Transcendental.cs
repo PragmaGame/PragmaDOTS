@@ -68,7 +68,7 @@ namespace Pragma.Dots.Mathematics
         public static FixedPoint Atan(FixedPoint x)
         {
             var negative = x.rawValue < 0;
-            var a = (long)UnsignedAbsClamped(x.rawValue);
+            var a = (long)UnsignedAbs(x.rawValue);
             long angle;
             if (a <= FixedPoint.ONE_RAW)
             {
@@ -170,7 +170,7 @@ namespace Pragma.Dots.Mathematics
             }
             var integer = MantissaQ30(x.rawValue, out var mantissa);
             var ln = integer * LN2_Q30 + LnMantissaQ30(mantissa);
-            return FixedPoint.FromRaw(RoundQ30ToRawSigned(ln));
+            return FixedPoint.FromRaw(RoundQ30ToRaw(ln));
         }
 
         /// <summary>Base-10 logarithm. Zero or negative input returns <see cref="FixedPoint.MinValue"/>.</summary>
@@ -182,7 +182,7 @@ namespace Pragma.Dots.Mathematics
             }
             var integer = MantissaQ30(x.rawValue, out var mantissa);
             var ln = integer * LN2_Q30 + LnMantissaQ30(mantissa);
-            return FixedPoint.FromRaw(RoundQ30ToRawSigned(MulShiftRound(ln, INV_LN10_Q30, Q30)));
+            return FixedPoint.FromRaw(RoundQ30ToRaw(MulShiftRound(ln, INV_LN10_Q30, Q30)));
         }
 
         /// <summary>
@@ -209,7 +209,7 @@ namespace Pragma.Dots.Mathematics
             }
             var integer = MantissaQ30(x.rawValue, out var mantissa);
             var log2X = ((long)integer << Q30) + ((LnMantissaQ30(mantissa) * LOG2E_Q30) >> Q30);
-            return Exp2(FixedPoint.FromRaw(RoundQ30ToRawSigned(MulShiftRound(log2X, y.rawValue, FixedPoint.FRACTIONAL_BITS))));
+            return Exp2(FixedPoint.FromRaw(RoundQ30ToRaw(MulShiftRound(log2X, y.rawValue, FixedPoint.FRACTIONAL_BITS))));
         }
 
         /// <summary><paramref name="x"/> raised to an integer power, by repeated squaring.</summary>
@@ -339,8 +339,8 @@ namespace Pragma.Dots.Mathematics
         // |atan2(y, x)| in Q30 for raw values of any (common) scale; the caller applies the sign of y.
         private static long Atan2MagnitudeQ30(long y, long x)
         {
-            var ax = UnsignedAbsClamped(x);
-            var ay = UnsignedAbsClamped(y);
+            var ax = UnsignedAbs(x);
+            var ay = UnsignedAbs(y);
             if (ax == 0 && ay == 0)
             {
                 return 0;
@@ -430,9 +430,6 @@ namespace Pragma.Dots.Mathematics
             return q30 >= 0 ? (q30 + half) >> shift : -((-q30 + half) >> shift);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static long RoundQ30ToRawSigned(long q30) => RoundQ30ToRaw(q30);
-
         private static long DivideRounded(long numerator, long denominator)
         {
             var negative = (numerator < 0) ^ (denominator < 0);
@@ -441,8 +438,5 @@ namespace Pragma.Dots.Mathematics
             var q = (long)((n + d / 2) / d);
             return negative ? -q : q;
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ulong UnsignedAbsClamped(long value) => value < 0 ? (ulong)(-(value + 1)) + 1UL : (ulong)value;
     }
 }

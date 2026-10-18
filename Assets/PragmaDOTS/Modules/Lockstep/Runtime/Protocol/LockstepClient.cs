@@ -56,6 +56,7 @@ namespace Pragma.Dots.Lockstep
         private float _playbackSpeed = 1f;
         private double _arrivalOffsetMean = double.NaN;
         private double _jitterSeconds;
+        private int _serverTicks;
         private bool _disposed;
 
         public LockstepClient(in LockstepClientSettings settings, ILockstepTransport transport, LockstepSimulationOptions simulationOptions = null)
@@ -87,6 +88,11 @@ namespace Pragma.Dots.Lockstep
         /// <summary>Confirmed frames received, which is also the first tick not yet received.</summary>
         public int ConfirmedTicks => _frames.EndTick;
         public int SimulatedTicks => Simulation?.Tick ?? 0;
+        /// <summary>
+        /// The ticks the server had closed as of its last start or pong message, or the confirmed ticks if more: how long
+        /// the match is, for the progress of a late joiner (<c>SimulatedTicks / (float)ServerTicks</c>).
+        /// </summary>
+        public int ServerTicks => Math.Max(_serverTicks, ConfirmedTicks);
         /// <summary>Latest tick an input was sent for.</summary>
         public int LastSentInputTick => _lastSentInputTick;
         /// <summary>Blend factor between the previous and the latest simulated tick for rendering, in [0, 1].</summary>
@@ -349,7 +355,7 @@ namespace Pragma.Dots.Lockstep
             var slot = reader.ReadByte();
             var joinTick = reader.ReadInt();
             var position = reader.ReadDouble();
-            reader.ReadInt();
+            var serverTicks = reader.ReadInt();
             // Only a client waiting to start: one that left already, while the start was on its way, stays out.
             if (reader.HasFailed || version != LockstepProtocol.VERSION ||
                 (State != LockstepClientState.Joining && State != LockstepClientState.Lobby))
@@ -369,6 +375,7 @@ namespace Pragma.Dots.Lockstep
             Config = config;
             LocalSlot = slot;
             JoinTick = joinTick;
+            _serverTicks = serverTicks;
             TryCreateSimulation();
 
             // Input for tick T is due on the server when its clock reaches T + 1; aim for TargetMargin ticks earlier.
@@ -477,10 +484,13 @@ namespace Pragma.Dots.Lockstep
         private void HandlePong(ref LockstepByteReader reader, double now)
         {
             var clientTime = reader.ReadDouble();
+            reader.ReadDouble();
+            var serverTicks = reader.ReadInt();
             if (reader.HasFailed)
             {
                 return;
             }
+            _serverTicks = Math.Max(_serverTicks, serverTicks);
             var sample = now - clientTime;
             if (sample < 0 || double.IsNaN(sample))
             {

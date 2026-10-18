@@ -70,6 +70,19 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Request_OfTheCurrentState_CancelsAPendingOne()
+        {
+            var machine = StateMachine.Create(TestState.Idle);
+            machine.Advance();
+            machine.Request(TestState.Walk);
+            machine.Request(TestState.Idle);
+
+            machine.Advance();
+            Assert.IsTrue(machine.Is(TestState.Idle), "the last request wins");
+            Assert.IsFalse(machine.Exited(TestState.Idle));
+        }
+
+        [Test]
         public void Id_IsTheValueOfAByteEnum_AlsoInBurst()
         {
             Assert.AreEqual(2, StateMachine.Id(TestState.Walk));

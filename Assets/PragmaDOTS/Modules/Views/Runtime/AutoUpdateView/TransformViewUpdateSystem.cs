@@ -51,7 +51,7 @@ namespace Pragma.Dots.Views
                     manager.RequestScan();
                     continue;
                 }
-                if (view.IsBound && view.IsAutoUpdateEnabled && view.IsHasHandler(typeof(LocalTransform)) &&
+                if (view.IsBound && view.IsAutoUpdateEnabled && view.HasHandler(typeof(LocalTransform)) &&
                     simulationManager.TryGetInterpolated(view.Entity, lastTick, alpha, view.BoundAtTick, out var transform))
                 {
                     view.UpdateData(transform);
