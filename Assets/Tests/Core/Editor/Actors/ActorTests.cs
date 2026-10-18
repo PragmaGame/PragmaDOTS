@@ -151,6 +151,19 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void TwoPartsAddingOneType_TheFirstOneWins_AsWhenBaked()
+        {
+            var tower = Definition("tower", null, new string[0], Value(4), new TestMergeablePart(8, (1, 1)));
+            using (var world = new World("Actors"))
+            {
+                var entityManager = world.EntityManager;
+                LogAssert.Expect(LogType.Error, new Regex("TestMergeablePart of the actor 'tower' failed to build.*TestActorValue already"));
+                var placed = ActorUtility.CreatePlaced(entityManager, tower, FixedPose.Identity, new FixedVector3(1, 1, 1), null, 1);
+                Assert.AreEqual((FixedPoint)4, entityManager.GetComponentData<TestActorValue>(placed).value, "the second part does not overwrite it");
+            }
+        }
+
+        [Test]
         public void ActorAuthoring_PlacesItsDefinition_AtThePoseOfItsGameObject_WithItsOverrides()
         {
             var tower = Definition("tower", null, new[] { "building" }, Value(1), new TestActorPart());

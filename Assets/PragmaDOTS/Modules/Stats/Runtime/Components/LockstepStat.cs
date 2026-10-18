@@ -32,7 +32,8 @@ namespace Pragma.Dots.Stats
         public FixedPoint value;
         /// <summary>
         /// Capped resources: the cap the amount was last fitted to, as of the last <see cref="LockstepStatSystem"/> update,
-        /// which is the maximum a bar shows. Zero until the first update, which fills the resource.
+        /// which is the maximum a bar shows. Negative for a resource that starts full, until the first update fills it;
+        /// zero for one that starts with an amount, which the first update keeps under the cap.
         /// </summary>
         public FixedPoint max;
 
@@ -70,13 +71,31 @@ namespace Pragma.Dots.Stats
         /// </summary>
         public static LockstepStat Resource(int type, int cap, LockstepStatCapPolicy capPolicy)
         {
-            return new LockstepStat { type = type, kind = LockstepStatKind.Resource, cap = cap, capPolicy = capPolicy };
+            return new LockstepStat { type = type, kind = LockstepStatKind.Resource, cap = cap, capPolicy = capPolicy, max = -FixedPoint.One };
         }
 
         /// <inheritdoc cref="Resource(int, int, LockstepStatCapPolicy)"/>
         public static LockstepStat Resource<TType>(TType type, TType cap, LockstepStatCapPolicy capPolicy) where TType : unmanaged, Enum
         {
             return Resource(LockstepStats.Id(type), LockstepStats.Id(cap), capPolicy);
+        }
+
+        /// <summary>
+        /// A resource capped by the attribute <paramref name="cap"/> of the same entity that starts with
+        /// <paramref name="amount"/>, at most the cap: a building under construction, energy that starts empty.
+        /// </summary>
+        public static LockstepStat Resource(int type, int cap, LockstepStatCapPolicy capPolicy, FixedPoint amount)
+        {
+            return new LockstepStat
+            {
+                type = type, kind = LockstepStatKind.Resource, cap = cap, capPolicy = capPolicy, value = FixedMath.Max(amount, FixedPoint.Zero),
+            };
+        }
+
+        /// <inheritdoc cref="Resource(int, int, LockstepStatCapPolicy, FixedPoint)"/>
+        public static LockstepStat Resource<TType>(TType type, TType cap, LockstepStatCapPolicy capPolicy, FixedPoint amount) where TType : unmanaged, Enum
+        {
+            return Resource(LockstepStats.Id(type), LockstepStats.Id(cap), capPolicy, amount);
         }
     }
 }

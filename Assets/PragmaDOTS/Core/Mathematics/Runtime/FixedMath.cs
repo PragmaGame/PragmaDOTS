@@ -58,9 +58,12 @@ namespace Pragma.Dots.Mathematics
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static FixedPoint Lerp(FixedPoint a, FixedPoint b, FixedPoint t) => a + (b - a) * t;
 
-        /// <summary>The inverse of <see cref="Lerp(FixedPoint,FixedPoint,FixedPoint)"/>: where <paramref name="x"/> lies between a and b.</summary>
+        /// <summary>
+        /// The inverse of <see cref="Lerp(FixedPoint,FixedPoint,FixedPoint)"/>: where <paramref name="x"/> lies between a and b.
+        /// Zero when a equals b, like <c>Mathf.InverseLerp</c>.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint InverseLerp(FixedPoint a, FixedPoint b, FixedPoint x) => (x - a) / (b - a);
+        public static FixedPoint InverseLerp(FixedPoint a, FixedPoint b, FixedPoint x) => a == b ? FixedPoint.Zero : (x - a) / (b - a);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static FixedPoint Remap(FixedPoint srcStart, FixedPoint srcEnd, FixedPoint dstStart, FixedPoint dstEnd, FixedPoint x) => Lerp(dstStart, dstEnd, InverseLerp(srcStart, srcEnd, x));
@@ -148,22 +151,7 @@ namespace Pragma.Dots.Mathematics
         public static long MulShiftRound(long a, long b, int shift)
         {
             var negative = (a < 0) ^ (b < 0);
-            var ua = UnsignedAbs(a);
-            var ub = UnsignedAbs(b);
-
-            var aLo = ua & 0xFFFFFFFFUL;
-            var aHi = ua >> 32;
-            var bLo = ub & 0xFFFFFFFFUL;
-            var bHi = ub >> 32;
-
-            var loLo = aLo * bLo;
-            var loHi = aLo * bHi;
-            var hiLo = aHi * bLo;
-            var hiHi = aHi * bHi;
-
-            var middle = (loLo >> 32) + (loHi & 0xFFFFFFFFUL) + (hiLo & 0xFFFFFFFFUL);
-            var lo = (middle << 32) | (loLo & 0xFFFFFFFFUL);
-            var hi = hiHi + (loHi >> 32) + (hiLo >> 32) + (middle >> 32);
+            Multiply(UnsignedAbs(a), UnsignedAbs(b), out var hi, out var lo);
 
             // Add half of the last kept bit for round-to-nearest.
             var half = 1UL << (shift - 1);
@@ -181,6 +169,71 @@ namespace Pragma.Dots.Mathematics
                 return negative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW;
             }
             return negative ? -(long)result : (long)result;
+        }
+
+        /// <summary>
+        /// <c>a * b / c</c> with a 128-bit intermediate, truncated toward zero: right where the product alone would overflow
+        /// the plain operators, such as an amount scaled to a new cap (<c>amount * cap / oldCap</c>). Saturates when the
+        /// quotient does not fit, and to the sign of the product when <paramref name="c"/> is zero.
+        /// </summary>
+        public static FixedPoint MulDiv(FixedPoint a, FixedPoint b, FixedPoint c)
+        {
+            var productNegative = (a.rawValue < 0) ^ (b.rawValue < 0);
+            if (a.rawValue == 0 || b.rawValue == 0)
+            {
+                return FixedPoint.Zero;
+            }
+            var negative = productNegative ^ (c.rawValue < 0);
+            if (c.rawValue == 0)
+            {
+                return FixedPoint.FromRaw(productNegative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW);
+            }
+
+            // The raw quotient is a.raw * b.raw / c.raw: the fractional scales cancel out but one.
+            Multiply(UnsignedAbs(a.rawValue), UnsignedAbs(b.rawValue), out var hi, out var lo);
+            var divisor = UnsignedAbs(c.rawValue);
+            if (hi >= divisor)
+            {
+                return FixedPoint.FromRaw(negative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW);
+            }
+
+            // Long division of the 128-bit product, one bit at a time; hi < divisor keeps the quotient within 64 bits.
+            var remainder = hi;
+            var quotient = 0UL;
+            for (var i = 63; i >= 0; i--)
+            {
+                var carry = remainder >> 63;
+                remainder = (remainder << 1) | ((lo >> i) & 1UL);
+                quotient <<= 1;
+                if (carry != 0 || remainder >= divisor)
+                {
+                    remainder -= divisor;
+                    quotient |= 1UL;
+                }
+            }
+            if (quotient > FixedPoint.MAX_RAW)
+            {
+                return FixedPoint.FromRaw(negative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW);
+            }
+            return FixedPoint.FromRaw(negative ? -(long)quotient : (long)quotient);
+        }
+
+        // The 128-bit product of two 64-bit values, as its high and low halves.
+        private static void Multiply(ulong a, ulong b, out ulong hi, out ulong lo)
+        {
+            var aLo = a & 0xFFFFFFFFUL;
+            var aHi = a >> 32;
+            var bLo = b & 0xFFFFFFFFUL;
+            var bHi = b >> 32;
+
+            var loLo = aLo * bLo;
+            var loHi = aLo * bHi;
+            var hiLo = aHi * bLo;
+            var hiHi = aHi * bHi;
+
+            var middle = (loLo >> 32) + (loHi & 0xFFFFFFFFUL) + (hiLo & 0xFFFFFFFFUL);
+            lo = (middle << 32) | (loLo & 0xFFFFFFFFUL);
+            hi = hiHi + (loHi >> 32) + (hiLo >> 32) + (middle >> 32);
         }
 
         /// <summary>

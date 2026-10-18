@@ -15,6 +15,9 @@ namespace Pragma.Dots.Vision
     /// </remarks>
     public static class LockstepVision
     {
+        /// <summary>The largest radius of sight, in world units; a larger one counts as this. Its square still fits the raw math.</summary>
+        public const int MAX_RADIUS = 30000;
+
         /// <summary>The buffer holds one plane per slot of the grid: <see cref="LockstepVisionSystem"/> has filled it.</summary>
         public static bool HasCells(in LockstepVisionGrid grid, NativeArray<LockstepVisionCell> cells)
         {
@@ -48,6 +51,7 @@ namespace Pragma.Dots.Vision
                 return false;
             }
 
+            radius = FixedMath.Min(radius, MAX_RADIUS);
             var offset = slot * grid.CellCount;
             var layout = grid.Layout;
             GetBounds(layout, position, radius, out var min, out var max);
@@ -86,6 +90,7 @@ namespace Pragma.Dots.Vision
                 return;
             }
 
+            radius = FixedMath.Min(radius, MAX_RADIUS);
             var offset = slot * grid.CellCount;
             var layout = grid.Layout;
             GetBounds(layout, position, radius, out var min, out var max);

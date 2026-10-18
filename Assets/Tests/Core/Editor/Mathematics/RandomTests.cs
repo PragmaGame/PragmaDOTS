@@ -25,6 +25,19 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void DefaultGenerator_IsNotStuckAtZero()
+        {
+            var random = default(FixedRandom);
+            var values = new HashSet<uint>();
+            for (var i = 0; i < 100; i++)
+            {
+                values.Add(random.NextUInt());
+            }
+            Assert.Greater(values.Count, 95);
+            Assert.AreEqual(new FixedRandom().NextUInt(), default(FixedRandom).NextUInt(), "still deterministic");
+        }
+
+        [Test]
         public void MatchesReferencePcg32()
         {
             // Reference PCG32 (XSH-RR) written independently of the implementation under test.

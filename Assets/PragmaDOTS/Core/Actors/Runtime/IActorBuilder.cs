@@ -10,7 +10,8 @@ namespace Pragma.Dots.Actors
     /// </summary>
     /// <remarks>
     /// A buffer returned by <see cref="AddBuffer{T}"/> is valid until the next component is added: fill it right away.
-    /// Each component type may be added once per actor.
+    /// Each component type may be added once per actor: adding it again throws, while baking and at run time alike, so the
+    /// part that adds it second fails to build.
     /// </remarks>
     public interface IActorBuilder
     {

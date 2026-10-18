@@ -424,7 +424,13 @@ namespace Pragma.Dots.Navigation
             {
                 var request = requests[index];
                 var agent = agents[request.entity];
-                var path = waypoints[request.entity];
+                if (!waypoints.TryGetBuffer(request.entity, out var path))
+                {
+                    // An agent made in code without its waypoint buffer has nowhere to keep a path: it stays put.
+                    agent.status = LockstepNavStatus.Idle;
+                    agents[request.entity] = agent;
+                    return;
+                }
                 var status = LockstepPathStatus.Complete;
                 if (hasGrid)
                 {

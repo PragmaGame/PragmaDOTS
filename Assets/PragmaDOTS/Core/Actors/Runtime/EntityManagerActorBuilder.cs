@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Pragma.Dots.Mathematics;
 using Unity.Collections;
@@ -5,7 +6,8 @@ using Unity.Entities;
 
 namespace Pragma.Dots.Actors
 {
-    // Builds an actor at run time, through the EntityManager of the world it goes into.
+    // Builds an actor at run time, through the EntityManager of the world it goes into. A type the entity has already is
+    // refused, as a baker refuses it, so that an actor built either way comes out the same.
     internal sealed class EntityManagerActorBuilder : IActorBuilder
     {
         private readonly EntityManager _entityManager;
@@ -36,6 +38,7 @@ namespace Pragma.Dots.Actors
 
         public void AddComponent<T>(in T component) where T : unmanaged, IComponentData
         {
+            CheckMissing<T>();
             if (ComponentType.ReadWrite<T>().IsZeroSized)
             {
                 _entityManager.AddComponent<T>(_entity);
@@ -46,7 +49,11 @@ namespace Pragma.Dots.Actors
             }
         }
 
-        public DynamicBuffer<T> AddBuffer<T>() where T : unmanaged, IBufferElementData => _entityManager.AddBuffer<T>(_entity);
+        public DynamicBuffer<T> AddBuffer<T>() where T : unmanaged, IBufferElementData
+        {
+            CheckMissing<T>();
+            return _entityManager.AddBuffer<T>(_entity);
+        }
 
         public void SetComponentEnabled<T>(bool enabled) where T : unmanaged, IEnableableComponent
         {
@@ -55,6 +62,14 @@ namespace Pragma.Dots.Actors
 
         public void DependsOn(UnityEngine.Object asset)
         {
+        }
+
+        private void CheckMissing<T>()
+        {
+            if (_entityManager.HasComponent(_entity, ComponentType.ReadWrite<T>()))
+            {
+                throw new InvalidOperationException($"The actor '{Key}' has {typeof(T).Name} already: each component type may be added once per actor.");
+            }
         }
     }
 }

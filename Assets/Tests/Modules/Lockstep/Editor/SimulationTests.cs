@@ -255,6 +255,49 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void EntityIds_OfCopies_AreTheirOwn()
+        {
+            using (var simulation = new LockstepSimulation(TestUtility.Config(), TestUtility.Options()))
+            {
+                var entityManager = simulation.World.EntityManager;
+                var original = entityManager.CreateEntity(typeof(LockstepEntityId));
+                var doomed = entityManager.CreateEntity(typeof(LockstepEntityId));
+                var disabled = entityManager.CreateEntity(typeof(LockstepEntityId));
+                TestUtility.Step(simulation);
+
+                // Instantiate copies the id; a copy of an entity destroyed in the same tick does not inherit its id either.
+                var copy = entityManager.Instantiate(original);
+                var orphan = entityManager.Instantiate(doomed);
+                entityManager.DestroyEntity(doomed);
+                entityManager.AddComponent<Disabled>(disabled);
+                // The copy comes first in the walk, so the original has to be known from the previous tick.
+                entityManager.AddComponent<ChecksumTag>(original);
+                TestUtility.Step(simulation);
+
+                Assert.AreEqual(1u, entityManager.GetComponentData<LockstepEntityId>(original).value, "the original keeps its id");
+                Assert.AreEqual(4u, entityManager.GetComponentData<LockstepEntityId>(copy).value);
+                Assert.AreEqual(5u, entityManager.GetComponentData<LockstepEntityId>(orphan).value, "ids are never reused");
+                Assert.AreEqual(3u, entityManager.GetComponentData<LockstepEntityId>(disabled).value);
+
+                using (var query = entityManager.CreateEntityQuery(new EntityQueryDesc
+                       {
+                           All = new[] { ComponentType.ReadOnly<LockstepEntityIdMap>() },
+                           Options = EntityQueryOptions.IncludeSystems,
+                       }))
+                {
+                    var map = query.GetSingleton<LockstepEntityIdMap>();
+                    Assert.IsTrue(map.TryGetEntity(1, out var resolved));
+                    Assert.AreEqual(original, resolved);
+                    Assert.IsTrue(map.TryGetEntity(4, out resolved));
+                    Assert.AreEqual(copy, resolved);
+                    Assert.IsTrue(map.TryGetEntity(3, out resolved), "a disabled entity keeps its id");
+                    Assert.AreEqual(disabled, resolved);
+                    Assert.IsFalse(map.TryGetEntity(2, out _));
+                }
+            }
+        }
+
+        [Test]
         public void TransformHistory_CapturesTheStartOfEveryTick()
         {
             using (var simulation = new LockstepSimulation(TestUtility.Config(), TestUtility.Options()))

@@ -86,6 +86,40 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void MulDiv_MatchesDecimalReference_InBurstToo()
+        {
+            var random = new System.Random(9);
+            using (var inputs = new NativeArray<MulDivInput>(5000, Allocator.TempJob))
+            using (var managed = new NativeArray<long>(inputs.Length, Allocator.TempJob))
+            using (var bursted = new NativeArray<long>(inputs.Length, Allocator.TempJob))
+            {
+                var values = inputs;
+                for (var i = 0; i < values.Length; i++)
+                {
+                    values[i] = new MulDivInput { x = NextLong(random, 1L << 50), y = NextLong(random, 1L << 40), z = NextLong(random, 1L << 45) };
+                }
+                new MulDivJob { inputs = inputs, outputs = managed }.Execute();
+                new MulDivJob { inputs = inputs, outputs = bursted }.Run();
+                for (var i = 0; i < values.Length; i++)
+                {
+                    var input = values[i];
+                    var exact = input.z == 0 ? 0m : decimal.Truncate((decimal)input.x * input.y / input.z);
+                    if (input.z != 0 && Math.Abs(exact) <= long.MaxValue)
+                    {
+                        Assert.AreEqual((long)exact, managed[i], $"{input.x} * {input.y} / {input.z}");
+                    }
+                    Assert.AreEqual(managed[i], bursted[i], $"{input.x} * {input.y} / {input.z} in Burst");
+                }
+            }
+
+            var big = (FixedPoint)100000;
+            Assert.AreEqual((FixedPoint)90000, FixedMath.MulDiv(60000, 150000, big), "where the plain product overflows");
+            Assert.AreEqual(FixedPoint.MaxValue, FixedMath.MulDiv(big, big, FixedPoint.Epsilon), "a quotient too large saturates");
+            Assert.AreEqual(FixedPoint.MinValue, FixedMath.MulDiv(-big, 2, FixedPoint.Zero), "so does division by zero");
+            Assert.AreEqual(FixedPoint.Zero, FixedMath.MulDiv(FixedPoint.Zero, big, FixedPoint.Zero));
+        }
+
+        [Test]
         public void Parse_IsExactAndCultureIndependent()
         {
             Assert.AreEqual(FixedPoint.FromFraction(-12375, 1000), FixedPoint.Parse("-12.375"));
@@ -268,6 +302,18 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Helpers_HandleDegenerateInputs()
+        {
+            Assert.AreEqual(FixedPoint.Zero, FixedMath.InverseLerp(3, 3, 5), "an empty range");
+            Assert.AreEqual((FixedPoint)10, FixedMath.Remap(3, 3, 10, 20, 5), "remaps to its start");
+            Assert.IsTrue(FixedPoint.TryParse("140737488355327.5", out _));
+            Assert.IsFalse(FixedPoint.TryParse("140737488355327.9999999", out _), "rounds past the largest value");
+            var grid = new FixedGrid(FixedVector2.Zero, FixedPoint.Zero, 4, 4);
+            Assert.IsFalse(grid.IsValid);
+            Assert.AreEqual(new int2(0, 0), grid.WorldToCell(new FixedVector2(3, 3)), "no division by zero");
+        }
+
+        [Test]
         public void Burst_ProducesBitIdenticalResults()
         {
             using (var inputs = CreateGoldenInputs(Allocator.TempJob))
@@ -329,6 +375,29 @@ namespace Pragma.Dots.Tests
             random.NextBytes(bytes);
             var value = BitConverter.ToInt64(bytes, 0) % range;
             return value;
+        }
+
+        private struct MulDivInput
+        {
+            public long x;
+            public long y;
+            public long z;
+        }
+
+        [BurstCompile(CompileSynchronously = true)]
+        private struct MulDivJob : IJob
+        {
+            [ReadOnly] public NativeArray<MulDivInput> inputs;
+            public NativeArray<long> outputs;
+
+            public void Execute()
+            {
+                for (var i = 0; i < inputs.Length; i++)
+                {
+                    var input = inputs[i];
+                    outputs[i] = FixedMath.MulDiv(FixedPoint.FromRaw(input.x), FixedPoint.FromRaw(input.y), FixedPoint.FromRaw(input.z)).rawValue;
+                }
+            }
         }
 
         [BurstCompile(CompileSynchronously = true)]

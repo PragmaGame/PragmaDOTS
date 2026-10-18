@@ -102,13 +102,13 @@ namespace Pragma.Dots.Stats
             {
                 var stat = LockstepStats.Id(attribute.Stat);
                 merged._resources.RemoveAll(resource => LockstepStats.Id(resource.Stat) == stat);
-                Replace(merged._attributes, merged._attributes.FindIndex(entry => LockstepStats.Id(entry.Stat) == stat), attribute);
+                Replace(merged._attributes, entry => LockstepStats.Id(entry.Stat) == stat, attribute);
             }
             foreach (var resource in _resources)
             {
                 var stat = LockstepStats.Id(resource.Stat);
                 merged._attributes.RemoveAll(attribute => LockstepStats.Id(attribute.Stat) == stat);
-                Replace(merged._resources, merged._resources.FindIndex(entry => LockstepStats.Id(entry.Stat) == stat), resource);
+                Replace(merged._resources, entry => LockstepStats.Id(entry.Stat) == stat, resource);
             }
             foreach (var target in _targets)
             {
@@ -141,8 +141,10 @@ namespace Pragma.Dots.Stats
             {
                 var stat = LockstepStats.Id(resource.Stat);
                 var cap = LockstepStats.Id(resource.Cap);
-                Add(stats, cap == LockstepStat.NONE ? LockstepStat.Resource(stat, resource.Amount) : LockstepStat.Resource(stat, cap, resource.CapPolicy),
-                    resource.Stat, actor);
+                var created = cap == LockstepStat.NONE ? LockstepStat.Resource(stat, resource.Amount)
+                    : resource.Amount.rawValue > 0 ? LockstepStat.Resource(stat, cap, resource.CapPolicy, resource.Amount)
+                    : LockstepStat.Resource(stat, cap, resource.CapPolicy);
+                Add(stats, created, resource.Stat, actor);
             }
             foreach (var resource in _resources)
             {
@@ -173,15 +175,23 @@ namespace Pragma.Dots.Stats
             stats.Add(stat);
         }
 
-        private static void Replace<T>(List<T> entries, int index, T entry)
+        // In place of the first entry of the stat; the inherited list may list it twice (which Build warns about), and the
+        // override has to win over every one of them.
+        private static void Replace<T>(List<T> entries, Predicate<T> isSame, T entry)
         {
-            if (index >= 0)
-            {
-                entries[index] = entry;
-            }
-            else
+            var index = entries.FindIndex(isSame);
+            if (index < 0)
             {
                 entries.Add(entry);
+                return;
+            }
+            entries[index] = entry;
+            for (var i = entries.Count - 1; i > index; i--)
+            {
+                if (isSame(entries[i]))
+                {
+                    entries.RemoveAt(i);
+                }
             }
         }
     }

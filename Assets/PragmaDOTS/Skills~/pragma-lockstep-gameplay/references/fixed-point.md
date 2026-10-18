@@ -33,8 +33,10 @@ references only Unity.Mathematics and Burst). The recipes below use lockstep typ
   `FixedPoint.FRACTIONAL_BITS` = 16.
 - Step 1/65536 (about 0.000015). Range about ±1.4e14 (`FixedPoint.MaxValue`, `FixedPoint.MinValue`;
   `MinValue = -MaxValue`, so negation never overflows).
-- `a * b` uses a 64-bit intermediate: keep `|a * b|` below about 2.1e9. `FixedMath.MulShiftRound` uses a 128-bit
-  intermediate; division falls back to exact long division when the shifted dividend would overflow.
+- `a * b` uses a 64-bit intermediate: keep `|a * b|` below about 2.1e9. `FixedMath.MulShiftRound` and
+  `FixedMath.MulDiv(a, b, c)` (`a * b / c`, truncated; saturates) use a 128-bit intermediate; division falls back to
+  exact long division when the shifted dividend would overflow.
+- A `FixedRandom` left at `default` runs the default sequence from a zero state: seed every generator.
 - Every operation is integer-only: identical bits in Mono, IL2CPP and Burst on every platform.
 
 ## Creating values
@@ -76,7 +78,7 @@ public static class Tuning
 
 | Group | Functions |
 |---|---|
-| Basic | `Abs`, `Sign` (-1/0/1), `Min`, `Max`, `Clamp`, `Clamp01`, `Lerp`, `InverseLerp`, `Remap`, `Select(falseValue, trueValue, test)`, `Step`, `SmoothStep`, `MoveTowards` |
+| Basic | `Abs`, `Sign` (-1/0/1), `Min`, `Max`, `Clamp`, `Clamp01`, `Lerp`, `InverseLerp` (0 when a == b), `Remap`, `MulDiv(a, b, c)`, `Select(falseValue, trueValue, test)`, `Step`, `SmoothStep`, `MoveTowards` |
 | Rounding | `Floor`, `Ceil`, `Round` (halves up), `Truncate`, `Frac`, `FloorToInt`, `CeilToInt`, `RoundToInt` |
 | Modulo | `Remainder` (sign of the dividend, like `%`), `Mod` (in `[0, Abs(y))`), `Wrap(x, min, max)` |
 | Powers | `Sqrt` (±1 step below about 2e9), `Rsqrt`, `Exp`, `Exp2`, `Log`, `Log2`, `Log10`, `Pow(FixedPoint, FixedPoint)`, `Pow(FixedPoint, int)` |

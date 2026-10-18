@@ -221,7 +221,8 @@ namespace Pragma.Dots.Stats
                 return false;
             }
 
-            // A grantor that is gone, or whose chunk had its grants written since the last update (expired ones included).
+            // A grantor that is gone, or whose chunk had its grants written since the last update (expired ones included). A
+            // grantor that lost its grants moved to a chunk without them, and moving into a chunk changes its order.
             private bool DidGrantsChange(BufferAccessor<LockstepStatGrantor> grantors, out bool hasLostGrantor)
             {
                 hasLostGrantor = false;
@@ -237,7 +238,10 @@ namespace Pragma.Dots.Stats
                             hasLostGrantor = true;
                             return true;
                         }
-                        isChanged = isChanged || storage[grantor].Chunk.DidChange(ref grantHandle, lastSystemVersion);
+                        var chunk = storage[grantor].Chunk;
+                        isChanged = isChanged || (chunk.Has(ref grantHandle)
+                            ? chunk.DidChange(ref grantHandle, lastSystemVersion)
+                            : chunk.DidOrderChange(lastSystemVersion));
                     }
                 }
                 return isChanged;

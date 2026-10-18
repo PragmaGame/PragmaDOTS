@@ -81,6 +81,39 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void PlacedActors_OfOneArchetypeInSeveralChunks_StartTheSameStateWhateverOrderTheyLoadedIn()
+        {
+            // Two subscenes with actors of one archetype: their scene sections (a shared component) keep them in chunks
+            // of their own, and the clients load the scenes in different orders.
+            using (var first = new World("Presentation A"))
+            using (var second = new World("Presentation B"))
+            {
+                CreateSection(first.EntityManager, 1, 1);
+                CreateSection(first.EntityManager, 2, 7);
+                CreateSection(second.EntityManager, 2, 7);
+                CreateSection(second.EntityManager, 1, 1);
+
+                using (var a = new LockstepSimulation(TestUtility.Config(), Options(first)))
+                using (var b = new LockstepSimulation(TestUtility.Config(), Options(second)))
+                {
+                    foreach (var simulation in new[] { a, b })
+                    {
+                        using (var query = simulation.World.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<ChecksumPadded>()))
+                        {
+                            var values = query.ToComponentDataArray<ChecksumPadded>(Allocator.Temp);
+                            Assert.AreEqual(12, values.Length);
+                            for (var i = 0; i < values.Length; i++)
+                            {
+                                Assert.AreEqual(i + 1, values[i].large, $"{simulation.World.Name}: the copies follow the baked order");
+                            }
+                        }
+                    }
+                    Assert.AreEqual(a.ComputeChecksum(), b.ComputeChecksum(), "both clients start from the same state");
+                }
+            }
+        }
+
+        [Test]
         public void PlacedActors_KeepLinkedEntitiesAndTheirReferences()
         {
             using (var presentation = new World("Presentation"))
@@ -139,6 +172,16 @@ namespace Pragma.Dots.Tests
             entityManager.SetComponentData(entity, new PlacedActor { order = order });
             entityManager.SetComponentData(entity, new ChecksumPadded { large = value });
             return entity;
+        }
+
+        // Six placed actors of one archetype, in a chunk of their own: a subscene section.
+        private static void CreateSection(EntityManager entityManager, ulong section, int firstOrder)
+        {
+            for (var i = 0; i < 6; i++)
+            {
+                var entity = CreatePlacedEntity(entityManager, (ulong)(firstOrder + i), firstOrder + i);
+                entityManager.AddSharedComponent(entity, new ChecksumSceneData { mask = section });
+            }
         }
 
         // A placed actor of one of five archetypes, made of the test components; its value is its order.

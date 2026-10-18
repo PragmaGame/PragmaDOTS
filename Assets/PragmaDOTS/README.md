@@ -197,8 +197,9 @@ does all of its math with it; anything else may use it where it wants exact, por
 - 64-bit signed raw value with 16 fractional bits (Q47.16): `FixedPoint.FromRaw(65536)` is 1.0.
 - Step `1/65536` (about 0.000015), range about ±1.4·10¹⁴.
 - Multiplication keeps a 64-bit intermediate: keep the magnitude of a product below about 2·10⁹.
-  `FixedMath.MulShiftRound` multiplies with a 128-bit intermediate; division falls back to exact long division when
-  the shifted dividend would overflow.
+  `FixedMath.MulShiftRound` multiplies with a 128-bit intermediate, and so does `FixedMath.MulDiv(a, b, c)`
+  (`a * b / c`, for scaling a large amount); division falls back to exact long division when the shifted dividend
+  would overflow.
 
 | Creating values | |
 |---|---|
@@ -233,7 +234,7 @@ public static class Rules
 
 | Group | Functions |
 |---|---|
-| Basic | `Abs`, `Sign`, `Min`, `Max`, `Clamp`, `Clamp01`, `Lerp`, `InverseLerp`, `Remap`, `Select`, `Step`, `SmoothStep`, `MoveTowards` |
+| Basic | `Abs`, `Sign`, `Min`, `Max`, `Clamp`, `Clamp01`, `Lerp`, `InverseLerp` (zero for an empty range), `Remap`, `MulDiv`, `Select`, `Step`, `SmoothStep`, `MoveTowards` |
 | Rounding | `Floor`, `Ceil`, `Round`, `Truncate`, `Frac`, `FloorToInt`, `CeilToInt`, `RoundToInt` |
 | Modulo | `Remainder` (sign of the dividend, like `%`), `Mod` (always in `[0, Abs(y))`), `Wrap(x, min, max)` |
 | Powers | `Sqrt`, `Rsqrt`, `Exp`, `Exp2`, `Log`, `Log2`, `Log10`, `Pow(FixedPoint, FixedPoint)`, `Pow(FixedPoint, int)` |
@@ -809,7 +810,7 @@ group, give it `[WorldSystemFilter(LockstepWorldFilter.SIMULATION)]`, or pass it
 | `LockstepRandom` | `value`, an `FixedRandom` seeded from the session seed |
 | `LockstepPlayerSlot` (buffer) | Player entity of every slot, `Entity.Null` when free |
 | `ActorRegistry` | The actor types (`ActorType` buffer: key, prefab, tags) and the tag table (`ActorTagName` buffer), copied from the presentation world; read them with `ActorLookup` |
-| `LockstepEntityIdMap` | Id to entity lookup, rebuilt at the end of every tick |
+| `LockstepEntityIdMap` | Id to entity lookup, rebuilt at the end of every tick that created, destroyed or moved an entity with an id |
 | `LockstepEntityIdCounter` | Last id handed out |
 
 #### Players
@@ -978,7 +979,8 @@ For identities that must match across clients, use `LockstepEntityId`:
 // Add it when creating the entity (or give the actor an Entity Id part).
 state.EntityManager.AddComponent<LockstepEntityId>(unit);
 
-// Ids are assigned at the end of the creation tick, starting at 1 and never reused.
+// Ids are assigned at the end of the creation tick, starting at 1 and never reused. A copy made with Instantiate
+// gets an id of its own: the id stays with the entity that had it. Disabled entities keep theirs.
 // A command carries the id; the simulation resolves it:
 var map = SystemAPI.GetSingleton<LockstepEntityIdMap>();
 if (map.TryGetEntity(attack.targetId, out var target))
@@ -1221,7 +1223,9 @@ carries that entity's capture.
 
 For every simulation actor (`Actor`), the view system instantiates the prefab of its type from the actor
 registry of the presentation world, adds `LockstepView { simulationEntity }`, writes the interpolated `LocalTransform`
-every frame and destroys the view when the actor goes away. `TryGetView(simulationEntity, out view)` finds a view. The
+every frame and destroys the view when the actor goes away. It runs in `SimulationSystemGroup`, after the session
+system and before `TransformSystemGroup`, so a view and its children are drawn where they are on this frame, a new one
+too. `TryGetView(simulationEntity, out view)` finds a view. The
 prefab shows only what its parts gave it: a part that adds rendering components (and a Transform part with
 *Interpolate*) makes actors drawn this way; most games use GameObject views instead.
 
@@ -1342,8 +1346,9 @@ The hash covers every entity and every unmanaged component of the simulation wor
 bytes, type indices and entity ids (entities are identified by traversal position, and `Entity` fields by the
 position of their target). Not hashed: pointers, blob asset references, managed, shared and chunk components,
 components on system entities, and anything marked `[LockstepChecksumIgnore]` (a component type or a single field).
-Ignored types do not count in the archetype signature either, and neither do the tags Entities adds only in the editor
-(`HideInHierarchy`), so an editor and a player build hash the same state alike; other tag components do count.
+Ignored types do not count in the archetype signature either, and neither do the types Entities adds only in the
+editor (the `HideInHierarchy` tag, and `EntityGuid`, which the entities of a subscene open for editing keep), so an
+editor and a player build hash the same state alike; other tag components do count.
 Keep simulation singletons on ordinary entities so they are covered.
 
 **Finding the cause.**
@@ -1568,7 +1573,7 @@ in the part menu.
 |---|---|
 | `LockstepNavGrid` | Singleton: origin, cell size, width, height, agent radius, the steepest walkable slope (`maxSlope`, rise over run) and a version that changes with the cells. The cells are the `LockstepNavCell` buffer of the same entity: the number of obstacles over each cell and its clearance, how many rings of free cells surround it |
 | `LockstepNavHeight` | Optional buffer on the grid entity: world Y of the ground at every cell corner (`CornerCount`, row by row along X). Agents walk on it, and cells steeper than `maxSlope` are blocked for good |
-| `LockstepNavObstacle` | A rectangle (center, size) in the space of the entity's `LockstepTransform` (yaw and uniform scale apply), or in world space without one. It blocks every cell whose centre is within the agent radius of it |
+| `LockstepNavObstacle` | A rectangle (center, size) in the space of the entity's `LockstepTransform` (yaw and uniform scale apply), or in world space without one. It blocks every cell whose centre is within the agent radius of it; a rectangle thinner than a cell with that radius counts as that thick, so a thin wall still blocks a line of cells |
 | `LockstepNavAgent` | Speed, pace, angular speed, the angle beyond which it turns on the spot, stopping distance and body radius of a unit that walks, its destination, the goal of the group it was sent with (`groupGoal`) and status (`Idle`, `Requested`, `Moving`, `Arrived`). The path is its `LockstepNavWaypoint` buffer |
 | `LockstepNavVelocity` | What an agent walked on its last step (`value`) and what avoidance picked for this one (`desired`), in units per second on X and Z. An agent with it and a radius takes part in avoidance |
 | `LockstepNavAvoidance` | Singleton that turns avoidance on: how many seconds ahead agents look (`timeHorizon`), how far (`neighbourDistance`) and how many neighbours they avoid (`maxNeighbours`), what a standing agent costs a path (`crowdCost`); `Default`. Without it agents plan and walk their paths as if they were alone |
@@ -1674,10 +1679,12 @@ walkable. Footprints that are not in the grid yet (two buildings placed on one t
   the agent walks on and shoulders its way through, so agents never turn back and never wait. Ties go to the earlier
   velocity, right turns before left ones: two agents walking into each other both turn right and pass. Collisions
   after the end of the path do not count, and agents standing at the end are shouldered aside. An avoiding agent never
-  steps onto a cell its body does not fit in (it slides along the wall, `LockstepNavigation.TryStep`), passes a corner
+  steps onto a cell its body does not fit in, nor through the corner between two blocked cells (it slides along the
+  wall, `LockstepNavigation.TryStep`), passes a corner
   of its path when its body covers it, lands exactly on the end of its path, and plans its path again when it has
   turned so far aside that a wall hides its next waypoint. Without the singleton, or without a radius, agents walk their
-  paths straight. `LockstepNavVelocity.value` is what the agent walked on its last step, avoidance or not.
+  paths straight; one pushed off its path whose way to the next waypoint runs into a wall slides along it and plans
+  its path again. `LockstepNavVelocity.value` is what the agent walked on its last step, avoidance or not.
 - **Crowds.** With avoidance, a path goes around agents standing in its way: every cell a standing agent's body, grown
   by the grid's agent radius, covers costs `crowdCost` cells more to enter, and straight lines are drawn through
   crowded cells only where the path itself crosses them. A walker goes around an idle squad when the way around is
@@ -1831,7 +1838,8 @@ public sealed class UnitGrantsPart : StatGrantsPart<StatType, StatTarget>
 ```
 
 - **Stats.** Give units and buildings a *Stats* part: attributes (*Max Health* 100, *Speed* 5), resources (*Health*
-  capped by *Max Health*, keeping its ratio; it starts full; an uncapped one such as money starts with its amount),
+  capped by *Max Health*, keeping its ratio; it starts full, or with its *Amount* when it has one, such as a building
+  under construction; an uncapped one such as money starts with its amount),
   the targets grants reach it as (*Infantry*) and whether it receives grants. Besides `LockstepStat` the part adds
   the buffers the actor takes part in: `LockstepStatModifier` with any attribute, `LockstepStatChange` with any
   resource, `LockstepStatTarget` with any target, `LockstepStatGrantor` when it receives grants (gameplay names the
@@ -1922,13 +1930,17 @@ public partial struct SpeedStatSystem : ISystem
   money.
 - **Caps.** A resource follows the attribute named in `cap` as that attribute is on the same tick. `KeepRatio` keeps
   the share (80 of 100 becomes 120 of 150, and 80 of 100 again), so a bonus to the maximum neither heals nor wounds;
-  `Clamp` keeps the amount and cuts it down to a lower cap. A capped resource starts full, under the modifiers of its cap,
-  and so does one whose cap was zero; `max` is the cap it was fitted to, the maximum a bar shows. Without its cap
-  attribute a resource is uncapped.
+  `Clamp` keeps the amount and cuts it down to a lower cap; shares of large amounts are computed without overflow. A
+  capped resource starts full, under the modifiers of its cap, unless it is created with an amount
+  (`LockstepStat.Resource(type, cap, policy, amount)`), which it keeps under the cap. One whose cap went to zero has no
+  share left to keep and stays empty when the cap comes back. `max` is the cap it was fitted to, the maximum a bar
+  shows (negative before the first update of a resource that starts full). Without its cap attribute a resource is
+  uncapped.
 - **Grants.** A grant reaches every entity whose `LockstepStatGrantor` buffer names the granting entity and whose
   `LockstepStatTarget`s include the grant's `target` (any entity, for `ANY`). Adding, removing or expiring a grant
   updates every receiver on the same tick, and an entity that starts inheriting later gets the grants in place. A
-  grantor that no longer exists is dropped from the buffer, and with it what it gave. `LockstepStatGrantor` holds an
+  grantor that no longer exists is dropped from the buffer, and with it what it gave; one that loses its
+  `LockstepStatGrant` buffer stops giving on the same tick. `LockstepStatGrantor` holds an
   `Entity`: a reference inside the simulation world, which the checksum hashes by its target; never sort by it, hash it
   or send it.
 - **Timed modifiers and grants.** `endTick` is the tick they are removed on: added on tick T for D ticks, they end on
@@ -2290,7 +2302,7 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 | A GameObject view misses a component | No `EntityViewUpdateSystem<T>` subclass for that type, or the part sits under a nested `EntityView` |
 | A GameObject view does not move | No `TransformComponentView` on it, or the entity has no `LockstepTransform`; without `LockstepTransformPrevious` it moves in steps |
 | Agents do not move | The agent has no `LockstepTransform` or `LockstepNavWaypoint` buffer, its speed is zero, or the destination was set after `LockstepNavSystemGroup` updated (it starts on the next tick) |
-| Agents walk through an obstacle | The obstacle is not in the simulation world (a static map object must be a placed actor), lies outside the grid, or is thinner than a cell with an agent radius of zero |
+| Agents walk through an obstacle | The obstacle is not in the simulation world (a static map object must be a placed actor) or lies outside the grid |
 | Agents stop short of the destination | `isPathPartial`: the destination is blocked or walled in, and the path ends at the closest reachable point |
 | A stat keeps its old value | The modifier names another stat or a resource (resources take `LockstepStatChange`s), the change names an attribute, the receiver lacks the grant's `LockstepStatTarget` or a `LockstepStatGrantor` naming the granting entity, or it was added after `LockstepStatSystem` updated (it applies from the next tick) |
 | A capped resource stays empty or ignores its cap | The entity has no attribute of the `cap` type, so the resource is uncapped; list the cap attribute in the same *Stats* part (it warns) |

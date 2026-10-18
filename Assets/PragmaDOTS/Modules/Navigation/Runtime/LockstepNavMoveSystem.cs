@@ -151,7 +151,9 @@ namespace Pragma.Dots.Navigation
             [ReadOnly] public NativeArray<LockstepNavCell> cells;
             public bool hasCells;
 
-            // Straight along the waypoints at full speed.
+            // Straight along the waypoints at full speed. The first leg starts wherever the agent stands, which separation
+            // may have pushed off its path: like a step of avoidance it slides along walls, and an agent that cannot walk it
+            // plans its path again. The legs after it are the path's own.
             public void WalkPath(ref LockstepTransform transform, ref LockstepNavAgent agent, in DynamicBuffer<LockstepNavWaypoint> waypoints)
             {
                 if (agent.status != LockstepNavStatus.Moving)
@@ -166,6 +168,8 @@ namespace Pragma.Dots.Navigation
                 }
                 var budget = agent.WalkSpeed * deltaTime;
                 var heading = FixedVector2.Zero;
+                var isFirstLeg = hasCells;
+                var isBlocked = false;
                 while (agent.waypointIndex < waypoints.Length)
                 {
                     var target = waypoints[agent.waypointIndex].position.Xz;
@@ -180,9 +184,26 @@ namespace Pragma.Dots.Navigation
                     {
                         heading = offset;
                     }
+                    var end = budget < distance ? FixedMath.MoveTowards(position, target, budget) : target;
+                    if (isFirstLeg)
+                    {
+                        isFirstLeg = false;
+                        var from = new FixedVector3(position.x, transform.position.y, position.y);
+                        var clearance = LockstepNavigation.GetClearance(grid, agent.radius);
+                        if (!LockstepNavigation.TryStep(grid, cells, from, end - position, clearance, out var to))
+                        {
+                            to = from;
+                        }
+                        if (to.Xz != end)
+                        {
+                            position = to.Xz;
+                            isBlocked = true;
+                            break;
+                        }
+                    }
                     if (budget < distance)
                     {
-                        position = FixedMath.MoveTowards(position, target, budget);
+                        position = end;
                         break;
                     }
                     position = target;
@@ -191,6 +212,10 @@ namespace Pragma.Dots.Navigation
                 }
 
                 Place(ref transform, ref agent, waypoints, position, heading);
+                if (isBlocked && agent.status == LockstepNavStatus.Moving)
+                {
+                    agent.Replan();
+                }
             }
 
             // One step at the velocity avoidance picked, sliding along walls; the waypoints its body covers are passed,

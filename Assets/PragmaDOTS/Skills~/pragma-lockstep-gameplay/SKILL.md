@@ -411,7 +411,8 @@ Lockstep; namespace and assembly `Pragma.Dots.Stats`), not fields that systems p
   squad, a commander). Both merge: a variant's part lists only the stats or grants it changes. An entity has a
   `LockstepStat` buffer of attributes (`LockstepStat.Attribute(type, baseValue)`) and resources
   (`LockstepStat.Resource(type, amount)`, or `Resource(type, capAttribute, LockstepStatCapPolicy.KeepRatio)`, which
-  starts full), plus the empty buffers it takes part in: `LockstepStatModifier`, `LockstepStatChange`,
+  starts full, or `Resource(type, capAttribute, policy, amount)`, which starts with the amount), plus the empty buffers
+  it takes part in: `LockstepStatModifier`, `LockstepStatChange`,
   `LockstepStatGrantor`, `LockstepStatTarget`.
 - **Modifiers (attributes).** `LockstepStatModifier.Flat`, `AdditivePercent` (shares summed), `MultiplicativePercent`
   (times 1 + value, stacking); the percentage factors stop at 0, so -100 % zeroes an attribute and debuffs never flip
@@ -491,7 +492,7 @@ if (LockstepWorlds.TryGetClient(presentationWorld, out var client) && client.Sim
   demand). Views come from a pool each project can replace (`EntityViewManagerSystem.PoolFactory`). See
   `references/views.md`.
 - `LockstepViewSystem` spawns an Entities Graphics copy of the type's prefab for every simulation actor and moves it
-  every frame (only useful when a part adds rendering components).
+  every frame before the transform systems (only useful when a part adds rendering components).
 - Presentation code never writes to the simulation world, not even a tag. Local state (selection, hover, "is mine":
   `data.slot == View.Client.LocalSlot`) stays in the presentation; changes go through commands.
 - Convert for display only: `(float)value`, `(float3)position`, `(quaternion)rotation`, `transform.ToLocalTransform()`.

@@ -184,6 +184,53 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Step_DoesNotCutTheCornerBetweenBlockedCells()
+        {
+            var grid = CreateGrid();
+            var cells = new NativeArray<LockstepNavCell>(grid.CellCount, Allocator.Temp);
+            using (cells)
+            {
+                // Cell (20, 20) spans X and Z from 0 to 0.5: the step goes through its corner into cell (21, 21).
+                var from = new FixedVector3(FixedPoint.FromFraction(9, 20), 0, FixedPoint.FromFraction(9, 20));
+                var step = new FixedVector2(FixedPoint.FromFraction(1, 10), FixedPoint.FromFraction(1, 10));
+                Assert.IsTrue(LockstepNavigation.TryStep(grid, cells, from, step, out var position));
+                Assert.AreEqual(new int2(21, 21), grid.WorldToCell(position), "nothing in the way");
+
+                cells[grid.GetIndex(new int2(21, 20))] = new LockstepNavCell { blockers = 1 };
+                Assert.IsTrue(LockstepNavigation.TryStep(grid, cells, from, step, out position));
+                Assert.AreEqual(new int2(20, 21), grid.WorldToCell(position), "it slides past the blocked side");
+
+                cells[grid.GetIndex(new int2(20, 21))] = new LockstepNavCell { blockers = 1 };
+                Assert.IsFalse(LockstepNavigation.TryStep(grid, cells, from, step, out _), "the diagonal between two blocked cells is closed");
+            }
+        }
+
+        [Test]
+        public void ThinWall_BlocksALineOfCells_AtAnyAngle()
+        {
+            var grid = CreateGrid();
+            foreach (var degrees in new[] { 0, 30, 45, 70 })
+            {
+                using (var cells = new NativeArray<LockstepNavCell>(grid.CellCount, Allocator.Temp))
+                {
+                    // Far thinner than a cell, and the grid grows obstacles by no radius.
+                    var wall = new LockstepNavObstacle { size = new FixedVector2(FixedPoint.FromFraction(1, 20), 8) };
+                    var rotation = FixedQuaternion.RotateY(FixedMath.ToRadians(degrees));
+                    var footprint = LockstepNavObstacleFootprint.Create(wall, LockstepTransform.FromPositionRotation(FixedVector3.Zero, rotation));
+                    LockstepNavigation.Stamp(grid, cells, footprint, 1);
+
+                    for (var along = -3; along <= 3; along++)
+                    {
+                        var point = footprint.Forward * along;
+                        var from = point - footprint.right * 2;
+                        var to = point + footprint.right * 2;
+                        Assert.IsFalse(LockstepNavigation.HasLineOfSight(grid, cells, from, to), $"{degrees} degrees: the wall is open at {along}");
+                    }
+                }
+            }
+        }
+
+        [Test]
         public void LineOfSight_ThroughACorner_NeedsBothSides()
         {
             var grid = CreateGrid();
@@ -445,6 +492,78 @@ namespace Pragma.Dots.Tests
                 {
                     Assert.AreEqual(0, cells[i].blockers);
                 }
+            }
+        }
+
+        [Test]
+        public void Obstacles_AreStampedAgain_WhenTheGridMoves()
+        {
+            using (var simulation = new LockstepSimulation(TestUtility.Config(), TestUtility.Options(NavigationSystems)))
+            {
+                var entityManager = simulation.World.EntityManager;
+                var grid = CreateGrid(entityManager);
+                CreateWall(entityManager, new FixedVector2(3, 0), new FixedVector2(1, 1));
+                TestUtility.Step(simulation);
+                Assert.IsFalse(IsWalkable(entityManager, grid, Point(3, 0)));
+
+                // The same number of cells, laid out one unit further: the cells under the wall are others now.
+                var moved = entityManager.GetComponentData<LockstepNavGrid>(grid);
+                moved.origin += new FixedVector2(1, 0);
+                entityManager.SetComponentData(grid, moved);
+                TestUtility.Step(simulation);
+
+                Assert.IsFalse(IsWalkable(entityManager, grid, Point(3, 0)), "the wall blocks where it stands");
+                var cells = entityManager.GetBuffer<LockstepNavCell>(grid);
+                var blocked = 0;
+                for (var i = 0; i < cells.Length; i++)
+                {
+                    Assert.LessOrEqual(cells[i].blockers, 1, "no cell counts the wall twice");
+                    blocked += cells[i].blockers;
+                }
+                Assert.AreEqual(4, blocked, "only the four cells under the wall");
+            }
+        }
+
+        [Test]
+        public void Grid_WhoseCellsTheGameSized_IsStampedOnTheFirstTick()
+        {
+            using (var simulation = new LockstepSimulation(TestUtility.Config(), TestUtility.Options(NavigationSystems)))
+            {
+                var entityManager = simulation.World.EntityManager;
+                var grid = CreateGrid(entityManager);
+                entityManager.AddBuffer<LockstepNavCell>(grid).ResizeUninitialized(entityManager.GetComponentData<LockstepNavGrid>(grid).CellCount);
+                TestUtility.Step(simulation);
+
+                var layout = entityManager.GetComponentData<LockstepNavGrid>(grid);
+                Assert.AreNotEqual(0u, layout.version);
+                var cells = entityManager.GetBuffer<LockstepNavCell>(grid);
+                Assert.AreEqual(20, cells[layout.GetIndex(new int2(20, 20))].clearance, "the clearance is computed");
+            }
+        }
+
+        [Test]
+        public void Agent_PushedOffItsPath_DoesNotWalkThroughAWall()
+        {
+            using (var simulation = new LockstepSimulation(TestUtility.Config(), TestUtility.Options(NavigationSystems)))
+            {
+                var entityManager = simulation.World.EntityManager;
+                var grid = CreateGrid(entityManager, FixedPoint.Half);
+                CreateWall(entityManager, FixedVector2.Zero, new FixedVector2(1, 12));
+                var destination = Point(2, 0);
+                var agent = CreateAgent(entityManager, Point(-2, 0), 4, default);
+                TestUtility.Step(simulation);
+
+                // As if separation had pushed it: it is on its way to a waypoint the wall hides, on the current grid.
+                var state = entityManager.GetComponentData<LockstepNavAgent>(agent);
+                state.SetDestination(destination);
+                state.status = LockstepNavStatus.Moving;
+                state.waypointIndex = 0;
+                state.gridVersion = entityManager.GetComponentData<LockstepNavGrid>(grid).version;
+                entityManager.SetComponentData(agent, state);
+                entityManager.GetBuffer<LockstepNavWaypoint>(agent).Add(new LockstepNavWaypoint { position = destination });
+
+                WalkUntilArrived(simulation, grid, agent, 300);
+                Assert.AreEqual(destination, Position(entityManager, agent), "it planned its way around");
             }
         }
 

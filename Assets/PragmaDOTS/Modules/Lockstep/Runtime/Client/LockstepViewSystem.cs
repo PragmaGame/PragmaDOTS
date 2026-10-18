@@ -14,10 +14,14 @@ namespace Pragma.Dots.Lockstep
     /// The view prefab is the prefab of the actor type in the presentation world, with whatever rendering components its
     /// parts gave it; its gameplay components are inert copies there. Most games show actors with GameObject views
     /// instead. Views are keyed by entity (index and version), so a
-    /// recycled simulation entity gets a fresh view.
+    /// recycled simulation entity gets a fresh view. The system runs after the session steps the simulation and before
+    /// <see cref="TransformSystemGroup"/>, so a view (with its children) is drawn where it is in this frame, a new one
+    /// too.
     /// </remarks>
     [WorldSystemFilter(WorldSystemFilterFlags.Presentation)]
-    [UpdateInGroup(typeof(PresentationSystemGroup), OrderFirst = true)]
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(LockstepOfflineSystem))]
+    [UpdateBefore(typeof(TransformSystemGroup))]
     public partial class LockstepViewSystem : SystemBase
     {
         private NativeHashMap<Entity, Entity> _views;
@@ -72,11 +76,13 @@ namespace Pragma.Dots.Lockstep
                 _simulationQuery = _simulationWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<Actor>());
             }
 
-            if (_registryQuery.CalculateEntityCount() == 0)
+            var registries = _registryQuery.ToEntityArray(Allocator.Temp);
+            if (registries.Length == 0)
             {
                 return;
             }
-            var registry = EntityManager.GetBuffer<ActorType>(_registryQuery.GetSingletonEntity(), true).ToNativeArray(Allocator.Temp);
+            // Like the copy into the simulation (LockstepActorUtility.CopyRegistry), a second registry is ignored.
+            var registry = EntityManager.GetBuffer<ActorType>(registries[0], true).ToNativeArray(Allocator.Temp);
 
             var simulationManager = _simulationWorld.EntityManager;
             var lastTick = simulation.Tick - 1;

@@ -15,7 +15,10 @@ namespace Pragma.Dots.Vision
     /// </remarks>
     public struct LockstepVisionSource : IComponentData
     {
-        /// <summary>How far it sees, in world units on the XZ plane, up to 30 000. Negative sees nothing.</summary>
+        /// <summary>
+        /// How far it sees, in world units on the XZ plane, up to <see cref="LockstepVision.MAX_RADIUS"/> (30 000; more counts
+        /// as that). Negative sees nothing.
+        /// </summary>
         public FixedPoint radius;
         /// <summary>The player slot that sees through it. A slot outside the session's slots (-1 for neutral) sees nothing.</summary>
         public int slot;

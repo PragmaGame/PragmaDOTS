@@ -346,9 +346,10 @@ namespace Pragma.Dots.Lockstep
             TryCreateSimulation();
 
             // Input for tick T is due on the server when its clock reaches T + 1; aim for TargetMargin ticks earlier.
-            // The start message is RTT/2 old, and the input needs another RTT/2 to travel.
+            // The start message is RTT/2 old, and the input needs another RTT/2 to travel. During the start countdown the
+            // position is negative: the clock counts down with the server's, and no input goes out before the join tick.
             var rtt = double.IsNaN(RoundTripTime) ? 0 : RoundTripTime;
-            _inputClock = Math.Max(joinTick, position + rtt * config.TickRate + TargetMargin - 1);
+            _inputClock = position + rtt * config.TickRate + TargetMargin - 1;
             _lastSentInputTick = joinTick - 1;
             _playoutClock = 0;
             _lastUpdateTime = now;

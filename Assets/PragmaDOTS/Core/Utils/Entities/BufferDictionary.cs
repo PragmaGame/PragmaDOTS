@@ -28,7 +28,8 @@ namespace Pragma.Dots.Utils
             while (low <= high)
             {
                 var middle = (low + high) >> 1;
-                var order = buffer.ElementAt(middle).Key.CompareTo(key);
+                // The indexer, not ElementAt: lookups work on read-only buffers too.
+                var order = buffer[middle].Key.CompareTo(key);
                 if (order == 0)
                 {
                     return middle;

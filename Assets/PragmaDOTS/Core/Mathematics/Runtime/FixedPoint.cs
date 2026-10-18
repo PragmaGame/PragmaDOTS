@@ -270,6 +270,11 @@ namespace Pragma.Dots.Mathematics
             // Round the fraction to the nearest step.
             var fraction = (fractionNumerator * ONE_RAW * 2 + fractionDenominator) / (fractionDenominator * 2);
             var raw = (integer << FRACTIONAL_BITS) + fraction;
+            if (raw < 0)
+            {
+                // The largest integer with a fraction that rounds up to one more.
+                return false;
+            }
             result = FromRaw(negative ? -raw : raw);
             return true;
         }

@@ -42,6 +42,25 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Lookups_WorkOnReadOnlyBuffers()
+        {
+            using (var world = new World("Buffer Dictionary"))
+            {
+                var entityManager = world.EntityManager;
+                var entity = entityManager.CreateEntity();
+                var buffer = entityManager.AddBuffer<TestDictionaryEntry>(entity);
+                buffer.GetOrAdd(2).value = 20;
+                buffer.GetOrAdd(7).value = 70;
+
+                var readOnly = entityManager.GetBuffer<TestDictionaryEntry>(entity, true);
+                Assert.IsTrue(readOnly.TryGet(7, out var entry));
+                Assert.AreEqual(70, entry.value);
+                Assert.IsTrue(readOnly.ContainsKey(2));
+                Assert.AreEqual(~1, readOnly.IndexOf(5));
+            }
+        }
+
+        [Test]
         public void Operations_MatchASortedDictionary_InBurstToo()
         {
             var random = new System.Random(11);

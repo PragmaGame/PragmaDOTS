@@ -14,13 +14,18 @@ namespace Pragma.Dots.Navigation
     /// Cells count the obstacles over them, so stamping and releasing commute and the cells do not depend on the order
     /// obstacles are visited in. The rectangle an obstacle stamped is kept in a cleanup component,
     /// <see cref="LockstepNavObstacleFootprint"/>, which is how a destroyed obstacle still knows which cells to release.
-    /// A new grid, or one whose size changed, is stamped again from scratch, starting with one blocker on every cell of its
-    /// ground that is too steep to walk on (<see cref="LockstepNavigation.IsSteep"/>): steep ground blocks for good.
+    /// A new grid, or one whose layout changed (origin, cell size, width, height, agent radius or slope limit), is stamped
+    /// again from scratch, starting with one blocker on every cell of its ground that is too steep to walk on
+    /// (<see cref="LockstepNavigation.IsSteep"/>): steep ground blocks for good.
     /// </remarks>
     [UpdateInGroup(typeof(LockstepNavSystemGroup), OrderFirst = true)]
     [BurstCompile]
     public partial struct LockstepNavObstacleSystem : ISystem
     {
+        // The grid the cells were stamped for; the first update stamps them whatever the buffer holds.
+        private Entity _stampedEntity;
+        private LockstepNavGrid _stamped;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
@@ -37,7 +42,7 @@ namespace Pragma.Dots.Navigation
                 return;
             }
 
-            var isRebuilt = false;
+            var isRebuilt = gridEntity != _stampedEntity || !IsSameLayout(grid, _stamped);
             if (!SystemAPI.HasBuffer<LockstepNavCell>(gridEntity))
             {
                 state.EntityManager.AddBuffer<LockstepNavCell>(gridEntity);
@@ -52,6 +57,8 @@ namespace Pragma.Dots.Navigation
             var cells = buffer.AsNativeArray();
             if (isRebuilt)
             {
+                _stampedEntity = gridEntity;
+                _stamped = grid;
                 var heights = SystemAPI.HasBuffer<LockstepNavHeight>(gridEntity)
                     ? SystemAPI.GetBuffer<LockstepNavHeight>(gridEntity).AsNativeArray()
                     : default;
@@ -116,6 +123,12 @@ namespace Pragma.Dots.Navigation
             return transforms.TryGetComponent(entity, out var transform)
                 ? LockstepNavObstacleFootprint.Create(obstacle, transform)
                 : LockstepNavObstacleFootprint.Create(obstacle);
+        }
+
+        private static bool IsSameLayout(in LockstepNavGrid a, in LockstepNavGrid b)
+        {
+            return a.origin == b.origin && a.cellSize == b.cellSize && a.width == b.width && a.height == b.height &&
+                   a.agentRadius == b.agentRadius && a.maxSlope == b.maxSlope;
         }
 
         private static bool IsSame(in LockstepNavObstacleFootprint a, in LockstepNavObstacleFootprint b)

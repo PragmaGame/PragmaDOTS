@@ -12,6 +12,29 @@ namespace Pragma.Dots.Tests
     public class PresentationTests
     {
         [Test]
+        public void ViewSystem_RunsAfterTheSessionAndBeforeTheTransforms()
+        {
+            using (var world = new World("Presentation"))
+            {
+                var group = world.GetOrCreateSystemManaged<SimulationSystemGroup>();
+                var transforms = world.GetOrCreateSystemManaged<TransformSystemGroup>();
+                var views = world.GetOrCreateSystemManaged<LockstepViewSystem>();
+                var session = world.GetOrCreateSystemManaged<LockstepOfflineSystem>();
+                group.AddSystemToUpdateList(transforms);
+                group.AddSystemToUpdateList(views);
+                group.AddSystemToUpdateList(session);
+                group.SortSystems();
+
+                var order = group.GetAllSystems(Allocator.Temp);
+                var sessionIndex = order.IndexOf(session.SystemHandle);
+                var viewIndex = order.IndexOf(views.SystemHandle);
+                var transformIndex = order.IndexOf(transforms.SystemHandle);
+                Assert.Less(sessionIndex, viewIndex, "views follow the ticks of this frame");
+                Assert.Less(viewIndex, transformIndex, "LocalToWorld follows the views in the same frame");
+            }
+        }
+
+        [Test]
         public void ViewSystem_SpawnsMovesAndRemovesViews()
         {
             using (var world = new World("Presentation"))

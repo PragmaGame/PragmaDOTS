@@ -116,8 +116,9 @@ namespace Pragma.Dots.Navigation
         /// <summary>
         /// Where a step (X and Z) from a position may end without entering a blocked cell: the whole step, else only
         /// its X part, else only its Z part, so whatever walks or is pushed into a wall slides along it. False when
-        /// none of them is walkable. A step from a blocked cell is free: whatever stands in an obstacle is on its way
-        /// out of it. Y is kept.
+        /// none of them is walkable. A step crosses no blocked cell on its way either, so it never cuts the corner
+        /// between two blocked cells that touch diagonally, as paths do not. A step from a blocked cell is free:
+        /// whatever stands in an obstacle is on its way out of it. Y is kept.
         /// </summary>
         public static bool TryStep(in LockstepNavGrid grid, NativeArray<LockstepNavCell> cells, FixedVector3 from, FixedVector2 step, out FixedVector3 position)
         {
@@ -137,17 +138,31 @@ namespace Pragma.Dots.Navigation
                 return true;
             }
             clearance = GetStepClearance(grid, cells, from, clearance);
-            if (IsPassable(grid, cells, position, clearance))
+            if (IsOpenStep(grid, cells, from, position, clearance))
             {
                 return true;
             }
             position = new FixedVector3(from.x + step.x, from.y, from.z);
-            if (step.x.rawValue != 0 && IsPassable(grid, cells, position, clearance))
+            if (step.x.rawValue != 0 && IsOpenStep(grid, cells, from, position, clearance))
             {
                 return true;
             }
             position = new FixedVector3(from.x, from.y, from.z + step.y);
-            return step.y.rawValue != 0 && IsPassable(grid, cells, position, clearance);
+            return step.y.rawValue != 0 && IsOpenStep(grid, cells, from, position, clearance);
+        }
+
+        // Every cell the step touches is passable. A step within a cell or into a side neighbour, nearly every step, needs
+        // only its end cell checked; the start cell is passable for the clearance of the step.
+        private static bool IsOpenStep(in LockstepNavGrid grid, NativeArray<LockstepNavCell> cells, FixedVector3 from, FixedVector3 to, int clearance)
+        {
+            var start = grid.WorldToCell(from);
+            var end = grid.WorldToCell(to);
+            var move = math.abs(end - start);
+            if (move.x + move.y <= 1)
+            {
+                return IsPassable(grid, cells, end, clearance);
+            }
+            return HasLineOfSight(grid, cells, from.Xz, to.Xz, clearance);
         }
 
         /// <summary>
@@ -447,16 +462,27 @@ namespace Pragma.Dots.Navigation
         }
 
         /// <summary>
-        /// The footprint blocks the cell: the cell centre is within the grid's agent radius of the rectangle. The cell may
-        /// lie outside the grid, so footprints that are not stamped yet can be checked against each other.
+        /// The footprint blocks the cell: the cell centre is within the grid's agent radius of the rectangle. A rectangle
+        /// thinner than a cell together with that radius counts as that thick, so that a thin wall still blocks a line of
+        /// cells that agents cannot slip through. The cell may lie outside the grid, so footprints that are not stamped yet
+        /// can be checked against each other.
         /// </summary>
         public static bool Covers(in LockstepNavGrid grid, in LockstepNavObstacleFootprint footprint, int2 cell)
         {
             // How far the cell centre lies outside the rectangle, along each of its axes.
+            var halfSize = GetBlockingHalfSize(grid, footprint);
             var offset = grid.GetCellCenter(cell) - footprint.center;
-            var outsideX = FixedMath.Max(FixedMath.Abs(FixedMath.Dot(offset, footprint.right)) - footprint.halfSize.x, FixedPoint.Zero);
-            var outsideZ = FixedMath.Max(FixedMath.Abs(FixedMath.Dot(offset, footprint.Forward)) - footprint.halfSize.y, FixedPoint.Zero);
+            var outsideX = FixedMath.Max(FixedMath.Abs(FixedMath.Dot(offset, footprint.right)) - halfSize.x, FixedPoint.Zero);
+            var outsideZ = FixedMath.Max(FixedMath.Abs(FixedMath.Dot(offset, footprint.Forward)) - halfSize.y, FixedPoint.Zero);
             return outsideX * outsideX + outsideZ * outsideZ <= grid.agentRadius * grid.agentRadius;
+        }
+
+        // The half size of the rectangle that blocks cells: grown by the agent radius, each side spans at least a cell, and
+        // a band a cell wide holds a cell centre on every row and column it crosses.
+        private static FixedVector2 GetBlockingHalfSize(in LockstepNavGrid grid, in LockstepNavObstacleFootprint footprint)
+        {
+            var least = FixedMath.Max(grid.cellSize / 2 - grid.agentRadius, FixedPoint.Zero);
+            return new FixedVector2(FixedMath.Max(footprint.halfSize.x, least), FixedMath.Max(footprint.halfSize.y, least));
         }
 
         private static FixedPoint GetHeight(in LockstepNavGrid grid, NativeArray<LockstepNavHeight> heights, int x, int z)
@@ -473,7 +499,7 @@ namespace Pragma.Dots.Navigation
             var radius = grid.agentRadius;
             var right = footprint.right;
             var forward = footprint.Forward;
-            var halfSize = footprint.halfSize;
+            var halfSize = GetBlockingHalfSize(grid, footprint);
             var reach = new FixedVector2(
                 FixedMath.Abs(right.x) * halfSize.x + FixedMath.Abs(forward.x) * halfSize.y + radius,
                 FixedMath.Abs(right.y) * halfSize.x + FixedMath.Abs(forward.y) * halfSize.y + radius);

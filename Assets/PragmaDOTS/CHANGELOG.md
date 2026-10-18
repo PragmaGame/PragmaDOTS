@@ -184,6 +184,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transition (`Is`, `Entered`, `Exited`, `Request`). An entity may run several machines, one per component.
   `StateMachinePart<TMachine, TState>` gives an actor its machine and initial state. Deterministic, so it serves
   lockstep simulations and any other world.
+- `FixedMath.MulDiv(a, b, c)`: `a * b / c` with a 128-bit intermediate, truncated toward zero.
+- `LockstepStat.Resource(type, cap, capPolicy, amount)`: a capped resource that starts with an amount (a building under
+  construction, energy that starts empty); the *Amount* of a capped resource in `StatsPart` does the same.
+- `LockstepVision.MAX_RADIUS` (30 000): a larger radius of sight counts as it.
 
 ### Changed
 
@@ -220,6 +224,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corner instead of one per cell.
 - `LockstepNavPathSystem` checks walking paths, collects the requests, searches the groups and plans the paths in a
   chain of jobs; a path blocked by a new obstacle is planned again on the same tick, with its group.
+- An actor built at run time refuses a component type it has already, as a baked one does: two parts adding one type
+  gave the last part's value at run time and the first one's when baked.
+- `LockstepViewSystem` runs in `SimulationSystemGroup`, after the session and before `TransformSystemGroup`, so the
+  Entities Graphics copies are drawn where they are on the frame they move, and a new one is not drawn at the origin
+  first.
+- `LockstepEntityIdSystem` keeps the ids of disabled entities in the map and rebuilds it only when an entity with an id
+  was created, destroyed or moved, without marking the chunks changed.
+- An obstacle thinner than a cell together with the agent radius blocks cells as if it were that thick: a thin wall
+  blocked no cell at all when it passed between cell centres.
+- A `FixedRandom` left at `default` runs the default sequence from a zero state instead of returning zero forever, and
+  `FixedMath.InverseLerp` of an empty range is zero (it saturated, and `Remap` overflowed).
 
 ### Fixed
 
@@ -232,7 +247,34 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Entities count nowhere. Changes every hash and invalidates the checksums stored in replays.
 - The prefab registry and the placed actors are copied into archetypes created in their order first: the copy alone
   created them in an order that followed the memory of the presentation world, so two clients could start with their
-  archetypes in a different order and report a desync on tick 0.
+  archetypes in a different order and report a desync on tick 0. Within an archetype the copies are also moved into
+  chunks in their order: actors of one archetype from two subscenes landed in an order that depended on the chunks
+  of the presentation world.
+- `Instantiate` of an entity with a `LockstepEntityId` gave the copy the same id, and the map resolved the id to either
+  of them; the copy now gets an id of its own.
+- `LockstepEntityIdSystem` cleared the map while jobs of the tick could still read it.
+- The checksum hashed `EntityGuid`, which the entities of a subscene open for editing keep and which differs between
+  editor processes.
+- The input clock of a client started at the join tick during the start countdown, so for about the first second of
+  every match its inputs were sent `StartDelaySeconds` late; it now counts down with the server's clock.
+- `BufferDictionary` lookups threw on read-only buffers.
+- `LockstepViewSystem` threw on every frame with two actor registries in the presentation world; it uses the first
+  one, like the copy into the simulation.
+- `LockstepNavigation.TryStep` let a step cut the corner between two blocked cells that touch diagonally; it now
+  checks every cell the step crosses. Agents walking without avoidance walked from wherever separation pushed them
+  straight through walls to their next waypoint; that leg now slides along walls and plans the path again.
+- `LockstepNavObstacleSystem` stamped a grid again only when its number of cells changed: moving it, changing its cell
+  size, agent radius or slope limit, or swapping its width and height left stale blockers. A cell buffer the game
+  sized itself was not stamped until an obstacle changed. An agent without a `LockstepNavWaypoint` buffer made path
+  planning throw; it stays idle.
+- Vision queries and stamps overflowed for radii above about 32 768.
+- `KeepRatio` overflowed when the amount times the new cap passed about 2·10⁹ (two amounts of about 46 000); a
+  resource whose cap went through zero filled up again when the cap came back; a grantor that lost its
+  `LockstepStatGrant` buffer kept giving until something else changed the receivers.
+- An override of a `StatsPart` or `StatGrantsPart` replaced only the first of two inherited entries of one stat (or
+  grant), and the second one won when built.
+- `FixedPoint.TryParse` wrapped to a negative value for the largest integer with a fraction that rounds up, and a
+  `FixedGrid` with a zero cell size divided by zero.
 
 ### Removed
 

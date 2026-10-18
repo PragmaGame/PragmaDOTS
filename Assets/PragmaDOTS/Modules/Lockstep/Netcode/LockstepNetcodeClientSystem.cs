@@ -17,6 +17,7 @@ namespace Pragma.Dots.Lockstep.Netcode
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(NetworkReceiveSystemGroup))]
     [UpdateAfter(typeof(LockstepInputSystemGroup))]
+    [UpdateBefore(typeof(LockstepViewSystem))]
     public partial class LockstepNetcodeClientSystem : SystemBase
     {
         private sealed unsafe class Transport : ILockstepTransport

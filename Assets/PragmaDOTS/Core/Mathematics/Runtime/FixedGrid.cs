@@ -67,6 +67,11 @@ namespace Pragma.Dots.Mathematics
         private int FloorDivide(long offset)
         {
             var size = cellSize.rawValue;
+            if (size <= 0)
+            {
+                // An invalid grid (IsValid is false): every position is in cell zero rather than a division by zero.
+                return 0;
+            }
             var quotient = offset / size;
             if (offset % size != 0 && offset < 0)
             {

@@ -103,6 +103,44 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void StatsPart_Override_WinsOverAStatTheParentListsTwice()
+        {
+            var parent = Definition("", null, new TestStatsPart
+            {
+                Attributes = { new StatAttributeEntry<TestStat>(TestStat.Speed, 5), new StatAttributeEntry<TestStat>(TestStat.Speed, 6) },
+            });
+            var child = Definition("fast", parent, new TestStatsPart { Attributes = { new StatAttributeEntry<TestStat>(TestStat.Speed, 9) } });
+            using (var world = new World("Stat Parts"))
+            {
+                var stats = world.EntityManager.GetBuffer<LockstepStat>(Place(world.EntityManager, child));
+                Assert.AreEqual(1, stats.Length, "the override stands for both");
+                Assert.IsTrue(stats.TryGetBase(TestStat.Speed, out var speed));
+                Assert.AreEqual((FixedPoint)9, speed);
+            }
+        }
+
+        [Test]
+        public void StatsPart_CappedResource_StartsFullOrWithItsAmount()
+        {
+            var part = new TestStatsPart
+            {
+                Attributes = { new StatAttributeEntry<TestStat>(TestStat.MaxHealth, 100) },
+                Resources = { new StatResourceEntry<TestStat>(TestStat.Health, TestStat.MaxHealth, LockstepStatCapPolicy.KeepRatio, 25) },
+            };
+            var site = Definition("site", null, part);
+            var tower = Definition("tower", null, Infantry());
+            using (var world = new World("Stat Parts"))
+            {
+                var entityManager = world.EntityManager;
+                Assert.IsTrue(entityManager.GetBuffer<LockstepStat>(Place(entityManager, site)).TryGet(TestStat.Health, out var health));
+                Assert.AreEqual((FixedPoint)25, health.value, "a construction site starts with its amount");
+                Assert.AreEqual(FixedPoint.Zero, health.max);
+                Assert.IsTrue(entityManager.GetBuffer<LockstepStat>(Place(entityManager, tower)).TryGet(TestStat.Health, out health));
+                Assert.Less(health.max, FixedPoint.Zero, "without an amount it fills on the first update");
+            }
+        }
+
+        [Test]
         public void StatsPart_ReportsDuplicateStatsAndMissingCaps()
         {
             var part = new TestStatsPart

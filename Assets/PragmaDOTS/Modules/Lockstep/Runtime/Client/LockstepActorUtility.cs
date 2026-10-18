@@ -59,8 +59,7 @@ namespace Pragma.Dots.Lockstep
             var copies = new NativeArray<Entity>(toCopy.Length, Allocator.Temp);
             if (toCopy.Length > 0)
             {
-                CreateArchetypes(source, destination, toCopy.AsArray());
-                destination.CopyEntitiesFrom(source, toCopy.AsArray(), copies);
+                CopyInOrder(source, destination, toCopy.AsArray(), copies);
             }
 
             var types = new NativeArray<ActorType>(sourceTypes.Length, Allocator.Temp);
@@ -131,19 +130,19 @@ namespace Pragma.Dots.Lockstep
                     }
                 }
             }
-            CreateArchetypes(source, destination, toCopy.AsArray());
             var copies = new NativeArray<Entity>(toCopy.Length, Allocator.Temp);
-            destination.CopyEntitiesFrom(source, toCopy.AsArray(), copies);
+            CopyInOrder(source, destination, toCopy.AsArray(), copies);
             // A placed actor was baked or built without the catalog: its key finds its type in the registry.
             ActorUtility.ResolveTypes(destination, copies);
             return entities.Length;
         }
 
-        // CopyEntitiesFrom creates the archetypes of the copies in an order of its own: it moves them chunk by chunk, and
-        // which chunk goes first depends on where the source allocated them, which differs between clients. The order of
-        // archetypes is simulation state (queries and the checksum walk archetypes in creation order), so they are
-        // created here first, in the order of the entities, and the copy only fills them.
-        private static void CreateArchetypes(EntityManager source, EntityManager destination, NativeArray<Entity> entities)
+        // CopyEntitiesFrom moves the copies chunk by chunk, and which chunk goes first depends on where the source
+        // allocated them: chunk indices are shared by every world of the process and differ between clients. Archetypes
+        // and the chunks inside them are simulation state (queries and the checksum walk them in order), so the archetypes
+        // are created first, in the order of the entities, and after the copy the entities are moved out and back one by
+        // one in that order, which fills fresh chunks in that order.
+        private static void CopyInOrder(EntityManager source, EntityManager destination, NativeArray<Entity> entities, NativeArray<Entity> copies)
         {
             for (var i = 0; i < entities.Length; i++)
             {
@@ -151,6 +150,15 @@ namespace Pragma.Dots.Lockstep
                 {
                     destination.CreateArchetype(types);
                 }
+            }
+            destination.CopyEntitiesFrom(source, entities, copies);
+            for (var i = 0; i < copies.Length; i++)
+            {
+                destination.AddComponent<LockstepCopyOrder>(copies[i]);
+            }
+            for (var i = 0; i < copies.Length; i++)
+            {
+                destination.RemoveComponent<LockstepCopyOrder>(copies[i]);
             }
         }
 

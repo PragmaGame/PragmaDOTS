@@ -82,6 +82,31 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void InputClock_WaitsOutTheStartCountdown()
+        {
+            var settings = Settings(minPlayers: 1);
+            settings.StartDelaySeconds = 0.6f;
+            using (var session = new SessionHarness(settings, latency: 0.05, jitter: 0.01))
+            {
+                var client = session.AddClient();
+                var maxLead = 0;
+                for (var i = 0; i < 150; i++)
+                {
+                    session.Step(0.01, VaryingInput);
+                    if (client.State == LockstepClientState.Running)
+                    {
+                        maxLead = System.Math.Max(maxLead, client.LastSentInputTick - session.Server.ClosedTicks);
+                    }
+                }
+
+                Assert.AreEqual(LockstepClientState.Running, client.State);
+                Assert.Greater(session.Server.ClosedTicks, 10, "the match has started");
+                // One-way latency plus the margin; a clock started at the join tick would run the countdown ahead (18 ticks).
+                Assert.That(maxLead, Is.LessThanOrEqualTo(8), "inputs go out for the ticks the server is about to close");
+            }
+        }
+
+        [Test]
         public void LateJoiner_ReplaysTheMatchAndMatchesTheOthers()
         {
             using (var session = new SessionHarness(Settings(minPlayers: 1), latency: 0.03, jitter: 0.02))

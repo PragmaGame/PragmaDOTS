@@ -68,13 +68,19 @@ namespace Pragma.Dots.Stats
             foreach (var grant in _grants)
             {
                 var index = merged._grants.FindIndex(entry => IsSame(entry, grant));
-                if (index >= 0)
-                {
-                    merged._grants[index] = grant;
-                }
-                else
+                if (index < 0)
                 {
                     merged._grants.Add(grant);
+                    continue;
+                }
+                // The override's grant stands for every inherited one with its key.
+                merged._grants[index] = grant;
+                for (var i = merged._grants.Count - 1; i > index; i--)
+                {
+                    if (IsSame(merged._grants[i], grant))
+                    {
+                        merged._grants.RemoveAt(i);
+                    }
                 }
             }
             return merged;

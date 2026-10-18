@@ -316,12 +316,79 @@ namespace Pragma.Dots.Tests
                 TestUtility.Step(simulation);
 
                 AssertResource(entityManager, unit, HEALTH, 140, 150, "filled to the modified cap, then the changes of the tick");
-                AssertResource(entityManager, unit, ENERGY, 0, 0, "without its cap attribute a resource is uncapped");
+                AssertResource(entityManager, unit, ENERGY, 0, -1, "without its cap attribute a resource is uncapped, and never fitted");
                 AssertResource(entityManager, unit, GOLD, 55, 0, "an uncapped resource keeps any amount");
 
                 AddChanges(entityManager, unit, (GOLD, -100));
                 TestUtility.Step(simulation);
                 AssertResource(entityManager, unit, GOLD, 0, 0);
+            }
+        }
+
+        [Test]
+        public void Resource_WithAnAmount_StartsWithItUnderItsCap()
+        {
+            using (var simulation = CreateSimulation())
+            {
+                var entityManager = simulation.World.EntityManager;
+                var unit = CreateEntity(entityManager,
+                    LockstepStat.Attribute(MAX_HEALTH, 100), LockstepStat.Resource(HEALTH, MAX_HEALTH, LockstepStatCapPolicy.KeepRatio, 10),
+                    LockstepStat.Attribute(MAX_ENERGY, 50), LockstepStat.Resource(ENERGY, MAX_ENERGY, LockstepStatCapPolicy.Clamp, 0),
+                    LockstepStat.Resource(GOLD, MAX_ENERGY, LockstepStatCapPolicy.Clamp, 500));
+                TestUtility.Step(simulation);
+                AssertResource(entityManager, unit, HEALTH, 10, 100, "a building under construction");
+                AssertResource(entityManager, unit, ENERGY, 0, 50, "energy that starts empty");
+                AssertResource(entityManager, unit, GOLD, 50, 50, "at most the cap");
+
+                entityManager.GetBuffer<LockstepStatModifier>(unit).Add(LockstepStatModifier.AdditivePercent(MAX_HEALTH, FixedPoint.Half, Research));
+                TestUtility.Step(simulation);
+                AssertResource(entityManager, unit, HEALTH, 15, 150, "from then on it keeps its share");
+            }
+        }
+
+        [Test]
+        public void Resource_WhoseCapWentToZero_DoesNotRefill()
+        {
+            using (var simulation = CreateSimulation())
+            {
+                var entityManager = simulation.World.EntityManager;
+                var unit = CreateEntity(entityManager,
+                    LockstepStat.Attribute(MAX_HEALTH, 100), LockstepStat.Resource(HEALTH, MAX_HEALTH, LockstepStatCapPolicy.KeepRatio),
+                    LockstepStat.Attribute(MAX_ENERGY, 100), LockstepStat.Resource(ENERGY, MAX_ENERGY, LockstepStatCapPolicy.Clamp));
+                TestUtility.Step(simulation);
+                AddChanges(entityManager, unit, (HEALTH, -30), (ENERGY, -30));
+                TestUtility.Step(simulation);
+
+                // A curse of -100 % to both maximums, then lifted.
+                var modifiers = entityManager.GetBuffer<LockstepStatModifier>(unit);
+                modifiers.Add(LockstepStatModifier.MultiplicativePercent(MAX_HEALTH, -FixedPoint.One, Ability));
+                modifiers.Add(LockstepStatModifier.MultiplicativePercent(MAX_ENERGY, -FixedPoint.One, Ability));
+                TestUtility.Step(simulation);
+                AssertResource(entityManager, unit, HEALTH, 0, 0);
+                AssertResource(entityManager, unit, ENERGY, 0, 0);
+
+                entityManager.GetBuffer<LockstepStatModifier>(unit).RemoveModifiers(Ability);
+                TestUtility.Step(simulation);
+                AssertResource(entityManager, unit, HEALTH, 0, 100, "nothing is left to keep a share of");
+                AssertResource(entityManager, unit, ENERGY, 0, 100);
+            }
+        }
+
+        [Test]
+        public void Resource_KeepsItsShare_OfLargeAmounts()
+        {
+            using (var simulation = CreateSimulation())
+            {
+                var entityManager = simulation.World.EntityManager;
+                var storage = CreateEntity(entityManager,
+                    LockstepStat.Attribute(MAX_ENERGY, 100000), LockstepStat.Resource(GOLD, MAX_ENERGY, LockstepStatCapPolicy.KeepRatio));
+                TestUtility.Step(simulation);
+                AddChanges(entityManager, storage, (GOLD, -40000));
+                TestUtility.Step(simulation);
+
+                entityManager.GetBuffer<LockstepStatModifier>(storage).Add(LockstepStatModifier.AdditivePercent(MAX_ENERGY, FixedPoint.Half, Research));
+                TestUtility.Step(simulation);
+                AssertResource(entityManager, storage, GOLD, 90000, 150000, "60 000 of 100 000 is 90 000 of 150 000");
             }
         }
 
@@ -448,6 +515,25 @@ namespace Pragma.Dots.Tests
                 var grantors = entityManager.GetBuffer<LockstepStatGrantor>(member, true);
                 Assert.AreEqual(1, grantors.Length, "the destroyed grantor was dropped");
                 Assert.AreEqual(player, grantors[0].entity);
+            }
+        }
+
+        [Test]
+        public void Grants_LeaveWithTheBufferOfTheGrantor()
+        {
+            using (var simulation = CreateSimulation())
+            {
+                var entityManager = simulation.World.EntityManager;
+                var squad = entityManager.CreateEntity(typeof(LockstepStatGrant));
+                var member = CreateReceiver(entityManager, squad);
+                entityManager.GetBuffer<LockstepStatGrant>(squad).Add(LockstepStatGrant.Create(LockstepStatModifier.Flat(SPEED, 2, Ability)));
+                TestUtility.Step(simulation);
+                Assert.AreEqual((FixedPoint)6, Value(entityManager, member, SPEED));
+
+                // The banner is lost: the squad lives on without grants.
+                entityManager.RemoveComponent<LockstepStatGrant>(squad);
+                TestUtility.Step(simulation);
+                Assert.AreEqual((FixedPoint)4, Value(entityManager, member, SPEED), "what the squad gave is gone");
             }
         }
 

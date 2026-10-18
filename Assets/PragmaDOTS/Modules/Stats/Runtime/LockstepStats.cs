@@ -264,16 +264,18 @@ namespace Pragma.Dots.Stats
             return true;
         }
 
-        // The amount for a new cap. A resource whose cap was zero, as a new one, counts as full.
+        // The amount for a new cap. A resource not fitted yet that starts full fills up; one fitted to a zero cap (its amount
+        // is zero then) or one that starts with an amount has no share to keep, so it keeps the amount.
         private static FixedPoint Fit(in LockstepStat stat, FixedPoint cap)
         {
-            if (stat.max <= FixedPoint.Zero)
+            if (stat.max.rawValue < 0)
             {
                 return cap;
             }
-            if (stat.capPolicy == LockstepStatCapPolicy.KeepRatio && cap != stat.max)
+            if (stat.max.rawValue > 0 && stat.capPolicy == LockstepStatCapPolicy.KeepRatio && cap != stat.max)
             {
-                return stat.value * cap / stat.max;
+                // The product of two large amounts overflows the plain operators.
+                return FixedMath.MulDiv(stat.value, cap, stat.max);
             }
             return stat.value;
         }

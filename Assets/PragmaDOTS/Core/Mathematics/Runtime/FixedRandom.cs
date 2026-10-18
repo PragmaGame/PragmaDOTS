@@ -8,7 +8,8 @@ namespace Pragma.Dots.Mathematics
     /// </summary>
     /// <remarks>
     /// It is a plain value type: keep it inside simulation state (a component or singleton) so it is hashed, recorded
-    /// and identical on every client. Copying the struct copies the sequence, so always write it back after use.
+    /// and identical on every client. Copying the struct copies the sequence, so always write it back after use. A
+    /// generator left at <c>default</c> runs the default sequence from a zero state; seed it to get a stream of its own.
     /// </remarks>
     [Serializable]
     public struct FixedRandom : IEquatable<FixedRandom>
@@ -17,7 +18,7 @@ namespace Pragma.Dots.Mathematics
         private const ulong DEFAULT_SEQUENCE = 0xDA3E39CB94B95BDBUL;
 
         public ulong state;
-        // Always odd.
+        // Odd; zero in a generator left at default, which then steps by the default sequence.
         public ulong increment;
 
         /// <summary>Creates a generator. Different <paramref name="sequence"/> values give independent streams.</summary>
@@ -44,7 +45,9 @@ namespace Pragma.Dots.Mathematics
         public uint NextUInt()
         {
             var old = state;
-            state = unchecked(old * MULTIPLIER + increment);
+            // An even increment never leaves a zero state: a generator nobody seeded would return zero forever.
+            var step = increment != 0 ? increment : (DEFAULT_SEQUENCE << 1) | 1UL;
+            state = unchecked(old * MULTIPLIER + step);
             var xorShifted = (uint)(((old >> 18) ^ old) >> 27);
             var rotation = (int)(old >> 59);
             return (xorShifted >> rotation) | (xorShifted << (-rotation & 31));

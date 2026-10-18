@@ -6,7 +6,8 @@ namespace Pragma.Dots.Stats
 {
     /// <summary>
     /// A resource of a <see cref="StatsPart{TStat, TTarget}"/>: the stat, the attribute that caps it (none for an uncapped
-    /// one), what it does when the cap changes, and the amount an uncapped one starts with. A capped resource starts full.
+    /// one), what it does when the cap changes, and the amount it starts with. A capped resource without an amount starts
+    /// full; with one, it starts with that much, at most the cap.
     /// </summary>
     [Serializable]
     public struct StatResourceEntry<TStat> where TStat : unmanaged, Enum
@@ -16,6 +17,11 @@ namespace Pragma.Dots.Stats
             Stat = stat;
             Cap = cap;
             CapPolicy = capPolicy;
+        }
+
+        public StatResourceEntry(TStat stat, TStat cap, LockstepStatCapPolicy capPolicy, FixedPoint amount) : this(stat, cap, capPolicy)
+        {
+            Amount = amount;
         }
 
         public StatResourceEntry(TStat stat, FixedPoint amount) : this()
@@ -31,7 +37,7 @@ namespace Pragma.Dots.Stats
 
         [field: SerializeField] public LockstepStatCapPolicy CapPolicy { get; set; }
 
-        [field: SerializeField, Tooltip("The amount an uncapped resource starts with; a capped one starts full.")]
+        [field: SerializeField, Tooltip("The amount it starts with. A capped resource gets at most its cap, and starts full without an amount (zero).")]
         public FixedPoint Amount { get; set; }
     }
 }
