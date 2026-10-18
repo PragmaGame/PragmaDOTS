@@ -6,7 +6,7 @@ user documentation is the [package README](Assets/PragmaDOTS/README.md).
 
 No code was copied from ME.BECS or Photon Quantum. The few algorithms they share with this package (Q16 fixed point,
 PCG32, SplitMix64) are public, standard algorithms, implemented here from scratch. The GameObject views are a port of
-ECV, the view layer of the author's own DawnOfWar project, adapted to lockstep.
+ECV, the view layer of the author's own earlier RTS, adapted to lockstep.
 
 ## Contents
 
@@ -100,7 +100,7 @@ ECV, the view layer of the author's own DawnOfWar project, adapted to lockstep.
 
 ## Taken from ECV
 
-ECV (Entity Component View, `DOTS.ECV` in DawnOfWar, an RTS on Entities 1.4 and Netcode ghosts) shows entities with
+ECV (Entity Component View, `DOTS.ECV`, from an RTS on Entities 1.4 and Netcode ghosts) shows entities with
 GameObjects: a pooled `EntityView` prefab per entity key, one `EntityComponentView<T>` MonoBehaviour per component type,
 and one `EntityViewUpdateSystem<T>` per type that pushes the components whose chunks changed. It lives in the same world
 as the entities it shows, which lockstep forbids: a presentation write to a simulated entity, even a tag, moves it to
@@ -160,7 +160,7 @@ the clients diverge. The port keeps the shape and replaces everything that wrote
 - Odin's key dropdown and the `WorldResolver` service lookup: dependencies the package does not take; keys are plain
   strings and the pool comes from `PoolFactory`.
 - The game's views (health bar, player color, selection). Selection in particular is local to a player and belongs to
-  the presentation in lockstep, not to a simulation component as in DawnOfWar.
+  the presentation in lockstep, not to a simulation component as in that RTS.
 
 ## Not taken, and why
 
@@ -218,7 +218,7 @@ also accounts for server load and asymmetric routes.
 
 **Physics, prediction culling, the Photon server plugin** (Quantum). Out of scope: the request was a lockstep layer for
 Entities and Netcode for Entities. Gameplay collisions are written with `FixedPoint`. Navigation
-came later, for DawnOfWar, as a grid of its own rather than Quantum's navmesh (decision 11).
+came later, for the author's RTS, as a grid of its own rather than Quantum's navmesh (decision 11).
 
 ## Decisions specific to Unity DOTS
 
@@ -339,7 +339,7 @@ These came up while building on Entities; neither reference package deals with t
     another component wake only when it changed. Versions are allowed to decide this because a recalculation is
     idempotent: a chunk recalculated without need gets the same bytes, so the state never depends on how versions
     advance on a machine (a late joiner replaying many ticks per frame included). Further choices, made for strategy
-    games (Dawn of War style research, squads, auras):
+    games (research, squads, auras):
     - **Attributes and resources.** Health is not a component next to the stats but a resource stat capped by the max
       health attribute: health, morale, energy and money share one pool rule (never below zero, capped, fitted when the
       cap changes by keeping the share or the amount) and one way to change them, one-tick `LockstepStatChange`s summed
@@ -405,7 +405,7 @@ These came up while building on Entities; neither reference package deals with t
     Entities 6.6 does the rest itself.
 
 17. **Actors: content as assets of parts.** Three earlier projects authored entities three ways: prefabs assembled
-    from MonoBehaviour parts with a string identifier and a preview of the view (DawnOfWar's composite authoring),
+    from MonoBehaviour parts with a string identifier and a preview of the view (an RTS's composite authoring),
     ScriptableObject configs of `[SerializeReference]` data parts keyed by hierarchical tags and turned into entities
     at run time (warfactory), and this package's separate authoring components and an index-based prefab registry. They
     are one model here. A part (`ActorPart`) is the single unit of extension and writes its components through
