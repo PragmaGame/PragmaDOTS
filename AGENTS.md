@@ -6,7 +6,7 @@ Guidance for AI agents (and humans) working in this repository.
 
 The development project of the Unity package `com.pragma.dots` (Pragma DOTS): building blocks for multiplayer games on
 Entities. The core (fixed-point math, actors, utilities) is always compiled; deterministic lockstep (with a Netcode for
-Entities transport), navigation, vision, stats and GameObject views are opt-in modules. The package is
+Entities transport), navigation, vision, stats, GameObject views and state machines are opt-in modules. The package is
 `Assets/PragmaDOTS` and is consumed through a git URL with `?path=Assets/PragmaDOTS`; everything else in the project
 (tests, research notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 6000.6, Entities 6.6, Netcode for Entities 6.6).
 
@@ -27,6 +27,7 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 | `Assets/PragmaDOTS/Modules/Vision` | `PRAGMA_DOTS_VISION`, needs Lockstep. `Pragma.Dots.Vision` (`Runtime`): the vision grid (one plane per player slot), vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and the actor parts (`Parts`) |
 | `Assets/PragmaDOTS/Modules/Stats` | `PRAGMA_DOTS_STATS`, needs Lockstep. `Pragma.Dots.Stats` (`Runtime`): attributes and resources (`LockstepStat`), modifiers, one-tick changes and grants (`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrant`, `LockstepStatGrantor`, `LockstepStatTarget`), `LockstepStatSystem`, `LockstepStats` helpers |
 | `Assets/PragmaDOTS/Modules/Views` | `PRAGMA_DOTS_VIEWS`, needs Lockstep. `Pragma.Dots.Views` (`Runtime`): GameObject views ported from ECV (DawnOfWar): `EntityView`, view parts, `EntityViewKey`, `EntityViewManagerSystem`, update systems, catalogs, `IEntityViewPool`, `ViewPart`. `Pragma.Dots.Views.Authoring` (`Authoring`): `EntityViewConfigAuthoring`. `Pragma.Dots.Views.Editor` (`Editor`): the actor view previews |
+| `Assets/PragmaDOTS/Modules/StateMachines` | `PRAGMA_DOTS_STATE_MACHINES`, needs only the core. `Pragma.Dots.StateMachines` (`Runtime`): `StateMachine` (current, previous, requested state, ticks in state), `IStateMachine` (a machine component of the game: a `StateMachine` and nothing else), `StateMachineSystemGroup<TMachine>` (applies the transitions in a Burst job, then runs its state systems), `StateMachinePart<TMachine, TState>` (`Parts`) |
 | `Assets/PragmaDOTS/Skills~` | Claude Code skills shipped with the package (actors, gameplay, sessions, desync); Unity skips the folder. Read them before writing content or simulation code |
 | `Assets/Tests/Core/Editor` | `Pragma.Dots.Tests.Editor`: the EditMode suite of the core (not shipped): `Mathematics`, `Utils`, `Actors`; test components and parts in `Support` |
 | `Assets/Tests/Modules/<Module>/Editor` | `Pragma.Dots.<Module>.Tests.Editor`: the suite of a module, compiled only with its define; the lockstep suite (`Pragma.Dots.Lockstep.Tests.Editor`) keeps the session and frame helpers and test components in `Support` |
@@ -60,11 +61,11 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   list, which is what `ValidateSimulationHash` compares.
 - **Netcode integration** is one hand-serialized RPC (`LockstepPacketRpc`, 1024 bytes) on the reliable channel; the
   framer fragments larger messages. Connections are tracked by entity, not by `NetworkId`.
-- **Modules.** Lockstep, navigation, vision, stats and views compile only with their define (`defineConstraints`), all
-  off in a new project; this project turns every one on in Player Settings (through *Project Settings > Pragma > DOTS*).
+- **Modules.** Lockstep, navigation, vision, stats, views and state machines compile only with their define
+  (`defineConstraints`), all off in a new project; this project turns every one on in Player Settings (through *Project Settings > Pragma > DOTS*).
   Navigation, vision, stats and views require Lockstep and list both defines in their constraints; the settings page
-  turns a module on with what it requires and off with what requires it. Otherwise a module never depends on another
-  one, so every allowed subset compiles; its actor parts live in its runtime assembly. The core never references a
+  turns a module on with what it requires and off with what requires it. State machines need only the core. Otherwise a
+  module never depends on another one, so every allowed subset compiles; its actor parts live in its runtime assembly. The core never references a
   module, and no package dependency is optional: Netcode for Entities is not one, and `Pragma.Dots.Lockstep.Netcode`
   compiles only when it is installed (`versionDefines`, like `Pragma.Dots.Utils.Physics`). `Utils` is the lowest
   layer: it references neither the rest of the core nor Entities. A compiled module's systems join every simulation
@@ -151,7 +152,8 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session), stats (formula,
   non-stacking modifiers, sources, timed modifiers, resources and caps, changes, grants, enum ids in Burst, change
-  versions, a session with a late joiner), sessions
+  versions, a session with a late joiner), state machines (transitions, enter and exit, Burst jobs against a managed
+  model, several machines per entity, the actor part, a session with a late joiner), sessions
   (latency, jitter, late join, disconnects, desync attribution, replays, commands with large data), presentation,
   GameObject views (component and buffer parts), offline mode and a real Netcode server with two clients (including a command larger than the
   reliable window).

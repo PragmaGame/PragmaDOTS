@@ -426,6 +426,30 @@ These came up while building on Entities; neither reference package deals with t
     `ActorUtility.ResolveTypes`. The actor types lost their `Lockstep` prefix (`Actor`, `ActorLookup`, `ActorRegistry`,
     `PlacedActor` for the former scene entity).
 
+19. **State machines whose states are systems.** PragmaCommonDOTS had a state machine kernel: a `SystemBase` that
+    walked its entities on the main thread and called managed state objects (`Enter`, `Run`, `Exit`) with the
+    `EntityManager`, one entity at a time. Nothing of it could run in a job, and its type-handle variant keyed states
+    by `IntPtr` type handles, which differ between processes. The module keeps its model (a status with the current,
+    previous and requested state; enter, tick and exit) and moves the logic into jobs: a state is a system of the
+    game with an ordinary parallel `IJobEntity` over the machine's entities, and the machine is plain data the job
+    reads and writes for its own entity (`Is`, `Entered`, `Exited`, `Request`), so a state ticks on every thread and
+    the result does not depend on them. States are the values of an enum, stored as integers, so they hash and travel
+    the same on every machine.
+
+    The transitions run at the start of the machine's update, in a group whose children are the states:
+    `StateMachineSystemGroup<TMachine>` applies them, then updates its systems, so a transition, its exit and its
+    enter fall on one update. A machine is the game's own component (one type per machine, several per entity), and
+    the group is an empty subclass the game declares, which also places the machine in the world: in
+    `LockstepSimulationSystemGroup` or in `SimulationSystemGroup`, since the module knows nothing of lockstep.
+    Generic jobs, components and `ISystem`s need registration attributes per closed type in Entities and Burst, so
+    the transition job is not generic: a machine component is a `StateMachine` and nothing else, and the job reads
+    every machine component as one through a dynamic type handle. The group completes that job before its states
+    run: they are systems inside the group's update, so they could not depend on a job the group registers only after
+    its update, and a query of the group would even register the group as the last writer of the machine after its
+    states ran. State tags (an enableable component per state) would let a state's job skip the chunks of other
+    states, but they need the type of every state in the transition and enable bits written from it; a check of an
+    integer per entity costs little, and a machine with many states can tick all of them in one job with a `switch`.
+
 ## Limitations and future work
 
 - **Prediction and rollback**: a predicted copy of the simulation world, restored from the confirmed one and

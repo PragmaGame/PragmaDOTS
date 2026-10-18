@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-gameplay
-description: Write deterministic gameplay with Pragma DOTS (com.pragma.dots) - the Lockstep module (Pragma.Dots.Lockstep) and the Navigation, Vision, Stats and Views modules built on it, with the core fixed-point math and actors - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, spawning actors by key inside the simulation (ActorLookup, LockstepTransform), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
+description: Write deterministic gameplay with Pragma DOTS (com.pragma.dots) - the Lockstep module (Pragma.Dots.Lockstep) and the Navigation, Vision, Stats and Views modules built on it, with the core fixed-point math and actors - simulation systems in LockstepSimulationSystemGroup, input structs and commands, player join/leave, spawning actors by key inside the simulation (ActorLookup, LockstepTransform), LockstepEntityId references, grid navigation (LockstepNavGrid, LockstepNavAgent, LockstepPathfinder), vision and fog of war (LockstepVisionGrid, LockstepVisionSource, LockstepVision), stats (attributes with timed or non-stacking modifiers, resources such as health with damage, healing and caps, research and squad bonuses granted to groups: LockstepStat, LockstepStatModifier, LockstepStatChange, LockstepStatGrant), state machines whose states tick in parallel jobs (StateMachine, StateMachineSystemGroup, IStateMachine), fixed-point math (FixedPoint, FixedVector3, FixedMath, FixedRandom) and presenting it with interpolation and GameObject views (EntityView, EntityComponentView, EntityBufferView, update systems, catalogs, pools). Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, views, UI - even if the user never says "deterministic" or "lockstep".
 ---
 
 # Gameplay with Pragma DOTS lockstep
@@ -35,6 +35,7 @@ scripting define, all off after installation:
 | Vision | `PRAGMA_DOTS_VISION` | `Pragma.Dots.Vision` | Lockstep |
 | Stats | `PRAGMA_DOTS_STATS` | `Pragma.Dots.Stats` | Lockstep |
 | Views | `PRAGMA_DOTS_VIEWS` | `Pragma.Dots.Views` (+ `.Authoring`) | Lockstep |
+| State machines | `PRAGMA_DOTS_STATE_MACHINES` | `Pragma.Dots.StateMachines` | |
 
 When a package type "could not be found", either its module is off (turn it on in *Project Settings > Pragma > DOTS*,
 which writes the define to every build target and turns Lockstep on with the modules that need it) or the game's
@@ -419,6 +420,30 @@ Lockstep; namespace and assembly `Pragma.Dots.Stats`), not fields that systems p
   `public partial class StatViewUpdateSystem : EntityBufferViewUpdateSystem<LockstepStat> { }`.
 - **Base values.** `stats.TrySetBase` for permanent changes of an attribute (a level up); the value follows in the next
   update.
+
+## State machines
+
+Behaviour that goes through phases (a unit's Idle / Move / Attack, a spell's cooldown) is a state machine of the State
+Machines module (`PRAGMA_DOTS_STATE_MACHINES`, needs only the core, so it also serves worlds without lockstep;
+namespace and assembly `Pragma.Dots.StateMachines`), not a set of flags:
+
+- **Declare** an enum of states (0 = none), a machine component
+  `public struct UnitBrain : IStateMachine { public StateMachine machine; }` (the machine and nothing else: the group
+  refuses other fields; state data goes to components of its own) and its group
+  `[UpdateInGroup(typeof(LockstepSimulationSystemGroup))] public partial class UnitBrainGroup : StateMachineSystemGroup<UnitBrain> { }`.
+- **Give** entities the machine with a part, `[Serializable, ActorPartMenu("Unit Brain")] public sealed class
+  UnitBrainPart : StateMachinePart<UnitBrain, UnitState> { }` (the inspector picks the initial state), or
+  `new UnitBrain { machine = StateMachine.Create(UnitState.Idle) }`.
+- **Write each state** as a system with `[UpdateInGroup(typeof(UnitBrainGroup))]` that schedules a parallel
+  `IJobEntity` over `ref UnitBrain`: `ref var m = ref brain.machine; if (m.Exited(UnitState.Move)) { exit }
+  if (!m.Is(UnitState.Move)) return; if (m.Entered(UnitState.Move)) { enter } tick; m.Request(UnitState.Idle);`.
+  `ticksInState` counts the ticks since the state was entered (0 on the transition): timers need no field of their own.
+- **Timing.** The group applies the requests at the start of its update, then runs its states: a request made by a
+  state takes effect on the next tick, one from a system before the group on this tick. The last request wins;
+  requesting the current state does nothing. Exit and enter run on the same tick, in the order of the state systems.
+- **Determinism.** In parallel jobs, write only the entity's own machine. Change other entities' machines (a stun in
+  an area) single-threaded, or leave a component the target's own state reads. Several machines per entity: one
+  component and one group each.
 
 ## Burst and jobs
 

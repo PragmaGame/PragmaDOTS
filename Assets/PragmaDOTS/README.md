@@ -4,12 +4,13 @@ Building blocks for games on Unity DOTS (Entities): a small core that every game
 on. The core is fixed-point math, [actors](#actors) (units, buildings and map objects described in assets of parts)
 and a few utilities. The modules are deterministic [lockstep](#lockstep) multiplayer, played over Netcode for Entities
 or offline, and on top of it [navigation](#navigation), [vision](#vision), [stats](#stats) and GameObject
-[views](#views). A module that is off is not compiled at all, so a game carries and runs only what it uses.
+[views](#views); [state machines](#state-machines) serve any game. A module that is off is not compiled at all, so a
+game carries and runs only what it uses.
 
 ```
- Navigation    Vision    Stats    Views     modules: opt-in, each needs Lockstep, none needs another
+ Navigation    Vision    Stats    Views     modules on top of Lockstep: opt-in, none needs another
  ──────────────────────────────────────
- Lockstep      + Netcode integration        module: opt-in; the Netcode part compiles when Netcode is installed
+ Lockstep (+ Netcode)    State machines     modules: opt-in, need only the core
  ══════════════════════════════════════
  Mathematics   Actors    Utils              core: always compiled, knows nothing of the modules
 ```
@@ -31,6 +32,7 @@ or offline, and on top of it [navigation](#navigation), [vision](#vision), [stat
   - [Vision](#vision)
   - [Stats](#stats)
   - [Views](#views)
+  - [State machines](#state-machines)
 - [Package layout](#package-layout)
 - [Claude Code skills](#claude-code-skills)
 - [Troubleshooting](#troubleshooting)
@@ -67,6 +69,7 @@ Each is off after installation; [turn on](#turning-modules-on) the ones you use.
 | [Vision](#vision) | `PRAGMA_DOTS_VISION` | Lockstep | What every player sees, for the fog of war and for the rules |
 | [Stats](#stats) | `PRAGMA_DOTS_STATS` | Lockstep | Attributes with modifiers, resources such as health, bonuses granted to groups |
 | [Views](#views) | `PRAGMA_DOTS_VIEWS` | Lockstep | Pooled GameObject views of simulation entities |
+| [State machines](#state-machines) | `PRAGMA_DOTS_STATE_MACHINES` | | Per-entity state machines whose states tick in parallel Burst jobs |
 
 - **Lockstep** (`Pragma.Dots.Lockstep`). Every client runs the same simulation in its own isolated Entities world, and
   only input travels: a server orders it into confirmed frames, one per tick, and never simulates, so the bandwidth
@@ -100,6 +103,10 @@ Each is off after installation; [turn on](#turning-modules-on) the ones you use.
   entity key, one view part per component or buffer type, fed when it changes, transforms interpolated between ticks,
   and a pool each project can replace (com.pragma.pool, Addressables...). For what Entities Graphics does not draw
   well: animators, VFX, health bars, world-space UI. In the editor, placed actors show their views.
+- **State machines** (`Pragma.Dots.StateMachines`). A machine component per machine (a unit's brain, a spell's
+  cooldown) with the current, previous and requested state; its states are systems that tick their entities in
+  parallel Burst jobs, with enter and exit logic on the update of a transition. Deterministic, so it serves lockstep
+  simulations and any other world alike; an actor part gives the initial state.
 
 Tooling: the *Project Settings > Pragma > DOTS* page, the *Window > Pragma > Lockstep Sessions* debug window, and
 [Claude Code skills](#claude-code-skills).
@@ -148,14 +155,15 @@ reference.
 | `Pragma.Dots.Stats` | Stats | Attributes, resources, modifiers, changes and grants, `LockstepStatSystem` and the `LockstepStats` helpers | simulation code, and presentation code that shows stats |
 | `Pragma.Dots.Views` | Views | `EntityView`, view parts, `EntityViewKey`, the view manager, catalogs, the pool abstraction, the View actor part | presentation code, and simulation code that sets an `EntityViewKey` |
 | `Pragma.Dots.Views.Authoring` | Views | `EntityViewConfigAuthoring` | authoring code, if any |
+| `Pragma.Dots.StateMachines` | State machines | `StateMachine`, `IStateMachine`, `StateMachineSystemGroup<TMachine>`, `StateMachinePart<TMachine, TState>` | simulation code |
 
 ### Turning modules on
 
 A module compiles only when its scripting define symbol is set, and all of them are off after installation. Turn on
 the ones you use in **Project Settings > Pragma > DOTS**: the page writes the define to every build target at once.
 Navigation, vision, stats and views run on the lockstep simulation, so they need the Lockstep module: the page turns it
-on with them and turns them off with it. They do not depend on each other. Their actor parts are in their runtime
-assemblies, so they build at run time as well as in subscenes.
+on with them and turns them off with it. They do not depend on each other. State machines need only the core. The
+actor parts of the modules are in their runtime assemblies, so they build at run time as well as in subscenes.
 
 Why defines rather than references alone: Unity compiles every assembly of a package, and a compiled module's systems
 join every simulation world (they carry the simulation filter) and enter `LockstepSimulation.DefaultSimulationHash`.
@@ -2033,6 +2041,106 @@ public sealed class PragmaPoolEntityViewPool : IEntityViewPool
 EntityViewManagerSystem.PoolFactory = world => new PragmaPoolEntityViewPool(poolService);
 ```
 
+## State machines
+
+`Pragma.Dots.StateMachines` gives entities state machines whose states are systems: every state ticks the entities in
+it with a parallel Burst job and runs its enter and exit logic on the update of a transition. It works in any Entities
+world: in a lockstep simulation the machines are deterministic state like any other, outside one they serve any game.
+
+A [module](#turning-modules-on) that needs only the core: turn it on with `PRAGMA_DOTS_STATE_MACHINES`.
+
+| Type | What it is |
+|---|---|
+| `StateMachine` | One machine: `current`, `previous`, `next` (the requested state) and `ticksInState`. States are numbers the game picks, usually an enum's values (`NONE` = 0). `Create(initial)`, `Is`, `Entered`, `Exited`, `Request`, `HasRequest`, `Id(enum)`; every method also takes the enum |
+| `IStateMachine` | A machine component of the game: a struct whose only field is a `StateMachine`. One type per machine, so an entity may run several |
+| `StateMachineSystemGroup<TMachine>` | Updates the machines of one component: applies the requested transitions in a parallel Burst job, then runs its systems, the states. The game declares one empty subclass per machine |
+| `StateMachinePart<TMachine, TState>` | Base of an actor part that gives the machine, entering its initial state (picked in the inspector) on its first update |
+
+### Setting it up
+
+1. Name the states with an enum, and declare the machine component and its group where the machine should update:
+
+```csharp
+public enum SpellState : byte { None = 0, Unavailable = 1, Available = 2, Active = 3 }
+
+public struct SpellMachine : IStateMachine
+{
+    public StateMachine machine;
+}
+
+[UpdateInGroup(typeof(LockstepSimulationSystemGroup))] // SimulationSystemGroup in a game without lockstep
+public partial class SpellMachineGroup : StateMachineSystemGroup<SpellMachine>
+{
+}
+```
+
+2. Give entities the machine: an actor part of the game,
+   `[Serializable, ActorPartMenu("Spell Machine")] public sealed class SpellMachinePart : StateMachinePart<SpellMachine, SpellState> { }`,
+   or `new SpellMachine { machine = StateMachine.Create(SpellState.Unavailable) }` where the entity is created. Keep the
+   data of the states (timers, targets) in components of their own: the machine component holds the machine only.
+3. Write every state as a system in the group, with a parallel job over the machine's entities:
+
+```csharp
+[UpdateInGroup(typeof(SpellMachineGroup))]
+[BurstCompile]
+public partial struct SpellActiveState : ISystem
+{
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        new Job().ScheduleParallel();
+    }
+
+    [BurstCompile]
+    private partial struct Job : IJobEntity
+    {
+        private void Execute(ref SpellMachine spell, ref SpellEffect effect)
+        {
+            ref var machine = ref spell.machine;
+            if (machine.Exited(SpellState.Active))
+            {
+                effect.isOn = false;
+            }
+            if (!machine.Is(SpellState.Active))
+            {
+                return;
+            }
+            if (machine.Entered(SpellState.Active))
+            {
+                effect.isOn = true;
+            }
+            if (machine.ticksInState >= effect.durationTicks)
+            {
+                machine.Request(SpellState.Unavailable);
+            }
+        }
+    }
+}
+```
+
+### Behaviour
+
+- **Updates.** Every update of the group applies the requested transitions first, then runs the states in system order.
+  A request made by a state is applied on the next update of the machine: the requesting state finishes its own update,
+  and the new one is entered and ticked on the next. Requests from systems that update before the group are applied in
+  the same update. In a lockstep simulation the group updates once per tick.
+- **Transitions.** `Request` replaces an earlier request; a request of the current state (or of `NONE`) changes nothing,
+  the state is not entered again. On the update of a transition `ticksInState` is 0, `Entered(new)` and `Exited(old)`
+  are true and `previous` is the old state. A new machine enters its initial state on its first update.
+- **Enter and exit.** Both run on the update of the transition, in the order of the state systems: when the exit of
+  one state and the enter of the next touch the same data, order the systems (`[UpdateBefore]`), or handle both states
+  in one job with a `switch` on `current`.
+- **Threads and determinism.** The transitions and the usual state jobs write only the entity's own machine, so any
+  number of threads gives the same result, in Burst and in Mono alike. A system that changes the machines of other
+  entities (a stun that hits everything in a blast) runs single-threaded, or leaves a component on the target for the
+  target's own state to read.
+- **Several machines.** An entity has one machine per machine component (a unit's movement and its weapon), each
+  updated by its own group.
+- **Cost.** The transitions are one parallel pass over the machine's entities per update, finished before the states
+  start, since the states are systems inside the group's update. Every state's job visits all of the machine's entities
+  and skips those in other states: for a machine with many states over many entities, one job with a `switch` on
+  `current` visits them once.
+
 ## Package layout
 
 | Path | Contents |
@@ -2059,6 +2167,7 @@ EntityViewManagerSystem.PoolFactory = world => new PragmaPoolEntityViewPool(pool
 | `Modules/Vision` | `Runtime`: `Pragma.Dots.Vision`, its parts in `Parts` |
 | `Modules/Stats` | `Runtime`: `Pragma.Dots.Stats` |
 | `Modules/Views` | `Runtime`: `Pragma.Dots.Views`, the `ViewPart`; `Authoring`: `Pragma.Dots.Views.Authoring`; `Editor`: `Pragma.Dots.Views.Editor`, the view previews |
+| `Modules/StateMachines` | `Runtime`: `Pragma.Dots.StateMachines`, the actor part base in `Parts` |
 | `Skills~` | Claude Code skills (Unity skips folders whose name ends with `~`) |
 
 ## Claude Code skills
@@ -2069,7 +2178,7 @@ how to work with it:
 | Skill | Use it for |
 |---|---|
 | `pragma-dots-actors` | Content as actors in any Entities game: definitions, parts, the catalog and its registry, spawning by key, tags, placed actors, the parts of the modules |
-| `pragma-lockstep-gameplay` | Writing simulation code: systems, input, commands, players, `FixedPoint` math, spawning, navigation, vision, stats; presentation and GameObject views |
+| `pragma-lockstep-gameplay` | Writing simulation code: systems, input, commands, players, `FixedPoint` math, spawning, navigation, vision, stats, state machines; presentation and GameObject views |
 | `pragma-lockstep-sessions` | Offline, host, join, dedicated servers, settings, match flow, custom transports, replays |
 | `pragma-lockstep-desync` | Finding and preventing desyncs, determinism tests |
 
@@ -2114,6 +2223,9 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 | `LockstepStatSystem` recalculates every tick | A system writes the stats every tick, also by only taking `DynamicBuffer<LockstepStat>` in a `SystemAPI.Query`, which is read-write: read them with `in` in an `IJobEntity` or with a read-only `BufferLookup` |
 | Connections drop when the window loses focus | `Application.runInBackground` is off |
 | A "Burst error" in the console | Burst falls back to managed code silently in some cases; fix the reported construct (for example a managed array in a Burst method) |
+| A state machine stays in `NONE` | No subclass of `StateMachineSystemGroup<T>` updates its component, or the subclass is not in a group of this world (in a lockstep simulation: `LockstepSimulationSystemGroup`) |
+| "The state machine component ... must have one field" | The machine component holds data beside its `StateMachine`: move the data to a component of its own |
+| A state's enter or exit logic never runs | It checks `Entered` / `Exited` after returning for entities not in the state, or its system is not in the machine's group |
 | Desync reports | See [Desync detection and debugging](#desync-detection-and-debugging) |
 
 ## Not included

@@ -15,6 +15,7 @@ noted. Fields of components are public and camelCase; settings and options are P
 - Navigation
 - Vision
 - Stats
+- State machines
 - Spatial index
 - Bytes helpers
 - Presentation-side access
@@ -203,6 +204,18 @@ Attributes, over own modifiers and received grants:
 percentage factors stop at 0, the flat part may go below. Resources: the tick's changes are summed, then the amount is
 kept within 0 and the cap; `KeepRatio` keeps the share when the cap changes, `Clamp` keeps the amount. A modifier or
 grant ending on tick T + D was applied on ticks T to T + D - 1 when added on tick T before `LockstepStatSystem`.
+
+## State machines
+
+Namespace and assembly `Pragma.Dots.StateMachines`: the State Machines module (`PRAGMA_DOTS_STATE_MACHINES`, needs
+only the core; works in any world).
+
+| Type | Members |
+|---|---|
+| `StateMachine` | `int current`, `int previous`, `int next` (requested; `NONE` = 0 when none), `int ticksInState` (0 on the update of the transition); `Create(initial)`, `HasRequest`, `Is(state)`, `Entered(state)`, `Exited(state)`, `Request(state)`, `Id(enum)`; every method also takes the game's enum |
+| `IStateMachine` | Marker of a machine component: a struct of the game whose only field is a `StateMachine` (checked when its group is created) |
+| `StateMachineSystemGroup<TMachine>` | Abstract `ComponentSystemGroup`: every update applies the requested transitions of `TMachine` in a parallel Burst job, finished before its systems run, then updates its systems, the states. Declare an empty subclass per machine and place it with `[UpdateInGroup]` |
+| `StateMachinePart<TMachine, TState>` | Abstract actor part: `Initial`; builds the machine with `StateMachine.Create(Initial)`. Declare a `[Serializable]` subclass per machine |
 
 ## Spatial index
 

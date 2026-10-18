@@ -1,0 +1,21 @@
+{
+    "name": "Pragma.Dots.StateMachines",
+    "rootNamespace": "Pragma.Dots.StateMachines",
+    "references": [
+        "Pragma.Dots.Actors",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_STATE_MACHINES"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

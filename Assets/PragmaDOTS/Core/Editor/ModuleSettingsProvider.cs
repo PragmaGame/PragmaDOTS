@@ -25,7 +25,8 @@ namespace Pragma.Dots.Editor
             ("Navigation", "PRAGMA_DOTS_NAVIGATION", LOCKSTEP, "Navigation grid, obstacles, agents and the pathfinder."),
             ("Vision", "PRAGMA_DOTS_VISION", LOCKSTEP, "Fog of war: one vision plane per player slot, vision sources, queries."),
             ("Stats", "PRAGMA_DOTS_STATS", LOCKSTEP, "Attributes and resources with modifiers, changes and grants."),
-            ("Views", "PRAGMA_DOTS_VIEWS", LOCKSTEP, "Pooled GameObject views of simulated entities.")
+            ("Views", "PRAGMA_DOTS_VIEWS", LOCKSTEP, "Pooled GameObject views of simulated entities."),
+            ("State Machines", "PRAGMA_DOTS_STATE_MACHINES", null, "Per-entity state machines whose states tick in parallel jobs.")
         };
 
         private static NamedBuildTarget[] _buildTargets;

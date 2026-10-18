@@ -91,4 +91,7 @@ By menu path, module in brackets:
   gameplay); needs a Transform part.
 - *View* (`ViewPart`, Views) - `EntityViewKey`: the actor's key unless the part names another (`Key`,
   `GetKey(actorKey)`); the editor previews the placed actor with that view.
+- `StateMachinePart<TMachine, TState>` (State Machines) - abstract: a game's subclass per machine
+  (`[Serializable, ActorPartMenu("Unit Brain")] public sealed class UnitBrainPart : StateMachinePart<UnitBrain, UnitState> { }`)
+  gives the machine component, entering `Initial` on its first update.
 - Stats has no part: build the stat buffers in a part of the game.

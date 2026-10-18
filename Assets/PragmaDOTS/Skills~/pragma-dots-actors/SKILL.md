@@ -189,6 +189,7 @@ for (var i = 0; i < level.Actors.Count; i++)
 | *Navigation/Grid*, *Obstacle*, *Agent*, *Avoidance* | Navigation | The grid of a map (with its terrain), obstacles, walking agents, avoidance |
 | *Vision/Grid*, *Source* | Vision | The vision grid of a map, what sees |
 | *View* (`ViewPart`) | Views | `EntityViewKey`: the actor's key unless the part names another |
+| A subclass of `StateMachinePart<TMachine, TState>` | State machines | A machine component of the game, entering the initial state on its first update |
 
 The Transform and Entity Id parts are `[DefaultActorPart]`: new definitions start with them when the lockstep module is
 on. The Stats module has no part: give stats from a part of the game (`builder.AddBuffer<LockstepStat>()`, see the

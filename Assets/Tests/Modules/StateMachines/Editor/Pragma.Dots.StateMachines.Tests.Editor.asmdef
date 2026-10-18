@@ -1,0 +1,33 @@
+{
+    "name": "Pragma.Dots.StateMachines.Tests.Editor",
+    "rootNamespace": "Pragma.Dots.Tests",
+    "references": [
+        "Pragma.Dots.StateMachines",
+        "Pragma.Dots.Actors",
+        "Pragma.Dots.Mathematics",
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Lockstep.Tests.Editor",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "PRAGMA_DOTS_STATE_MACHINES"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

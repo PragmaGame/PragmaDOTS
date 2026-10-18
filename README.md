@@ -9,9 +9,9 @@ carries and runs only what it uses.
 ## What's inside
 
 ```
- Navigation    Vision    Stats    Views     modules: opt-in, each needs Lockstep, none needs another
+ Navigation    Vision    Stats    Views     modules on top of Lockstep: opt-in, none needs another
  ──────────────────────────────────────
- Lockstep      + Netcode integration        module: opt-in; the Netcode part compiles when Netcode is installed
+ Lockstep (+ Netcode)    State machines     modules: opt-in, need only the core
  ══════════════════════════════════════
  Mathematics   Actors    Utils              core: always compiled, knows nothing of the modules
 ```
@@ -26,6 +26,7 @@ carries and runs only what it uses.
 | Vision | module, `PRAGMA_DOTS_VISION` | What every player slot sees, on a grid stamped every tick, for the fog of war and for the rules |
 | Stats | module, `PRAGMA_DOTS_STATS` | Attributes with timed and non-stacking modifiers, resources such as health, bonuses granted to groups |
 | Views | module, `PRAGMA_DOTS_VIEWS` | Pooled GameObject views of simulation entities, fed per component when it changes, with interpolated transforms |
+| State machines | module, `PRAGMA_DOTS_STATE_MACHINES` | Per-entity state machines whose states tick in parallel Burst jobs, with or without lockstep |
 
 Turn modules on in *Project Settings > Pragma > DOTS*.
 
@@ -44,9 +45,9 @@ Only `Assets/PragmaDOTS` ships; everything else is the development project.
 
 | Path | Contents |
 |---|---|
-| `Assets/PragmaDOTS` | The package: `Core` (math, actors, utilities), `Modules` (lockstep, navigation, vision, stats, views), Claude Code skills (`Skills~`) |
+| `Assets/PragmaDOTS` | The package: `Core` (math, actors, utilities), `Modules` (lockstep, navigation, vision, stats, views, state machines), Claude Code skills (`Skills~`) |
 | `Assets/Tests/Core/Editor` | EditMode tests of the core: math, utilities and actors |
-| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, actors in the simulation, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
+| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, actors in the simulation, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`, `StateMachines`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
 | [`documentation.md`](documentation.md) | Design notes: architecture, decisions, what was taken from ME.BECS, Photon Quantum and ECV, and why |
 | [`mebecs_research.md`](mebecs_research.md) | How ME.BECS implements determinism and networking |
 | [`photon_research.md`](photon_research.md) | How Photon Quantum implements determinism and prediction/rollback |

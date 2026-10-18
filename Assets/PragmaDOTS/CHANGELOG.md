@@ -158,6 +158,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DataLength` gives its size. Outside ECS, `LockstepClient.AddCommand(payload, data)`. Large commands are fragmented on
   the wire and reach every client in one tick.
 - The `pragma-dots-actors` Claude Code skill: content as actors, in any Entities game.
+- State machines (`Pragma.Dots.StateMachines`, module `PRAGMA_DOTS_STATE_MACHINES`, needs only the core), taken from
+  PragmaCommonDOTS and redesigned for jobs: a machine component of the game holds a `StateMachine` (current,
+  previous and requested state, ticks in the state; states are the values of an enum), a
+  `StateMachineSystemGroup<TMachine>` subclass applies the requested transitions in a parallel Burst job and then runs
+  its systems, the states, which tick their entities in parallel jobs with enter and exit logic on the update of a
+  transition (`Is`, `Entered`, `Exited`, `Request`). An entity may run several machines, one per component.
+  `StateMachinePart<TMachine, TState>` gives an actor its machine and initial state. Deterministic, so it serves
+  lockstep simulations and any other world.
 
 ### Changed
 
