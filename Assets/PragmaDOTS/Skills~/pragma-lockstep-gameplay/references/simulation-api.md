@@ -18,6 +18,7 @@ noted. Fields of components are public and camelCase; settings and options are P
 - State machines
 - Spatial index
 - Bytes helpers
+- Core utilities
 - Presentation-side access
 - Actor parts
 
@@ -31,6 +32,7 @@ noted. Fields of components are public and camelCase; settings and options are P
 | `LockstepTransformHistorySystem` | `OrderFirst`, after frame apply. Copies `LockstepTransform` into `LockstepTransformPrevious` |
 | `LockstepBeginSimulationEntityCommandBufferSystem` | `OrderFirst`, after the transform history. Singleton: `LockstepBeginSimulationEntityCommandBufferSystem.Singleton` |
 | gameplay systems | Default order slot inside the group |
+| `LockstepSignalCleanupSystem` | `OrderLast`, before the end buffer. Destroys every signal (`SignalTag`): signals published through the end buffer live through the next tick |
 | `LockstepEndSimulationEntityCommandBufferSystem` | `OrderLast`. Singleton: `LockstepEndSimulationEntityCommandBufferSystem.Singleton` |
 | `LockstepEntityIdSystem` | `OrderLast`, after the end buffer. Assigns ids, rebuilds `LockstepEntityIdMap` |
 
@@ -229,6 +231,18 @@ only the core; works in any world).
 
 `LockstepBytes.ToFixedList64(in T)`, `ToFixedList128(in T)`, `Read<T>(in FixedList64Bytes<byte>)`,
 `Read<T>(in FixedList128Bytes<byte>)` - for join data and start data structs.
+
+## Core utilities
+
+Namespace `Pragma.Dots.Utils`, assembly `Pragma.Dots.Utils.Entities` (the core).
+
+| API | Notes |
+|---|---|
+| `Signals.Publish(this EntityCommandBuffer, in T)`, `Publish(this EntityCommandBuffer.ParallelWriter, sortKey, in T)`, `Publish(this EntityManager, in T)` | A signal entity: the game's component `T` and `SignalTag`. Through the end-of-tick buffer it lives through the next tick |
+| `SignalTag` | On every signal; query `WithAll<SignalTag>()` |
+| `IDictionaryElement<TKey>` | `TKey Key { get; set; }` on the game's buffer element (`TKey : unmanaged, IComparable<TKey>`) |
+| `BufferDictionary` | Extensions on `DynamicBuffer<TElement>`: `IndexOf(key)` (index, or `~insertionIndex`), `ContainsKey`, `TryGet(key, out element)`, `ref GetOrAdd(key[, out added])`, `Remove(key)`. Sorted by key; Burst-compatible |
+| `EntityManagerExtensions` | `TryGetComponent(entity, out T)`, `TryGetBuffer(entity, isReadOnly, out buffer)` |
 
 ## Presentation-side access
 

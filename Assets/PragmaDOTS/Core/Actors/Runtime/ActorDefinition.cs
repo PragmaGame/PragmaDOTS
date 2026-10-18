@@ -132,19 +132,15 @@ namespace Pragma.Dots.Actors
         private void Reset()
         {
 #if UNITY_EDITOR
-            var types = new List<Type>();
+            var candidates = new List<Type>();
             foreach (var type in UnityEditor.TypeCache.GetTypesWithAttribute<DefaultActorPartAttribute>())
             {
                 if (typeof(ActorPart).IsAssignableFrom(type) && !type.IsAbstract && type.GetConstructor(Type.EmptyTypes) != null)
                 {
-                    types.Add(type);
+                    candidates.Add(type);
                 }
             }
-            types.Sort((a, b) =>
-            {
-                var order = GetDefaultOrder(a).CompareTo(GetDefaultOrder(b));
-                return order != 0 ? order : string.CompareOrdinal(a.FullName, b.FullName);
-            });
+            var types = SelectDefaultParts(candidates);
             _parts = new ActorPart[types.Count];
             for (var i = 0; i < types.Count; i++)
             {
@@ -153,8 +149,34 @@ namespace Pragma.Dots.Actors
 #endif
         }
 
+        // The default part types among the candidates, in order: a part another candidate replaces is left out.
+        internal static List<Type> SelectDefaultParts(IEnumerable<Type> candidates)
+        {
+            var types = new List<Type>(candidates);
+            var replaced = new HashSet<Type>();
+            foreach (var type in types)
+            {
+                var replaces = GetDefaultAttribute(type).Replaces;
+                if (replaces != null && replaces != type)
+                {
+                    replaced.Add(replaces);
+                }
+            }
+            types.RemoveAll(replaced.Contains);
+            types.Sort((a, b) =>
+            {
+                var order = GetDefaultAttribute(a).Order.CompareTo(GetDefaultAttribute(b).Order);
+                return order != 0 ? order : string.CompareOrdinal(a.FullName, b.FullName);
+            });
+            return types;
+        }
+
+        private static DefaultActorPartAttribute GetDefaultAttribute(Type type)
+        {
+            return (DefaultActorPartAttribute)Attribute.GetCustomAttribute(type, typeof(DefaultActorPartAttribute));
+        }
+
 #if UNITY_EDITOR
-        private static int GetDefaultOrder(Type type) => ((DefaultActorPartAttribute)Attribute.GetCustomAttribute(type, typeof(DefaultActorPartAttribute))).Order;
 
         /// <summary>Raised in the editor when a definition is edited, for tools that show actors (previews).</summary>
         public static event Action<ActorDefinition> EditorChanged;

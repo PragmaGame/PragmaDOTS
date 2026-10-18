@@ -155,6 +155,7 @@ namespace Pragma.Dots.Lockstep
                 typeof(LockstepBeginSimulationEntityCommandBufferSystem),
                 typeof(LockstepEndSimulationEntityCommandBufferSystem),
                 typeof(LockstepEntityIdSystem),
+                typeof(LockstepSignalCleanupSystem),
             };
             if (options.AutoDiscoverSystems)
             {

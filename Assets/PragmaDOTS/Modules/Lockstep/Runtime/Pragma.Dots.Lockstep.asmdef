@@ -4,6 +4,7 @@
     "references": [
         "Pragma.Dots.Mathematics",
         "Pragma.Dots.Actors",
+        "Pragma.Dots.Utils.Entities",
         "Unity.Entities",
         "Unity.Collections",
         "Unity.Burst",

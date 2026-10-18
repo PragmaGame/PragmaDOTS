@@ -5,6 +5,7 @@
         "Pragma.Dots.Lockstep",
         "Pragma.Dots.Mathematics",
         "Pragma.Dots.Actors",
+        "Pragma.Dots.Utils.Entities",
         "Pragma.Dots.Lockstep.Netcode",
         "Unity.Entities",
         "Unity.Entities.Hybrid",

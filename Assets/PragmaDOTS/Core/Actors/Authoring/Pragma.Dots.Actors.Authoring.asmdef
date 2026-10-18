@@ -6,7 +6,8 @@
         "Pragma.Dots.Mathematics",
         "Unity.Entities",
         "Unity.Entities.Hybrid",
-        "Unity.Collections"
+        "Unity.Collections",
+        "Unity.Transforms"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

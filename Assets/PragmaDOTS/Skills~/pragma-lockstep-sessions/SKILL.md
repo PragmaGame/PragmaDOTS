@@ -113,7 +113,7 @@ Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running
 | Start | `RequestStart(serverWorld)` or `server.StartGame(now)`: `State` is `Running` at once, `GetTickPosition(now)` is negative during the countdown | The start message arrives during the countdown: `Running`, `StartedEvent`, the simulation world is created |
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
 | Leave | Announced in a frame; the slot frees up | `client.Leave()`, or the connection/world goes away |
-| End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent`; the remaining frames are still simulated. The reason does not reach the clients. Ending in the lobby only closes the server (later joins get `GameEnded`): lobby clients are not told |
+| End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent` with `client.EndReason`; the remaining frames are still simulated. Ending in the lobby tells the waiting players the same way; later joins get `GameEnded` |
 | Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded` |
 
 With Netcode (`Pragma.Dots.Lockstep.Netcode`), the component equivalents in the server world are an entity with
@@ -140,7 +140,7 @@ Late-join loading screen: show `client.SimulatedTicks / (float)client.ConfirmedT
 ```csharp
 if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 {
-    // client.State, LocalSlot, JoinTick, RejectReason, Config, SimulatedTicks, ConfirmedTicks, InterpolationAlpha,
+    // client.State, LocalSlot, JoinTick, RejectReason, EndReason, Config, SimulatedTicks, ConfirmedTicks, InterpolationAlpha,
     // RoundTripTime (NaN until measured), JitterTicks, IsDesynced, DesyncTick,
     // Simulation (null before the start and on non-simulating clients; also LockstepWorlds.TryGetSimulation)
 }
@@ -258,5 +258,4 @@ game's). Replays need the same simulation build.
 | Entities Graphics copies missing | No actor registry in the presentation world, or `waitForActorRegistry` off while the subscene loads late |
 | Actors missing from the simulation | The catalog subscene had not loaded when the simulation was created (`waitForActorRegistry`), or the run-time content (`ActorUtility.CreateRegistry`, `CreatePlaced`) was built after the session started |
 | GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` (Views module) |
-| Lobby clients wait forever after the host ended the match | `EndGame` in the lobby does not tell them: leave or disconnect them yourself |
 | Desync errors | Use the `pragma-lockstep-desync` skill |

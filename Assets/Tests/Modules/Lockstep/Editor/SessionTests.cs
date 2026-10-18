@@ -287,6 +287,97 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void EndGame_InTheLobby_TellsTheWaitingPlayersWhy()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 3), latency: 0.05, jitter: 0.04))
+            {
+                var a = session.AddClient();
+                var b = session.AddClient();
+                var ended = new List<LockstepClient>();
+                a.EndedEvent += ended.Add;
+                b.EndedEvent += ended.Add;
+                session.Run(1, VaryingInput);
+                Assert.AreEqual(LockstepClientState.Lobby, a.State);
+
+                session.Server.EndGame(LockstepEndReason.ServerShutdown);
+                session.Run(1, VaryingInput);
+
+                Assert.AreEqual(LockstepServerState.Ended, session.Server.State);
+                CollectionAssert.AreEquivalent(new[] { a, b }, ended, "each waiting player hears it once");
+                foreach (var client in new[] { a, b })
+                {
+                    Assert.AreEqual(LockstepClientState.Ended, client.State);
+                    Assert.AreEqual(LockstepEndReason.ServerShutdown, client.EndReason);
+                    Assert.IsNull(client.Simulation, "a match that never started has no simulation");
+                }
+
+                var late = session.AddClient();
+                session.Run(1, VaryingInput);
+                Assert.AreEqual(LockstepClientState.Rejected, late.State);
+                Assert.AreEqual(LockstepJoinRejectReason.GameEnded, late.RejectReason);
+            }
+        }
+
+        [Test]
+        public void EndGame_DuringTheMatch_LetsEveryClientFinishTheClosedTicks()
+        {
+            using (var session = new SessionHarness(Settings(), latency: 0.05, jitter: 0.04))
+            {
+                var a = session.AddClient();
+                var b = session.AddClient();
+                session.Run(3, VaryingInput);
+                Assert.AreEqual(LockstepClientState.Running, a.State);
+
+                session.Server.EndGame();
+                var closed = session.Server.ClosedTicks;
+                session.Run(2, VaryingInput);
+
+                Assert.AreEqual(closed, session.Server.ClosedTicks, "no tick is closed after the end");
+                foreach (var client in new[] { a, b })
+                {
+                    Assert.AreEqual(LockstepClientState.Ended, client.State);
+                    Assert.AreEqual(LockstepEndReason.Finished, client.EndReason);
+                    Assert.AreEqual(closed, client.SimulatedTicks, "the client simulated every closed tick");
+                }
+                Assert.IsEmpty(session.Desyncs);
+                TestUtility.AssertSameChecksums(a, b, 5);
+            }
+        }
+
+        [Test]
+        public void Signals_ReachTheNextTick_TheSameOnEveryClient()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 1), latency: 0.05, jitter: 0.04))
+            {
+                var first = session.AddClient(SignalOptions());
+                session.Run(3, VaryingInput);
+                // Replays the match from tick 0, many ticks per frame: the signals must not depend on the pace.
+                var late = session.AddClient(SignalOptions());
+                session.Run(3, VaryingInput);
+
+                Assert.IsEmpty(session.Desyncs);
+                TestUtility.AssertSameChecksums(first, late, 10);
+                foreach (var client in new[] { first, late })
+                {
+                    var entityManager = client.Simulation.World.EntityManager;
+                    using (var counters = entityManager.CreateEntityQuery(typeof(TestTickSignalCounter)))
+                    using (var signals = entityManager.CreateEntityQuery(typeof(TestTickSignal)))
+                    {
+                        var counter = counters.GetSingleton<TestTickSignalCounter>();
+                        Assert.Greater(counter.received, 100);
+                        Assert.AreEqual(0, counter.stale, "every signal was seen on the tick after it was published, and only then");
+                        Assert.AreEqual(counter.sent - counter.received, signals.CalculateEntityCount(), "only the last tick's signals are left");
+                    }
+                }
+            }
+        }
+
+        private static LockstepSimulationOptions SignalOptions()
+        {
+            return TestUtility.Options(typeof(TestGameplaySystem), typeof(TestTickSignalSystem));
+        }
+
+        [Test]
         public void FullSession_RejectsExtraPlayers()
         {
             var settings = Settings(minPlayers: 1);

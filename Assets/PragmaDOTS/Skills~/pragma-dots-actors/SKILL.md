@@ -83,7 +83,7 @@ type), `PlacementScale` (along its local axes; X where a uniform scale is needed
 `AddBuffer` (fill the buffer right away: adding anything else invalidates it), `SetComponentEnabled`, `DependsOn(asset)`
 (bake again when that asset changes). `DrawGizmos(in ActorGizmoContext)` draws the part of a placed actor in the scene
 view (`ActorGizmos.DrawCircle`, `DrawRectangle`). `[DefaultActorPart]` (with an `Order`) puts a part into every new
-definition.
+definition; `Replaces = typeof(OtherPart)` stands in for another default part.
 
 Rules for `Build`:
 
@@ -184,6 +184,7 @@ for (var i = 0; i < level.Actors.Count; i++)
 
 | Part (menu) | Module | Adds |
 |---|---|---|
+| *Local Transform* (`LocalTransformPart`) | core | Unity's `LocalTransform` at the placement and `LocalToWorld`; a non-uniform scale goes into a `PostTransformMatrix` |
 | *Transform* (`TransformPart`) | Lockstep | `LockstepTransform` from the placement and the X of its scale; *Interpolate* (on by default) adds `LockstepTransformPrevious` |
 | *Entity Id* (`EntityIdPart`) | Lockstep | `LockstepEntityId` |
 | *Navigation/Grid*, *Obstacle*, *Agent*, *Avoidance* | Navigation | The grid of a map (with its terrain), obstacles, walking agents, avoidance |
@@ -191,28 +192,15 @@ for (var i = 0; i < level.Actors.Count; i++)
 | *View* (`ViewPart`) | Views | `EntityViewKey`: the actor's key unless the part names another |
 | A subclass of `StateMachinePart<TMachine, TState>` | State machines | A machine component of the game, entering the initial state on its first update |
 
-The Transform and Entity Id parts are `[DefaultActorPart]`: new definitions start with them when the lockstep module is
-on. The Stats module has no part: give stats from a part of the game (`builder.AddBuffer<LockstepStat>()`, see the
+New definitions start with the parts marked `[DefaultActorPart]`: Local Transform in a game without lockstep; with the
+lockstep module its Transform (which replaces Local Transform) and Entity Id. The Stats module has no part: give stats from a part of the game (`builder.AddBuffer<LockstepStat>()`, see the
 `pragma-lockstep-gameplay` skill).
 
 ## Without the lockstep module
 
-Actors then have no transform part. A game on Unity transforms writes one:
-
-```csharp
-[Serializable, ActorPartMenu("Unity Transform"), DefaultActorPart]
-public sealed class LocalTransformPart : ActorPart
-{
-    public override void Build(IActorBuilder builder)
-    {
-        var placement = builder.Placement;
-        builder.AddComponent(LocalTransform.FromPositionRotationScale((float3)placement.position, (quaternion)placement.rotation, (float)builder.PlacementScale.x));
-        builder.AddComponent(new LocalToWorld { Value = float4x4.identity });
-    }
-}
-```
-
-and calls `ActorUtility.ResolveTypes(entityManager)` after the catalog and the maps have loaded. Determinism is then
+Actors get Unity's transform from the core *Local Transform* part, which new definitions start with, and the game
+calls `ActorUtility.ResolveTypes(entityManager)` after the catalog and the maps have loaded. Spawned prefabs stand at
+the identity: set their `LocalTransform`. Determinism is then
 up to the game; `FixedPoint` fields still keep part data exact.
 
 ## Editor

@@ -11,5 +11,11 @@ namespace Pragma.Dots.Actors
     {
         /// <summary>Where the part goes among the default parts, lowest first; ties go by class name.</summary>
         public int Order { get; set; }
+
+        /// <summary>
+        /// A default part this one stands in for: when both are compiled, new definitions get only this one (the transform
+        /// of the Lockstep module replaces <see cref="LocalTransformPart"/>).
+        /// </summary>
+        public Type Replaces { get; set; }
     }
 }

@@ -54,9 +54,10 @@ ghosts) uses it alone.
   inheriting from a parent. A catalog makes them the types a world spawns by key, maps place them with overrides, and
   the editor shows what a definition inherits and previews placed actors with their views. The same parts bake into
   subscenes or build at run time; the modules bring parts of their own.
-- **[Utilities](#utilities)** (`Pragma.Dots.Utils`). `FixedDictionary4096Bytes` (a hash map that fits in a
-  component), `OptionalValue`, inspectors for fixed lists and fixed strings, and `CollisionMatrixToFilter` for projects
-  with Unity Physics. No Entities dependency.
+- **[Utilities](#utilities)** (`Pragma.Dots.Utils`, `Pragma.Dots.Utils.Entities`). `FixedDictionary4096Bytes` (a hash
+  map that fits in a component), `OptionalValue`, inspectors for fixed lists and fixed strings and
+  `CollisionMatrixToFilter` for projects with Unity Physics, without an Entities dependency; signals (one-off events as
+  entities), buffers used as dictionaries of any size and `EntityManager` helpers on top of Entities.
 
 ### The modules
 
@@ -146,6 +147,7 @@ reference.
 | `Pragma.Dots.Mathematics` | core | `FixedPoint`, vectors, quaternion, pose, `FixedMath`, `FixedRandom`, `FixedGrid` | simulation and presentation code |
 | `Pragma.Dots.Utils` | core | `FixedDictionary4096Bytes`, `OptionalValue` | any code |
 | `Pragma.Dots.Utils.Physics` | core, with `com.unity.physics` | `CollisionMatrixToFilter` | presentation code |
+| `Pragma.Dots.Utils.Entities` | core | `Signals`, `SignalCleanupSystem`, `BufferDictionary`, `EntityManagerExtensions` | simulation and presentation code |
 | `Pragma.Dots.Actors` | core | `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `ActorLookup`, `ActorUtility` and the actor components | simulation and presentation code |
 | `Pragma.Dots.Actors.Authoring` | core | `ActorCatalogAuthoring` and the bakers of the actor catalog and of placed actors | authoring code, if any |
 | `Pragma.Dots.Lockstep` | Lockstep | The protocol, the simulation world, its components, checksums, replays, offline mode, presentation helpers, the spatial index, the Transform and Entity Id actor parts and the copy of actors into the simulation | simulation and presentation code |
@@ -310,14 +312,15 @@ are copied into every simulation world, and the module adds the Transform and En
 
 | Part | Module | Adds |
 |---|---|---|
+| Local Transform (`LocalTransformPart`) | core | `LocalTransform` at the placement (identity on the prefab of a type) and `LocalToWorld`; a scale that differs between the axes goes into a `PostTransformMatrix`, as baking does. In a subscene it takes over the baked entity's transform (`TransformUsageFlags.ManualOverride`) |
 | Transform (`TransformPart`) | Lockstep | `LockstepTransform`: the pose of a placed actor and the X of its scale, identity on the prefab of a type (spawning code places it); with *Interpolate*, `LockstepTransformPrevious` |
 | Entity Id (`EntityIdPart`) | Lockstep | `LockstepEntityId` |
 | Navigation/Agent, Obstacle, Avoidance, Grid | Navigation | See [Navigation](#navigation) |
 | Vision/Source, Grid | Vision | See [Vision](#vision) |
 | View (`ViewPart`) | Views | `EntityViewKey`: the actor's key, unless the part names another; see [Views](#views) |
 
-The Transform part is the lockstep one. A game without the lockstep module gives its actors a transform with a part of
-its own (see the `LocalTransformPart` below).
+New definitions start with Unity's transform (Local Transform); with the lockstep module they start with its Transform
+and Entity Id parts instead, since the lockstep Transform replaces the Unity one (`[DefaultActorPart(Replaces = ...)]`).
 
 A component or buffer element of the game becomes a part without code: give the type `[ActorComponent]` (and
 `[Serializable]`, so Unity keeps its values). The part menu lists it, and the inspector edits its fields; `FixedPoint`
@@ -337,7 +340,7 @@ A part with logic (several components, values worked out from others, references
 `FixedPose`) and `PlacementScale` (along its local axes; X where a uniform scale is needed), `HasPart<T>()`,
 `AddComponent`, `AddBuffer` (fill the buffer before adding anything else), `SetComponentEnabled`, `DependsOn` (bake
 again when an asset changes). `DrawGizmos` draws the part of a placed actor in the scene view. `[DefaultActorPart]`
-puts a part into every new definition.
+puts a part into every new definition (`Order` sorts them, `Replaces` names a default part it stands in for).
 
 ```csharp
 [Serializable, ActorPartMenu("Combat/Weapon")]
@@ -349,22 +352,6 @@ public sealed class WeaponPart : ActorPart
     public override void Build(IActorBuilder builder)
     {
         builder.AddComponent(new Weapon { range = _range, projectile = new FixedString32Bytes(_projectile != null ? _projectile.Key : "") });
-    }
-}
-```
-
-A part that gives an actor Unity's transform, for a game without lockstep (`[DefaultActorPart]` adds it to new
-definitions):
-
-```csharp
-[Serializable, ActorPartMenu("Unity Transform"), DefaultActorPart]
-public sealed class LocalTransformPart : ActorPart
-{
-    public override void Build(IActorBuilder builder)
-    {
-        var placement = builder.Placement;
-        builder.AddComponent(LocalTransform.FromPositionRotationScale((float3)placement.position, (quaternion)placement.rotation, (float)builder.PlacementScale.x));
-        builder.AddComponent(new LocalToWorld { Value = float4x4.identity });
     }
 }
 ```
@@ -461,7 +448,7 @@ argument). The parts are deterministic for that: terrains, for instance, are sam
 ## Utilities
 
 `Pragma.Dots.Utils` holds small types that DOTS games keep needing. It depends neither on the rest of the package nor
-on Entities.
+on Entities; `Pragma.Dots.Utils.Entities` (same namespace) adds the helpers that need Entities.
 
 | Type | Use |
 |---|---|
@@ -477,6 +464,74 @@ In simulation state use keys whose hash is the same on every machine: integers, 
 `Pragma.Dots.Utils.Editor` draws `FixedString32Bytes` to `FixedString4096Bytes` fields as text fields (text past the
 capacity is cut) and `FixedList32Bytes<T>` to `FixedList4096Bytes<T>` fields as arrays whose elements use their own
 property drawers (a `FixedPoint` element shows as a number), capped at the list's capacity.
+
+### Signals
+
+One-off events as entities: a signal is an entity with a component of the game (the event and its data) and a
+`SignalTag`. Consumers read it with an ordinary query, and every signal is destroyed at the end of the update, just
+before the end-of-update command buffer plays back: by `SignalCleanupSystem` in `SimulationSystemGroup`, and by
+`LockstepSignalCleanupSystem` at the end of a lockstep tick.
+
+```csharp
+public struct UnitDied : IComponentData
+{
+    public uint unitId;
+    public int killerSlot;
+}
+
+// Publish, also from a job (Publish(sortKey, signal) on a parallel writer):
+var commandBuffer = SystemAPI.GetSingleton<EndSimulationEntityCommandBufferSystem.Singleton>().CreateCommandBuffer(state.WorldUnmanaged);
+commandBuffer.Publish(new UnitDied { unitId = id, killerSlot = slot });
+
+// Consume, in any system of the next update:
+foreach (var died in SystemAPI.Query<RefRO<UnitDied>>().WithAll<SignalTag>())
+{
+    // ...
+}
+```
+
+- **Lifetime.** Published through the end-of-update command buffer, the usual way, a signal is created after the
+  cleanup: it lives through the whole next update, and every system of that update sees it once. Published at once
+  (`entityManager.Publish(signal)`) or through a buffer played back earlier, it is seen by the systems that follow, up
+  to the end of the same update.
+- **In a lockstep simulation** signals are state like any other: published through the end-of-tick buffer, they are
+  hashed between the two ticks and seen on the next one by every client. The presentation may skip ticks, so effects
+  and sounds read a tick-stamped buffer instead ([Effects and sounds](#effects-and-sounds)).
+- A signal without data is a tag of its own (`Publish(new Spawned())`). A world without either group destroys its
+  signals itself: `entityManager.DestroyEntity` of a query over `SignalTag`.
+
+### Buffer dictionaries
+
+A dynamic buffer used as a dictionary of any size, where `FixedDictionary4096Bytes` would not fit: the game's element
+type names its key (`IDictionaryElement<TKey>`), and `BufferDictionary` keeps the elements sorted by it.
+
+```csharp
+[InternalBufferCapacity(0)]
+public struct Cooldown : IBufferElementData, IDictionaryElement<int>
+{
+    public int ability;
+    public int ticksLeft;
+
+    public int Key { get => ability; set => ability = value; }
+}
+
+cooldowns.GetOrAdd(ability).ticksLeft = 30;   // a reference to the entry, added when missing
+if (cooldowns.TryGet(ability, out var cooldown)) { }
+cooldowns.Remove(ability);
+```
+
+- `IndexOf` (the index, or the complement of where the key would go), `ContainsKey`, `TryGet`, `GetOrAdd` (also with
+  `out bool added`), `Remove`; Burst-compatible.
+- Iterating the buffer visits the entries in key order, whatever order they were added in: deterministic for keys
+  with a deterministic `CompareTo` (integers, fixed strings; not `Entity`). A lookup costs O(log n), an add or a remove
+  O(n) for the elements it moves.
+- Change the entries only through these methods (or keep the buffer sorted yourself), and never change a key in place.
+
+### EntityManager extensions
+
+`TryGetComponent(entity, out component)` and `TryGetBuffer(entity, isReadOnly, out buffer)`: false for an entity that
+does not exist or lacks it. Entities covers the rest: `AddComponent` and `RemoveComponent` do nothing (and return
+false) when the component is already there or already gone, and `AddComponentData` also sets an existing component.
 
 ## Lockstep
 
@@ -729,6 +784,7 @@ Or let the package spawn and move views for you: GameObject prefabs bound to an 
 | | `LockstepTransformHistorySystem` | Copies `LockstepTransform` into `LockstepTransformPrevious` for interpolation |
 | | `LockstepBeginSimulationEntityCommandBufferSystem` | Plays back buffers recorded for the start of the tick |
 | | your systems | Ordered with `[UpdateBefore]` / `[UpdateAfter]`, or in your own subgroups |
+| last | `LockstepSignalCleanupSystem` | Destroys the signals of the tick ([Signals](#signals)) |
 | last | `LockstepEndSimulationEntityCommandBufferSystem` | Plays back buffers recorded during the tick |
 | last | `LockstepEntityIdSystem` | Assigns `LockstepEntityId`s to new entities and rebuilds `LockstepEntityIdMap` |
 
@@ -1092,9 +1148,9 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   world: the server announces the leave in a frame and the slot becomes free. A new config joins again over the same
   connection.
 - **End.** `RequestEnd` / `server.EndGame(reason)` stops closing ticks and tells everybody;
-  `client.EndedEvent` fires and the client finishes simulating the frames it already has. The reason does not reach
-  the clients. Ending in the lobby only closes the server: later joins are rejected with `GameEnded`, and the clients
-  waiting in the lobby are not told.
+  `client.EndedEvent` fires, `client.EndReason` says why (`Finished`, or `ServerShutdown` when the server config goes
+  away) and the client finishes simulating the frames it already has. Ending in the lobby tells the players waiting
+  there the same way (they never simulate), and later joins are rejected with `GameEnded`.
 - **Rejection.** `client.RejectedEvent` reports `LockstepJoinRejectReason`: `InvalidRequest`, `ProtocolMismatch`,
   `SimulationMismatch` (a different build), `SessionFull`, `GameInProgress` (late join is off), `GameEnded`.
 
@@ -1111,6 +1167,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `PlaybackSpeed` | How fast the playout runs: 1 is real time, 0 holds the picture (replays) |
 | `RoundTripTime`, `JitterTicks` | Network measurements |
 | `IsDesynced`, `DesyncTick`, `LocalChecksums` | Desync state |
+| `EndReason` | Why the match ended, once `State` is `Ended` |
 | `StartedEvent`, `DesyncedEvent`, `EndedEvent`, `RejectedEvent` | Events |
 | `SetInput`, `AddCommand`, `Join`, `Leave`, `ExportReplay` | Actions |
 
@@ -2153,6 +2210,7 @@ public partial struct SpellActiveState : ISystem
 | `Core/Utils/Runtime` | `Pragma.Dots.Utils`: `FixedDictionary4096Bytes`, `OptionalValue` |
 | `Core/Utils/Editor` | `Pragma.Dots.Utils.Editor`: drawers of fixed lists and fixed strings |
 | `Core/Utils/Physics` | `Pragma.Dots.Utils.Physics`: `CollisionMatrixToFilter` |
+| `Core/Utils/Entities` | `Pragma.Dots.Utils.Entities`: signals and their cleanup, `BufferDictionary`, `EntityManagerExtensions`; `SignalTag` in `Components` |
 | `Core/Editor` | `Pragma.Dots.Editor`: the modules page |
 | `Modules/Lockstep/Runtime/Protocol` | `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays and `LockstepReplayHost`, loopback network |
 | `Modules/Lockstep/Runtime/Simulation` | `LockstepSimulation`, the system group, command buffer systems, frame application, checksums, entity ids |

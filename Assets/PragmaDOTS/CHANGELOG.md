@@ -158,6 +158,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DataLength` gives its size. Outside ECS, `LockstepClient.AddCommand(payload, data)`. Large commands are fragmented on
   the wire and reach every client in one tick.
 - The `pragma-dots-actors` Claude Code skill: content as actors, in any Entities game.
+- `Pragma.Dots.Utils.Entities`, taken from PragmaCommonDOTS: signals, one-off events as entities (`Publish` on an
+  `EntityManager`, a command buffer or a parallel writer, `SignalTag`), destroyed once per update by
+  `SignalCleanupSystem` (end of `SimulationSystemGroup`) and `LockstepSignalCleanupSystem` (end of a lockstep tick),
+  both before the end-of-update command buffer; `BufferDictionary`, a dynamic buffer of the game's
+  `IDictionaryElement<TKey>` kept sorted by key (`IndexOf`, `ContainsKey`, `TryGet`, `GetOrAdd`, `Remove`), Burst-
+  compatible and iterated in key order; `EntityManagerExtensions.TryGetComponent` and `TryGetBuffer`.
+- `LocalTransformPart` in the core: Unity's `LocalTransform` and `LocalToWorld` (with a `PostTransformMatrix` for a
+  non-uniform scale) for games without lockstep; while baking, a part that adds Unity's transform takes over the
+  entity's transform (`TransformUsageFlags.ManualOverride`), since baking strips it otherwise. `DefaultActorPartAttribute.Replaces`: the lockstep Transform part
+  replaces it in new definitions.
+- `LockstepClient.EndReason`: why the server ended the match.
 - State machines (`Pragma.Dots.StateMachines`, module `PRAGMA_DOTS_STATE_MACHINES`, needs only the core), taken from
   PragmaCommonDOTS and redesigned for jobs: a machine component of the game holds a `StateMachine` (current,
   previous and requested state, ticks in the state; states are the values of an enum), a
@@ -205,6 +216,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `LockstepServer.EndGame` in the lobby told nobody: the players waiting there stayed in `Lobby`. They now get the
+  end of the match like the players of a running one, and every client reads the reason, which it used to drop.
 - An editor and a player build reported a desync on tick 0 with identical state: the checksum's archetype signature
   counted the types the editor alone adds — the shared `EditorRenderData` on baked entities and the `HideInHierarchy`
   tag on the world time entity. The signature now lists only the types the checksum hashes (unmanaged components,

@@ -382,6 +382,18 @@ These came up while building on Entities; neither reference package deals with t
     a serialized array (a `[SerializeReference]` generic box), so their own drawers apply; the physics helper compiles
     only when Unity Physics is installed (`versionDefines`), and its cache keeps the group index of each call.
 
+    Later the signals, the buffer dictionary and the `EntityManager` helpers followed, into
+    `Pragma.Dots.Utils.Entities`. Signals keep their model (an entity per event with a tag, all destroyed once per
+    update), but the cleanup now runs before the end-of-update command buffer, so that signals published through it,
+    the usual way and the one for jobs, live through the next update instead of depending on the order of two
+    `OrderLast` systems; the lockstep simulation has a cleanup of its own at the end of the tick, as its world has no
+    `SimulationSystemGroup`. The dictionary was a hash map in a buffer of a generic element: it needed a registration
+    attribute per key and value type, hashed with `EqualityComparer` (managed, not Burst), never grew, and kept its slot
+    states in the byte enum nested in a generic struct that Burst 2.0 compiles wrong. It is now a buffer of the game's
+    own element sorted by key: binary search, no registration, and iteration in key order, the same on every machine,
+    at the price of O(n) inserts. Of the `EntityManager` helpers only the reads of what may be missing stayed:
+    Entities 6.6 does the rest itself.
+
 17. **Actors: content as assets of parts.** Three earlier projects authored entities three ways: prefabs assembled
     from MonoBehaviour parts with a string identifier and a preview of the view (DawnOfWar's composite authoring),
     ScriptableObject configs of `[SerializeReference]` data parts keyed by hierarchical tags and turned into entities

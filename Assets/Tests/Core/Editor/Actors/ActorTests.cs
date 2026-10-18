@@ -5,6 +5,8 @@ using Pragma.Dots.Actors;
 using Pragma.Dots.Mathematics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Transforms;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -175,6 +177,39 @@ namespace Pragma.Dots.Tests
                 Assert.AreEqual(placement, built.pose);
                 Assert.AreEqual(authoring.GetPlacementScale(), built.scale);
             }
+        }
+
+        [Test]
+        public void LocalTransformPart_PlacesTheActor_AndKeepsANonUniformScaleApart()
+        {
+            var wall = Definition("wall", null, new string[0], new LocalTransformPart());
+            var rotation = FixedQuaternion.RotateY(FixedMath.HalfPi);
+            using (var world = new World("Actors"))
+            {
+                var entityManager = world.EntityManager;
+                var uniform = ActorUtility.CreatePlaced(entityManager, wall, new FixedPose(new FixedVector3(1, 2, 3), rotation), new FixedVector3(2, 2, 2), null, 1);
+                var local = entityManager.GetComponentData<LocalTransform>(uniform);
+                Assert.AreEqual(new float3(1, 2, 3), local.Position);
+                Assert.AreEqual(((quaternion)rotation).value, local.Rotation.value);
+                Assert.AreEqual(2f, local.Scale);
+                Assert.IsFalse(entityManager.HasComponent<PostTransformMatrix>(uniform));
+                Assert.AreEqual(local.ToMatrix(), entityManager.GetComponentData<LocalToWorld>(uniform).Value);
+
+                var stretched = ActorUtility.CreatePlaced(entityManager, wall, FixedPose.Identity, new FixedVector3(4, 1, 1), null, 2);
+                Assert.AreEqual(1f, entityManager.GetComponentData<LocalTransform>(stretched).Scale, "the scale goes to the matrix");
+                Assert.AreEqual(float4x4.Scale(4, 1, 1), entityManager.GetComponentData<PostTransformMatrix>(stretched).Value);
+                Assert.AreEqual(float4x4.Scale(4, 1, 1), entityManager.GetComponentData<LocalToWorld>(stretched).Value);
+            }
+        }
+
+        [Test]
+        public void DefaultParts_AreSortedByOrder_WithoutTheOnesAnotherDefaultReplaces()
+        {
+            var types = ActorDefinition.SelectDefaultParts(new[] { typeof(TestDefaultPartLate), typeof(TestDefaultPartReplaced), typeof(TestDefaultPartReplacing) });
+            CollectionAssert.AreEqual(new[] { typeof(TestDefaultPartReplacing), typeof(TestDefaultPartLate) }, types);
+
+            types = ActorDefinition.SelectDefaultParts(new[] { typeof(TestDefaultPartLate), typeof(TestDefaultPartReplaced) });
+            CollectionAssert.AreEqual(new[] { typeof(TestDefaultPartReplaced), typeof(TestDefaultPartLate) }, types, "without its replacement it stays");
         }
 
         private static ActorComponentPart<TestActorValue> Value(int value) => new ActorComponentPart<TestActorValue>(new TestActorValue { value = value });

@@ -25,7 +25,8 @@ Deeper reference:
 ## Modules
 
 The core is always compiled and knows nothing of lockstep: `Pragma.Dots.Mathematics` (fixed-point math),
-`Pragma.Dots.Actors` (+ `.Authoring`) and `Pragma.Dots.Utils`. Everything else is a module that compiles only with its
+`Pragma.Dots.Actors` (+ `.Authoring`), `Pragma.Dots.Utils` and `Pragma.Dots.Utils.Entities` (signals, buffer
+dictionaries). Everything else is a module that compiles only with its
 scripting define, all off after installation:
 
 | Module | Define | Assembly to reference | Needs |
@@ -316,6 +317,15 @@ foreach (var (player, commands, commandData) in
   a small struct and create them after the loop, or use the end-of-tick command buffer.
 - **Per-entity random streams:** `FixedRandom.CreateFromIndex(info.seed, lockstepEntityId.value)` stored in a component,
   created once `LockstepEntityId.IsAssigned` (the tick after creation; on the creation tick every id is still 0).
+- **Events between systems (a unit died, a building finished):** signals of the core
+  (`Pragma.Dots.Utils.Entities`): `commandBuffer.Publish(new UnitDied { ... })` through the end-of-tick buffer (also
+  from jobs, with a sort key), read on the next tick with `SystemAPI.Query<RefRO<UnitDied>>().WithAll<SignalTag>()`;
+  `LockstepSignalCleanupSystem` destroys them at the end of that tick. Every client sees the same signals on the same
+  tick; the presentation may miss them when it skips ticks.
+- **A per-entity map of any size (cooldowns by ability, counts by type):** a buffer of the game's element with
+  `IDictionaryElement<TKey>` used through `BufferDictionary` (`GetOrAdd(key)` returns a reference, `TryGet`, `Remove`):
+  sorted by key, so iterating it is deterministic, unlike a hash map. Up to about 340 small entries,
+  `FixedDictionary4096Bytes` fits in a component instead (iteration follows the keys' hashes).
 - **One-shot effects for the presentation:** append `{ tick, kind, position }` to a singleton buffer in the
   simulation and trim old entries; the presentation plays entries newer than the last tick it handled (it may skip
   ticks when it catches up).

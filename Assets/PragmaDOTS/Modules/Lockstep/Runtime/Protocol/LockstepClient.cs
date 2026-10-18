@@ -70,6 +70,9 @@ namespace Pragma.Dots.Lockstep
         public LockstepClientSettings Settings => _settings;
         public LockstepClientState State { get; private set; }
         public LockstepJoinRejectReason RejectReason { get; private set; }
+
+        /// <summary>Why the server ended the match, once <see cref="State"/> is <see cref="LockstepClientState.Ended"/>.</summary>
+        public LockstepEndReason EndReason { get; private set; }
         /// <summary>Slot assigned by the server, or -1.</summary>
         public int LocalSlot { get; private set; }
         /// <summary>Tick on which the local player enters the simulation.</summary>
@@ -230,6 +233,7 @@ namespace Pragma.Dots.Lockstep
                 case LockstepMessageType.End:
                     if (State == LockstepClientState.Running || State == LockstepClientState.Lobby)
                     {
+                        EndReason = (LockstepEndReason)reader.ReadByte();
                         State = LockstepClientState.Ended;
                         EndedEvent?.Invoke(this);
                     }

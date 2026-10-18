@@ -298,27 +298,25 @@ namespace Pragma.Dots.Lockstep
             }
         }
 
-        /// <summary>Stops closing ticks and tells every client the match is over.</summary>
+        /// <summary>
+        /// Stops closing ticks and tells every player the match is over, also the players waiting in the lobby; later joins
+        /// are rejected with <see cref="LockstepJoinRejectReason.GameEnded"/>.
+        /// </summary>
         public void EndGame(LockstepEndReason reason = LockstepEndReason.Finished)
         {
             if (State == LockstepServerState.Ended)
             {
                 return;
             }
-            var wasRunning = State == LockstepServerState.Running;
             State = LockstepServerState.Ended;
-            if (!wasRunning)
-            {
-                return;
-            }
             foreach (var connection in _connectionOrder)
             {
-                if (!connection.started)
+                if (connection.slot < 0)
                 {
                     continue;
                 }
                 // Flush what was closed so clients can finish the match.
-                while (connection.nextFrameToSend < ClosedTicks)
+                while (connection.started && connection.nextFrameToSend < ClosedTicks)
                 {
                     SendFramesMessage(connection);
                 }

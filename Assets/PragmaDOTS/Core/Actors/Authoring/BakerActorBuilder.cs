@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Pragma.Dots.Mathematics;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Transforms;
 
 namespace Pragma.Dots.Actors.Authoring
 {
@@ -36,6 +37,11 @@ namespace Pragma.Dots.Actors.Authoring
 
         public void AddComponent<T>(in T component) where T : unmanaged, IComponentData
         {
+            // Baking strips the Unity transform of an entity that asks for none: a part that writes one takes it over.
+            if (typeof(T) == typeof(LocalTransform) || typeof(T) == typeof(LocalToWorld) || typeof(T) == typeof(PostTransformMatrix))
+            {
+                _baker.AddTransformUsageFlags(_entity, TransformUsageFlags.ManualOverride);
+            }
             if (ComponentType.ReadWrite<T>().IsZeroSized)
             {
                 _baker.AddComponent(_entity, ComponentType.ReadWrite<T>());

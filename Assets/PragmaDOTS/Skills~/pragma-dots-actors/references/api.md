@@ -25,7 +25,7 @@ Namespace and assembly `Pragma.Dots.Actors` (the core, always compiled) unless n
 |---|---|
 | `ActorPart` | `[Serializable]` abstract base: `Build(IActorBuilder)`, `virtual DrawGizmos(in ActorGizmoContext)`. Serialized by reference: renaming needs `[MovedFrom]` |
 | `[ActorPartMenu("Group/Name")]` | Where the part menu lists a part class |
-| `[DefaultActorPart]` | Puts the part into every new definition; `Order` sorts them (then the full type name) |
+| `[DefaultActorPart]` | Puts the part into every new definition; `Order` sorts them (then the full type name), `Replaces` names a default part this one stands in for when both are compiled |
 | `[ActorComponent("Group/Name")]` | On an unmanaged `[Serializable]` `IComponentData` or `IBufferElementData`: the menu offers it as `ActorComponentPart<T>` / `ActorBufferPart<T>`, whose inspector edits the value |
 | `IActorBuilder` | `FixedString32Bytes Key`, `bool IsPlaced`, `FixedPose Placement` (identity on a type's prefab), `FixedVector3 PlacementScale` (along the local axes), `HasPart<T>()`, `AddComponent<T>(in T)`, `DynamicBuffer<T> AddBuffer<T>()` (fill it before adding anything else), `SetComponentEnabled<T>(bool)`, `DependsOn(UnityEngine.Object)` (bake again when it changes; nothing at run time) |
 | `BakerActorBuilder` (`Pragma.Dots.Actors.Authoring`), `EntityManagerActorBuilder` | The builder while a subscene bakes, and at run time |
@@ -72,8 +72,11 @@ Namespace and assembly `Pragma.Dots.Actors` (the core, always compiled) unless n
 
 By menu path, module in brackets:
 
+- *Local Transform* (`LocalTransformPart`, core) - Unity's `LocalTransform` at the placement (identity on a type's
+  prefab) and `LocalToWorld`; a scale that differs between the axes goes into a `PostTransformMatrix`.
+  `[DefaultActorPart]`, replaced by the lockstep Transform.
 - *Transform* (`TransformPart`, Lockstep) - `LockstepTransform` from the placement and the X of its scale (identity on
-  a type's prefab); *Interpolate* (on by default) adds `LockstepTransformPrevious`. `[DefaultActorPart]`.
+  a type's prefab); *Interpolate* (on by default) adds `LockstepTransformPrevious`. `[DefaultActorPart]`, replacing Local Transform.
 - *Entity Id* (`EntityIdPart`, Lockstep) - `LockstepEntityId`. `[DefaultActorPart]`.
 - *Navigation/Grid* (`NavGridPart`, Navigation) - the navigation grid of a map (size centred on the placement, cell
   size, agent radius) and its ground: a `TerrainData` covering the grid exactly, its world Y and the steepest walkable
