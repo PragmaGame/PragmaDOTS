@@ -1,0 +1,24 @@
+{
+    "name": "Pragma.Dots.Navigation",
+    "rootNamespace": "Pragma.Dots.Navigation",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Mathematics",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_LOCKSTEP",
+        "PRAGMA_DOTS_NAVIGATION"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

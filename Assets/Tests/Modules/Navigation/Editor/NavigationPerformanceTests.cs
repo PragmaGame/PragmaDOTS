@@ -2,14 +2,15 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using NUnit.Framework;
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Navigation;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Navigation;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// How long navigation takes on a crowded map: eight armies of 150 agents on a 256 by 256 grid with buildings and a

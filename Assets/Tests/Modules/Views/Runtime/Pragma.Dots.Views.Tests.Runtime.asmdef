@@ -1,0 +1,23 @@
+{
+    "name": "Pragma.Dots.Views.Tests.Runtime",
+    "rootNamespace": "Pragma.Dots.Tests",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Views",
+        "Unity.Entities",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "PRAGMA_DOTS_LOCKSTEP",
+        "PRAGMA_DOTS_VIEWS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

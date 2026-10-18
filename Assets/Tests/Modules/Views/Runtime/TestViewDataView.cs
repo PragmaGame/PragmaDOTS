@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Views;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>Records the values it shows, the binds and the bind breaks; it shows changes only.</summary>
     public sealed class TestViewDataView : EntityComponentViewUnmanaged<TestViewData>

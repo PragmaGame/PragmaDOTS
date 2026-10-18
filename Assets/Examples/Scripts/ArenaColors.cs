@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>The player colors; <see cref="ArenaAvatar.colorIndex"/> picks one.</summary>
     public static class ArenaColors

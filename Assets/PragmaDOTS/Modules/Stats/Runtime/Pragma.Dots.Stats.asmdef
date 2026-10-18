@@ -1,0 +1,24 @@
+{
+    "name": "Pragma.Dots.Stats",
+    "rootNamespace": "Pragma.Dots.Stats",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Mathematics",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_LOCKSTEP",
+        "PRAGMA_DOTS_STATS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

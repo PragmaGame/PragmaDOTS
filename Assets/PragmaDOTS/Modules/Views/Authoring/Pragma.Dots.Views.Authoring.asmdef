@@ -1,0 +1,31 @@
+{
+    "name": "Pragma.Dots.Views.Authoring",
+    "rootNamespace": "Pragma.Dots.Views.Authoring",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Views",
+        "Unity.Entities",
+        "Unity.Entities.Hybrid",
+        "Unity.Collections",
+        "Unity.NetCode",
+        "Unity.NetCode.Authoring.Hybrid"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_LOCKSTEP",
+        "PRAGMA_DOTS_VIEWS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.netcode",
+            "expression": "6.6.0",
+            "define": "PRAGMA_DOTS_UNITY_NETCODE"
+        }
+    ],
+    "noEngineReferences": false
+}

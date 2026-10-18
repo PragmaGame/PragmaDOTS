@@ -1,0 +1,32 @@
+{
+    "name": "Pragma.Dots.Lockstep.Netcode",
+    "rootNamespace": "Pragma.Dots.Lockstep.Netcode",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Mathematics",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Mathematics",
+        "Unity.NetCode",
+        "Unity.Networking.Transport"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_LOCKSTEP",
+        "PRAGMA_DOTS_UNITY_NETCODE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.netcode",
+            "expression": "6.6.0",
+            "define": "PRAGMA_DOTS_UNITY_NETCODE"
+        }
+    ],
+    "noEngineReferences": false
+}

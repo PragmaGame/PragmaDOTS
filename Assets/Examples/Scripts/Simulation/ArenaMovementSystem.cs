@@ -1,9 +1,10 @@
-using Pragma.Lockstep.Mathematics;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>Moves avatars, keeps them inside the arena and apart from each other.</summary>
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]

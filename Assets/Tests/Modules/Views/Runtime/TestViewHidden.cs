@@ -1,6 +1,6 @@
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// Enableable tag of the view tests: the entities of <c>TestViewSpawnSystem</c> have it on from tick 8 to tick 12, and

@@ -1,13 +1,14 @@
 using System.Text.RegularExpressions;
 using NUnit.Framework;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Views;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.TestTools;
 using Object = UnityEngine.Object;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>GameObject views (the adapted ECV) driven by <see cref="TestViewSpawnSystem"/>.</summary>
     public class EntityViewTests

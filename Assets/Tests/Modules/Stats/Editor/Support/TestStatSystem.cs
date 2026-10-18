@@ -1,9 +1,10 @@
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Stats;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Stats;
 using Unity.Collections;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// Changes stats the way gameplay does, picking from the simulation's random generator: on about every other tick one

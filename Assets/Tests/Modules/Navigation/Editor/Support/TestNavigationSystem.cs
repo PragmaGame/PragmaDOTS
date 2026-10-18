@@ -1,8 +1,9 @@
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Navigation;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Navigation;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// Drives agents through a scripted match: sends them to their targets on tick 2, drops a wall across their way on tick

@@ -1,0 +1,22 @@
+{
+    "name": "Pragma.Dots.Lockstep.Editor",
+    "rootNamespace": "Pragma.Dots.Lockstep.Editor",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Unity.Entities",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_LOCKSTEP"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

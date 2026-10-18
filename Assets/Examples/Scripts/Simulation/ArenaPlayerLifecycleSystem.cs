@@ -1,10 +1,11 @@
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Views;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>Spawns an avatar on the tick a player joins and removes it on the tick the player leaves.</summary>
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]

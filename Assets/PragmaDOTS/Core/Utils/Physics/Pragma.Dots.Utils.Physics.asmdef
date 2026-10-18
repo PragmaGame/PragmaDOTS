@@ -1,0 +1,24 @@
+{
+    "name": "Pragma.Dots.Utils.Physics",
+    "rootNamespace": "Pragma.Dots.Utils",
+    "references": [
+        "Unity.Physics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_UNITY_PHYSICS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.physics",
+            "expression": "1.0.0",
+            "define": "PRAGMA_DOTS_UNITY_PHYSICS"
+        }
+    ],
+    "noEngineReferences": false
+}

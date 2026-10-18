@@ -1,7 +1,7 @@
-using Pragma.Lockstep.Mathematics;
+using Pragma.Dots.Mathematics;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     public struct ArenaAvatar : IComponentData
     {

@@ -1,13 +1,14 @@
 using NUnit.Framework;
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Navigation;
-using Pragma.Lockstep.Vision;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Navigation;
+using Pragma.Dots.Vision;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     public class VisionTests
     {

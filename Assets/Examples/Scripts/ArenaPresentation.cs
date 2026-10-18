@@ -1,9 +1,10 @@
 using System.Collections.Generic;
+using Pragma.Dots.Lockstep;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>
     /// Builds the arena and draws the scoreboard straight from the simulation world, which presentation code only reads.

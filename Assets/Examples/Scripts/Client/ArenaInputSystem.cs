@@ -1,10 +1,11 @@
+using Pragma.Dots.Lockstep;
 using Unity.Entities;
 using UnityEngine;
 #if LOCKSTEP_EXAMPLES_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>
     /// Reads the local devices once per frame and writes the lockstep input. Runs in client and offline worlds only;

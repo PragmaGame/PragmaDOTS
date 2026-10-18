@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Views;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>Records the contents of every buffer pushed to it, as comma-separated values.</summary>
     public sealed class TestViewElementView : EntityBufferView<TestViewElement>

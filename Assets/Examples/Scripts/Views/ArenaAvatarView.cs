@@ -1,7 +1,7 @@
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Views;
 using UnityEngine;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>
     /// Paints the avatar in its player's color and draws the local player's avatar a little bigger. It shows

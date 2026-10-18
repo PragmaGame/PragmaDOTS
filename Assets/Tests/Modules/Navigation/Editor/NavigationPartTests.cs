@@ -1,11 +1,12 @@
 using NUnit.Framework;
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Navigation;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Navigation;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     public class NavigationPartTests
     {

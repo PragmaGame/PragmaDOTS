@@ -1,10 +1,11 @@
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Views;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>Turns each player's input and commands into movement, dashes, shots and color changes.</summary>
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]

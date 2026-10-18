@@ -1,13 +1,14 @@
 using System.Collections.Generic;
 using System.IO;
-using Pragma.Lockstep.Netcode;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Lockstep.Netcode;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.NetCode;
 using Unity.Networking.Transport;
 using UnityEngine;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>
     /// Starts the sample in one of three ways: offline (in-process server), host (server and client worlds in this

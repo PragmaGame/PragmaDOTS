@@ -1,13 +1,15 @@
 # PragmaDOTSLokstep
 
-Development project of **Pragma DOTS Lockstep** (`com.pragma.dotslockstep`): deterministic lockstep for Unity DOTS
-(Entities), built on top of Netcode for Entities.
+Development project of **Pragma DOTS** (`com.pragma.dots`): building blocks for multiplayer games on Unity DOTS
+(Entities). Fixed-point math and the utilities are always there; deterministic lockstep, navigation, vision, stats and
+GameObject views are modules a game turns on.
 
-Every client runs the same simulation in its own isolated Entities world. Only player input travels over the network:
-a server orders it into confirmed frames, and every client steps its simulation with exactly the same frames. The
-server never simulates, and the bandwidth depends on the number of players, not on the number of entities.
+With the lockstep module every client runs the same simulation in its own isolated Entities world. Only player input
+travels over the network: a server orders it into confirmed frames, and every client steps its simulation with exactly
+the same frames. The server never simulates, and the bandwidth depends on the number of players, not on the number of
+entities.
 
-**Documentation: [Assets/PragmaDOTSLockstep/README.md](Assets/PragmaDOTSLockstep/README.md).**
+**Documentation: [Assets/PragmaDOTS/README.md](Assets/PragmaDOTS/README.md).**
 
 ## Highlights
 
@@ -17,7 +19,8 @@ server never simulates, and the bandwidth depends on the number of players, not 
 - A server that orders input and never stalls, adaptive input timing, a jitter-aware playout buffer.
 - Desync detection by majority vote with a per-component breakdown, replays (watched through ordinary clients, at any
   speed, from any player's view), late join, offline mode.
-- Netcode for Entities integration (host, dedicated server, thin clients) and a transport-agnostic core.
+- Netcode for Entities integration (host, dedicated server, thin clients), compiled when Netcode is installed, over a
+  transport-agnostic protocol.
 - Deterministic navigation: a walkability grid with ground heights baked from a terrain (steep slopes blocked), obstacles,
   A* with string pulling in integer math, agents that walk on the ground and re-plan when obstacles change.
 - Vision: what every player slot sees, stamped on a grid from vision sources on every tick, the same on every client,
@@ -29,30 +32,29 @@ server never simulates, and the bandwidth depends on the number of players, not 
   changes, interpolated transforms, a pool each project can replace.
 - Actors: units, buildings and map objects described in assets (a key, tags, a parent, parts), spawned by key from a
   catalog, placed on maps with overrides, previewed in the editor with their views, baked or built at run time.
-- Modules: navigation, vision, stats and views compile only when their scripting define is on
-  (*Project Settings > Pragma > Lockstep*); the core and the utilities (`FixedDictionary4096Bytes`, `OptionalValue`,
-  fixed list and string inspectors) are always there.
+- Modules: lockstep, navigation, vision, stats and views compile only when their scripting define is on
+  (*Project Settings > Pragma > DOTS*); navigation, vision, stats and views build on lockstep. Fixed-point math and the
+  utilities (`FixedDictionary4096Bytes`, `OptionalValue`, fixed list and string inspectors) are always there.
 
 ## Installation
 
 ```
-https://github.com/PragmaGame/PragmaDOTSLokstep.git?path=Assets/PragmaDOTSLockstep
+https://github.com/PragmaGame/PragmaDOTSLokstep.git?path=Assets/PragmaDOTS
 ```
 
-Requires Unity 6000.6+, Entities 6.6 and Netcode for Entities 6.6. See the
-[package documentation](Assets/PragmaDOTSLockstep/README.md#installation).
+Requires Unity 6000.6+ and Entities 6.6; playing lockstep over a network needs Netcode for Entities 6.6. See the
+[package documentation](Assets/PragmaDOTS/README.md#installation).
 
 ## Repository
 
-Only `Assets/PragmaDOTSLockstep` ships; everything else is the development project.
+Only `Assets/PragmaDOTS` ships; everything else is the development project.
 
 | Path | Contents |
 |---|---|
-| `Assets/PragmaDOTSLockstep` | The package: `Core` (math, protocol, simulation, Netcode), `Modules` (navigation, vision, stats, views), `Utils`, Claude Code skills (`Skills~`) |
+| `Assets/PragmaDOTS` | The package: `Core` (math, utilities), `Modules` (lockstep, navigation, vision, stats, views), Claude Code skills (`Skills~`) |
 | `Assets/Examples` | *Lockstep Arena*, a playable sample: offline, host and join ([README](Assets/Examples/README.md)) |
-| `Assets/Tests/Core/Editor` | EditMode tests of the core: math, serialization, checksums, simulation, spatial index, sessions, replays, presentation, Netcode integration |
-| `Assets/Tests/Modules` | EditMode tests of each module (`Navigation`, `Vision`, `Stats`, `Views`), compiled with the module; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
-| `Assets/Tests/Utils/Editor` | EditMode tests of the utilities |
+| `Assets/Tests/Core/Editor` | EditMode tests of the core: math and utilities |
+| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, actors, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
 | [`documentation.md`](documentation.md) | Design notes: architecture, decisions, what was taken from ME.BECS, Photon Quantum and ECV, and why |
 | [`mebecs_research.md`](mebecs_research.md) | How ME.BECS implements determinism and networking |
 | [`photon_research.md`](photon_research.md) | How Photon Quantum implements determinism and prediction/rollback |

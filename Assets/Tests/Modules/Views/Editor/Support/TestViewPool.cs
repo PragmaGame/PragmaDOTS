@@ -1,8 +1,8 @@
 using System;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Views;
 using Object = UnityEngine.Object;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>A pool that never reuses anything and counts what the manager does with it.</summary>
     internal sealed class TestViewPool : IEntityViewPool, IDisposable

@@ -1,7 +1,8 @@
 # Lockstep Arena (sample)
 
-The sample uses the GameObject views module: its assembly compiles only with `PRAGMA_LOCKSTEP_VIEWS` on
-(*Project Settings > Pragma > Lockstep*). This project has every module on.
+The sample uses the lockstep and GameObject views modules and Netcode for Entities: its assembly compiles only with
+`PRAGMA_DOTS_LOCKSTEP` and `PRAGMA_DOTS_VIEWS` on (*Project Settings > Pragma > DOTS*) and `com.unity.netcode`
+installed. This project has every module on.
 
 Open `Scenes/LockstepArena.unity` and press Play. The panel in the top-left corner starts the game:
 

@@ -1,10 +1,11 @@
 using NUnit.Framework;
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Vision;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Vision;
 using Unity.Entities;
 using UnityEngine;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     public class VisionPartTests
     {

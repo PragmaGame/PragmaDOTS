@@ -1,8 +1,9 @@
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Views;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// A timeline for the view tests. Tick 3: an entity with key A at x = 10 (moving +1 every tick) and the

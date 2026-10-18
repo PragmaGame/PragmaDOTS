@@ -1,4 +1,4 @@
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>The <c>EntityViewKey</c>s of the sample, bound to view prefabs in <c>Views/ArenaViewConfig.asset</c>.</summary>
     public static class ArenaViewKeys

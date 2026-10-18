@@ -1,6 +1,6 @@
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Views;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>Counts the pushes of the tag <see cref="TestViewHidden"/>.</summary>
     public sealed class TestViewHiddenView : EntityComponentView<TestViewHidden>

@@ -1,6 +1,6 @@
-using Pragma.Lockstep.Mathematics;
+using Pragma.Dots.Mathematics;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>Tuning of the sample, written with exact fractions so every value is deterministic.</summary>
     public static class ArenaRules

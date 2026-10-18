@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1187af462b17cd648b2cb0aeae41d997, type: 3}
   m_Name: ArenaViewConfig
-  m_EditorClassIdentifier: Pragma.Lockstep.Views::Pragma.Lockstep.Views.EntityViewConfig
+  m_EditorClassIdentifier: Pragma.Dots.Views::Pragma.Dots.Views.EntityViewConfig
   _binders:
   - <Key>k__BackingField: Arena Avatar
     <View>k__BackingField: {fileID: 6001541401556382876, guid: 4285145a9c1ce3d4fad8036fd5a6c70a, type: 3}

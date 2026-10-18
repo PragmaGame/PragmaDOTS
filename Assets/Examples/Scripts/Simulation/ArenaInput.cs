@@ -1,5 +1,5 @@
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>
     /// What one player sends every tick. Keep inputs small and quantized: the bytes of this struct are what travels

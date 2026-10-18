@@ -1,8 +1,8 @@
-# Pragma DOTS Lockstep: design notes
+# Pragma DOTS: design notes
 
 How the package is built, what it took from ME.BECS, Photon Quantum and ECV, what it deliberately left out and why.
 The research behind it is in [mebecs_research.md](mebecs_research.md) and [photon_research.md](photon_research.md); the
-user documentation is the [package README](Assets/PragmaDOTSLockstep/README.md).
+user documentation is the [package README](Assets/PragmaDOTS/README.md).
 
 No code was copied from ME.BECS or Photon Quantum. The few algorithms they share with this package (Q16 fixed point,
 PCG32, SplitMix64) are public, standard algorithms, implemented here from scratch. The GameObject views are a port of
@@ -46,7 +46,7 @@ ECV, the view layer of the author's own DawnOfWar project, adapted to lockstep.
 
 ## Comparison
 
-| Topic | ME.BECS | Photon Quantum | Pragma DOTS Lockstep |
+| Topic | ME.BECS | Photon Quantum | Pragma DOTS |
 |---|---|---|---|
 | ECS | Own | Own | Unity Entities |
 | Model | Optimistic event lockstep with rollback | Prediction and rollback on server-confirmed input | Strict lockstep on server-confirmed frames |
@@ -265,7 +265,7 @@ These came up while building on Entities; neither reference package deals with t
     way.
 
 11. **Navigation on a grid.** RTS units need paths around buildings, and NavMesh is float-based and built per
-    platform. `Pragma.Lockstep.Navigation` keeps a walkability grid in the simulation world as plain state: a buffer
+    platform. `Pragma.Dots.Navigation` keeps a walkability grid in the simulation world as plain state: a buffer
     of obstacle counts, so obstacles stamp and release cells in any order with the same result, and the checksum
     covers it. Obstacles are entities; the rectangle each one stamped is kept in a cleanup component, which is how a
     destroyed building releases its cells. The search is A* with integer costs and a heap with a strict total order;
@@ -366,15 +366,15 @@ These came up while building on Entities; neither reference package deals with t
     not, and every compiled system that carries the simulation filter joins every simulation world and enters
     `DefaultSimulationHash`. A game without navigation would still create the navigation systems (idle, but in the
     hash and in the build). So navigation, vision, stats and views are modules whose assemblies have a
-    `defineConstraints` entry (`PRAGMA_LOCKSTEP_NAVIGATION`...), off by default: an unused module is not compiled. The
+    `defineConstraints` entry (`PRAGMA_DOTS_NAVIGATION`...), off by default: an unused module is not compiled. The
     core (protocol, simulation, math, Netcode) and the utilities are always on, and modules depend on the core only,
     so any subset compiles. Scripting defines are per build target, and a server and clients built with different
-    modules refuse each other through the simulation hash; the *Project Settings > Pragma > Lockstep* page writes a
+    modules refuse each other through the simulation hash; the *Project Settings > Pragma > DOTS* page writes a
     define to every build target at once and warns when a module is on for some targets only. Each module carries its
     own authoring assembly, since one assembly of all the bakers could not compile without every module.
 16. **Utilities taken from PragmaCommonDOTS.** A few general types (`FixedDictionary4096Bytes`, `OptionalValue`, the
     fixed list and fixed string drawers, `CollisionMatrixToFilter`) moved here so that projects no longer need that
-    package. They live in `Pragma.Lockstep.Utils`, the lowest layer, with no dependency on the core, so that they can
+    package. They live in `Pragma.Dots.Utils`, the lowest layer, with no dependency on the core, so that they can
     move out again without touching it. The move fixed what lockstep use exposed: the dictionary lost entries when
     removed slots filled the table and could not grow past 16 entries, and its slot states were an enum nested in the
     generic struct, whose value 2 Burst 2.0 compiled as 0, emptying removed slots that probe chains still ran through
@@ -403,6 +403,19 @@ These came up while building on Entities; neither reference package deals with t
     actor built in a scratch world to the game's own view parts. In an open subscene the preview lives outside it,
     since baking does not skip hidden objects. Navigation grids sample terrains in fixed point so that a grid built at
     run time matches on every machine.
+
+18. **Lockstep as a module of a DOTS package.** The package outgrew lockstep: views, actors and the utilities serve any
+    Entities game, it replaces PragmaCommonDOTS, and some of the projects it is meant for use Entities without Netcode.
+    So it is Pragma DOTS (`com.pragma.dots`, assemblies and namespaces `Pragma.Dots.*`), whose core is the fixed-point
+    math and the utilities, and lockstep is a module (`PRAGMA_DOTS_LOCKSTEP`) like the others. A package cannot have an
+    optional dependency, so Netcode for Entities is no longer one: the Netcode transport of lockstep compiles when
+    `com.unity.netcode` is installed (`versionDefines`), and the transport-agnostic protocol, offline mode, replays and
+    tests need nothing more. Navigation, vision, stats and views run in the lockstep simulation group, on its tick and
+    its transforms, so they require the lockstep module: the rule that a module depends on the core alone became a
+    module depends on the core and on the modules it declares. Their assemblies list both defines, so a hand-edited set
+    of defines still compiles, and the settings page turns a module on together with Lockstep and off together with it.
+    Splitting the simulation from the protocol was not worth it: a game that simulates without a network runs lockstep
+    offline, over the loopback.
 
 ## Limitations and future work
 

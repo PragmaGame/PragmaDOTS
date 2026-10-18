@@ -227,7 +227,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3b85043fa14450f4cb260ee9bc6dacac, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Pragma.Lockstep.Views::Pragma.Lockstep.Views.EntityView
+  m_EditorClassIdentifier: Pragma.Dots.Views::Pragma.Dots.Views.EntityView
 --- !u!114 &1877587207719316974
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -239,7 +239,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 815d5575d68ff5b4ca0f8e9a1f41f479, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Pragma.Lockstep.Views::Pragma.Lockstep.Views.TransformComponentView
+  m_EditorClassIdentifier: Pragma.Dots.Views::Pragma.Dots.Views.TransformComponentView
 --- !u!114 &840251402774613071
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -251,7 +251,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 381683fcf808d8d46bc24475d290678c, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Pragma.Lockstep.Examples::Pragma.Lockstep.Examples.ArenaAvatarView
+  m_EditorClassIdentifier: Pragma.Dots.Examples::Pragma.Dots.Examples.ArenaAvatarView
   _renderers:
   - {fileID: 4367743845811549709}
   _body: {fileID: 2435940974200342250}

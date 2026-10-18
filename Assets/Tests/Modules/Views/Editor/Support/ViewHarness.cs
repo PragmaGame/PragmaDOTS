@@ -1,10 +1,11 @@
 using System;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Views;
 using Unity.Entities;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// A presentation world with the GameObject view systems, two view prefabs bound to the keys of

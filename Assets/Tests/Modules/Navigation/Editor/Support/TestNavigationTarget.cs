@@ -1,7 +1,7 @@
-using Pragma.Lockstep.Mathematics;
+using Pragma.Dots.Mathematics;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// Where <see cref="TestNavigationSystem"/> sends an agent, and where it sends it back to, with the goals of the groups

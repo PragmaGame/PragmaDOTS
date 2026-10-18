@@ -1,13 +1,14 @@
 using System.Text.RegularExpressions;
 using NUnit.Framework;
-using Pragma.Lockstep.Mathematics;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
+using Pragma.Dots.Views;
 using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.TestTools;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     public class ViewPartTests
     {

@@ -1,9 +1,10 @@
-using Pragma.Lockstep.Mathematics;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 
-namespace Pragma.Lockstep.Examples
+namespace Pragma.Dots.Examples
 {
     /// <summary>Flies projectiles, knocks back the avatars they hit and scores for the shooter.</summary>
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Views;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>Records every value pushed to it, repeated ones included.</summary>
     public sealed class TestViewDataRawView : EntityComponentView<TestViewData>

@@ -1,0 +1,25 @@
+{
+    "name": "Pragma.Dots.Views.Editor",
+    "rootNamespace": "Pragma.Dots.Views.Editor",
+    "references": [
+        "Pragma.Dots.Lockstep",
+        "Pragma.Dots.Mathematics",
+        "Pragma.Dots.Views",
+        "Unity.Entities",
+        "Unity.Collections"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "PRAGMA_DOTS_LOCKSTEP",
+        "PRAGMA_DOTS_VIEWS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

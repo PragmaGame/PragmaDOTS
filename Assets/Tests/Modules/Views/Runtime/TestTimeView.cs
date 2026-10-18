@@ -1,7 +1,8 @@
 using System.Collections.Generic;
-using Pragma.Lockstep.Views;
+using Pragma.Dots.Lockstep;
+using Pragma.Dots.Views;
 
-namespace Pragma.Lockstep.Tests
+namespace Pragma.Dots.Tests
 {
     /// <summary>Records every tick of <see cref="LockstepTime"/> pushed to it.</summary>
     public sealed class TestTimeView : EntityComponentView<LockstepTime>
