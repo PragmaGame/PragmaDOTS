@@ -201,16 +201,17 @@ for (var i = 0; i < level.Actors.Count; i++)
 | *Local Transform* (`LocalTransformPart`) | core | Unity's `LocalTransform` at the placement and `LocalToWorld`; a non-uniform scale goes into a `PostTransformMatrix` |
 | *Transform* (`TransformPart`) | Lockstep | `LockstepTransform` from the placement and the X of its scale; *Interpolate* (on by default) adds `LockstepTransformPrevious` |
 | *Entity Id* (`EntityIdPart`) | Lockstep | `LockstepEntityId` |
-| *Navigation/Grid*, *Obstacle*, *Agent*, *Avoidance* | Navigation | The grid of a map (with its terrain), obstacles, walking agents, avoidance |
-| *Vision/Grid*, *Source* | Vision | The vision grid of a map, what sees |
-| *View* (`ViewPart`) | Views | `EntityViewKey`: the actor's key unless the part names another |
-| A subclass of `StateMachinePart<TMachine, TState>` | State machines | A machine component of the game, entering the initial state on its first update |
+| *Navigation/Grid*, *Obstacle*, *Agent*, *Avoidance* | Navigation (`pragma-dots-navigation`) | The grid of a map (with its terrain), obstacles, walking agents, avoidance |
+| *Vision/Grid*, *Source* | Vision (`pragma-dots-vision`) | The vision grid of a map, what sees |
+| *View* (`ViewPart`) | Views (`pragma-dots-views`) | `EntityViewKey`: the actor's key unless the part names another |
+| A subclass of `StateMachinePart<TMachine, TState>` | State machines (`pragma-dots-state-machines`) | A machine component of the game, entering the initial state on its first update |
 
 New definitions start with the parts marked `[DefaultActorPart]`: Local Transform in a game without lockstep; with the
 lockstep module its Transform (which replaces Local Transform) and Entity Id. The Stats module's parts are generic
 bases the game closes over its enums in one line each:
 `[Serializable, ActorPartMenu("Stats")] public sealed class UnitStatsPart : StatsPart<StatType, StatTarget> { }` and
-`UnitGrantsPart : StatGrantsPart<StatType, StatTarget>` (see the `pragma-lockstep-gameplay` skill).
+`UnitGrantsPart : StatGrantsPart<StatType, StatTarget>` (see the `pragma-dots-stats` skill). The skill of each module
+covers what its parts are for and how gameplay drives them.
 
 ## Without the lockstep module
 

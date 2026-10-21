@@ -12,10 +12,7 @@ noted. Fields of components are public and camelCase; settings and options are P
 - Transforms
 - Entity ids
 - Actors in the simulation
-- Navigation
-- Vision
-- Stats
-- State machines
+- Modules on top
 - Spatial index
 - Bytes helpers
 - Core utilities
@@ -140,89 +137,11 @@ Spawning: `var actors = ActorRegistryQuery.Get(ref state, _registry); if (actors
 The registry always exists in simulation worlds made by the built-in systems; it is empty when a baking subscene had
 not loaded, so start the session with `waitForActorRegistry`.
 
-## Navigation
+## Modules on top
 
-Namespace and assembly `Pragma.Dots.Navigation`: the Navigation module (`PRAGMA_DOTS_NAVIGATION`, needs Lockstep).
-
-| Type | Members |
-|---|---|
-| `LockstepNavGrid` | Singleton. `FixedVector2 origin` (corner of cell 0, 0 on X and Z), `FixedPoint cellSize`, `int width`, `int height`, `FixedPoint agentRadius`, `FixedPoint maxSlope` (rise over run; steeper cells are blocked, 0 none), `uint version` (changes with any cell); `Layout` (the `FixedGrid` of its cells), `CellCount`, `CornerCount`, `IsValid`, `Contains`, `GetIndex`, `GetCornerIndex`, `GetCell`, `WorldToCell`, `GetCellCenter`, `ClampToGrid` |
-| `LockstepNavCell` | Buffer on the grid entity, row by row along X: `ushort blockers`, `byte clearance` (rings of free cells to the nearest blocked cell or the edge: 0 blocked, 1 next to one), `IsWalkable`. Sized by `LockstepNavObstacleSystem`, which starts every steep cell with one permanent blocker and computes the clearance again whenever a cell changes |
-| `LockstepNavHeight` | Optional buffer on the grid entity: `FixedPoint value`, world Y of the ground at each cell corner, `CornerCount` of them row by row along X. Static: read when the cells are built. Agents walk on it |
-| `LockstepNavObstacle` | `FixedVector2 center`, `FixedVector2 size`: a rectangle in the space of the entity's `LockstepTransform` (yaw, uniform scale), world space without one |
-| `LockstepNavObstacleFootprint` | Cleanup component the obstacle system writes: the stamped world rectangle (`center`, `right`, `halfSize`, `Forward`); `Create(obstacle, transform)`, `Create(obstacle)` |
-| `LockstepNavAgent` | `speed`, `pace` (walks no faster than this while above 0: the pace of its group), `angularSpeed` (radians per second, 0 turns at once), `turnInPlaceAngle` (radians: facing further than this from where its path leads, it stands and turns on the spot first; 0 walks while it turns), `stoppingDistance`, `radius` (body: overlapping agents are pushed apart; larger than the grid's agent radius, it keeps to cells with room for it; 0 takes no part), `destination`, `groupGoal` (the point of the group it was sent with: requests of a tick to the same goal cell share one search), `status`, `isPathPartial`, `waypointIndex`, `gridVersion`; `SetDestination(FixedVector3)` (alone), `SetDestination(destination, groupGoal)` (with a group), `Replan()` (plan again, same destination and group), `MustTurnInPlace(rotation, heading)`, `Stop()` (the agent's cell is checked again: stopped inside an obstacle, it walks out), `IsMoving`, `WalkSpeed`. An idle or arrived agent on a cell that becomes blocked, or too narrow for its body, walks to the nearest one it fits in |
-| `LockstepNavStatus` | `Idle`, `Requested` (planned in the next navigation update), `Moving`, `Arrived` |
-| `LockstepNavWaypoint` | Buffer: `FixedVector3 position`; the path, end included, Y of the destination (not walked to: agents walk on X and Z, their Y is the ground) |
-| `LockstepNavVelocity` | `FixedVector2 value` (what the agent walked on its last step, units per second on X and Z), `FixedVector2 desired` (what avoidance picked for this step). With a radius, the agent takes part in avoidance |
-| `LockstepNavAvoidance` | Singleton that turns avoidance on: `FixedPoint timeHorizon` (seconds ahead), `FixedPoint neighbourDistance`, `int maxNeighbours` (at most `MAX_NEIGHBOURS`), `FixedPoint crowdCost` (cells a standing agent adds to a path through the cells its body covers; 0 plans through crowds); `Default` (1.5 s, 5 units, 8, 4 cells). Without it agents plan and walk their paths as if alone |
-| `LockstepNavSystemGroup` | In `LockstepSimulationSystemGroup`: `LockstepNavObstacleSystem` (first; keeps the clearance), `LockstepNavPathSystem` (groups requests, one search per group, paths in parallel), `LockstepNavAvoidanceSystem` (picks avoiding velocities, with a `LockstepNavAvoidance`), `LockstepNavMoveSystem`, `LockstepNavSeparationSystem` (pushes overlapping agents apart; opposite walkers only sideways). Set destinations before it |
-| `LockstepNavPathMap` | The grid as one agent plans on it: `grid`, `cells`, `clearance` (`GetClearance` of its radius), `crowd` (standing agents per cell, empty for none), `crowdCost`; `new LockstepNavPathMap(grid, cells, clearance = 1)`, `IsPassable(cell)`. In a job, mark the field `[ReadOnly]` and create every array |
-| `LockstepPathfinder` | `new LockstepPathfinder(cellCount, allocator)`, `FindPath(grid, cells, ...)` or `FindPath(map, start, destination, NativeList<FixedVector3> or DynamicBuffer<LockstepNavWaypoint>)` returns `LockstepPathStatus` (`Failed`, `Complete`, `Partial`); a group: `SearchGroup(map, goalCell, startCells)` (one search back from the goal to all starts), `GetChain(startCell, chain)`, `FollowChain(map, start, destination, chain, waypoints)` (`Failed` when the chain does not lead there: plan alone); `TryGetStartCell`, `TryGetEndCell`; `Dispose()`. Keeps scratch memory; one per thread |
-| `LockstepNavigation` | `IsWalkable(grid, cells, cell or position)`, `GetClearance(grid, radius)` (1 up to the agent radius, one more per cell size larger, rounded), `IsPassable(grid, cells, cell or position, clearance)`, `UpdateClearance(grid, cells)` (after stamping cells yourself), `HasLineOfSight(grid, cells, from, to)` (`FixedVector3` or XZ) and `HasLineOfSight(grid, cells, fromXz, toXz, clearance)` (exact, corners count both sides), `TryFindNearestWalkable(grid, cells, cell, out nearest)`, `TryFindNearestPassable(grid, cells, cell, clearance, out nearest)`, `TryStep(grid, cells, from, step[, clearance], out position)` (the passable part of a step: whole, X or Z; never through the corner between blocked cells), `GetStepClearance`, `IsClear(grid, cells, footprint)` (every cell the footprint would block is inside the grid and walkable: where a building may go), `Covers(grid, footprint, cell)` and `GetCoverage(grid, footprint, out min, out max)` (the cells a footprint blocks, outside the grid too, for footprints not stamped yet), `Stamp(grid, cells, footprint, count)` for previews and tests; ground: `HasHeights(grid, heights)`, `GetHeight(grid, heights, xz)` (bilinear, the edge beyond the grid), `ToGround(grid, heights, position)` (unchanged without heights), `IsSteep(grid, heights, cell)` |
-
-Read the cells with `SystemAPI.GetSingletonBuffer<LockstepNavCell>(true).AsNativeArray()` and the grid with
-`SystemAPI.GetSingleton<LockstepNavGrid>()`.
-
-`FixedGrid` (`Pragma.Dots.Mathematics`) is the cell math both grids share: `origin`, `cellSize`, `width`, `height`;
-`CellCount`, `IsValid`, `Contains`, `GetIndex`, `GetCell`, `WorldToCell(xz)` (integer math on raw values, may lie
-outside), `GetCellMin`, `GetCellCenter`, `ClampToGrid`.
-
-## Vision
-
-Namespace and assembly `Pragma.Dots.Vision`: the Vision module (`PRAGMA_DOTS_VISION`, needs Lockstep).
-
-| Type | Members |
-|---|---|
-| `LockstepVisionGrid` | Singleton. `origin`, `cellSize`, `width`, `height` (a `FixedGrid`, `Layout`), `int slotCount` (planes: the session's `maxPlayers`, set by the system), `bool isRevealed` (every query answers true: fog off); `CellCount` (of one plane), `IsValid`, `Contains`, `WorldToCell` |
-| `LockstepVisionCell` | Buffer on the grid entity, plane by plane in slot order, each row by row along X: `bool isVisible`. Sized, cleared and stamped on every tick |
-| `LockstepVisionSource` | `FixedPoint radius` (sight on XZ, up to `LockstepVision.MAX_RADIUS` = 30 000, more counts as that; negative sees nothing), `int slot` (sees for it; outside the session's slots, -1 included, for nobody). Needs `LockstepTransform`. Gameplay keeps both current (owner, a sight stat) |
-| `LockstepVisionSystem` | `OrderLast` in `LockstepSimulationSystemGroup`, before `LockstepEndSimulationEntityCommandBufferSystem`: completes the tick's jobs, sizes the buffer (`slotCount` planes), clears it and stamps every source. The planes show the state the tick ended with |
-| `LockstepVision` | `HasCells(grid, cells)`, `GetPlane(grid, cells, slot)` (one slot's cells, to draw its fog; default for a slot without a plane), `IsVisible(grid, cells, slot, xz)`, `IsVisible(grid, cells, slot, xz, radius)` (a body seen by its edge), `IsCellVisible(grid, cells, slot, cell)`, `Stamp(grid, cells, slot, xz, radius)`. A cell is visible when a circle of sight reaches into it; nothing outside the grid is visible unless revealed |
-
-Read them with `SystemAPI.GetSingletonEntity<LockstepVisionGrid>()` and the buffer of that entity. A command checked
-against vision ("attack only what you see") reads the planes the previous tick left, which is what the player saw.
-
-## Stats
-
-Namespace and assembly `Pragma.Dots.Stats`: the Stats module (`PRAGMA_DOTS_STATS`, needs Lockstep). Its actor parts
-are generic bases the game closes over its enums: `StatsPart<TStat, TTarget>` (`Attributes` of
-`StatAttributeEntry<TStat>`, `Resources` of `StatResourceEntry<TStat>`, `Targets`, `ReceivesGrants`) and
-`StatGrantsPart<TStat, TTarget>` (`Source`, `Grants` of `StatGrantEntry<TStat, TTarget>`), both mergeable;
-`NoStatTarget` for games without targets. An entity built by hand gets `LockstepStat` filled at once, then the empty
-`LockstepStatModifier`, `LockstepStatChange`, `LockstepStatGrantor`, `LockstepStatTarget`.
-
-| Type | Members |
-|---|---|
-| `LockstepStat` | Buffer: `int type` (the game's stat id, `NONE` = 0 is none), `LockstepStatKind kind` (`Attribute`, `Resource`), `FixedPoint value`; attributes: `FixedPoint baseValue`; resources: `int cap` (an attribute type or `NONE`), `LockstepStatCapPolicy capPolicy` (`KeepRatio`, `Clamp`), `FixedPoint max` (the cap fitted to; negative before the first update of a resource that starts full, 0 for one created with an amount). Factories `Attribute(type, baseValue)`, `Resource(type, amount)`, `Resource(type, cap, capPolicy)` (starts full), `Resource(type, cap, capPolicy, amount)` (starts with the amount, at most the cap), also with an enum type; `IsAttribute`, `IsResource`. Each stat once per entity |
-| `LockstepStatModifier` | Buffer, attributes only: `int stat`, `LockstepStatModifierType type`, `LockstepStatStacking stacking`, `FixedPoint value`, `LockstepStatSource source`, `int endTick` (`PERMANENT` = 0: until removed); `Flat`, `AdditivePercent`, `MultiplicativePercent` factories `(stat, value, source = default, endTick = PERMANENT, stacking = Stack)`, also with an enum stat; `IsExpired(tick)` |
-| `LockstepStatModifierType` | `Flat` (adds), `AdditivePercent` (shares summed: 0.25 adds 25 %, a sum of -1 or less gives 0), `MultiplicativePercent` (times 1 + value, stacking; -1 or less gives 0) |
-| `LockstepStatStacking` | `Stack`, `Strongest` (of the `Strongest` modifiers of an attribute with one type and source `kind`, only the largest absolute value applies, the first on a tie) |
-| `LockstepStatChange` | Buffer, resources only: `int stat`, `FixedPoint amount`, `LockstepStatSource source`; `Create(stat, amount, source = default)`, also with an enum stat. Applied and cleared by the next `LockstepStatSystem` update |
-| `LockstepStatGrant` | Buffer of a granting entity: `int target` (`ANY` = 0: every receiver), `LockstepStatModifier modifier`; `Create(modifier, target = ANY)`, also with an enum target |
-| `LockstepStatGrantor` | Buffer of a receiver: `Entity entity`, an entity whose grants it receives. Dropped by the stat system when the entity is gone |
-| `LockstepStatTarget` | Buffer of a receiver: `int value`, a group grants can target; `Create(enum)` |
-| `LockstepStatSource` | `uint kind`, `uint id`, equality. What applied a modifier, grant or change; one source's modifiers are removed together |
-| `LockstepStatSystem` | In `LockstepSimulationSystemGroup`: removes expired modifiers and grants, recalculates the chunks whose stats, modifiers, grantors or targets changed, whose grantors' grants changed or which have pending changes, writes `LockstepStat` only then |
-| `LockstepStats` | Extensions on `DynamicBuffer<LockstepStat>`, each with an `int` or enum type: `TryGet(type, out LockstepStat)`, `TryGetValue`, `TryGetPendingValue(changes, type, out value)` (a resource after the changes not yet applied, for payments), `TryGetBase`, `TrySetBase` (attributes only). `RemoveModifiers(modifiers, source)`, `RemoveGrants(grants, source)` (return the count, keep the order), `Calculate(type, baseValue, NativeArray<LockstepStatModifier>)`, `Id(enum)` |
-
-Attributes, over own modifiers and received grants:
-`value = (base + sum of Flat) * max(0, 1 + sum of AdditivePercent) * product of max(0, 1 + MultiplicativePercent)`; the
-percentage factors stop at 0, the flat part may go below. Resources: the tick's changes are summed, then the amount is
-kept within 0 and the cap; `KeepRatio` keeps the share when the cap changes, `Clamp` keeps the amount. A modifier or
-grant ending on tick T + D was applied on ticks T to T + D - 1 when added on tick T before `LockstepStatSystem`.
-
-## State machines
-
-Namespace and assembly `Pragma.Dots.StateMachines`: the State Machines module (`PRAGMA_DOTS_STATE_MACHINES`, needs
-only the core; works in any world).
-
-| Type | Members |
-|---|---|
-| `StateMachine` | `int current`, `int previous`, `int next` (requested; `NONE` = 0 when none), `int ticksInState` (0 on the update of the transition); `Create(initial)`, `HasRequest`, `Is(state)`, `Entered(state)`, `Exited(state)`, `Request(state)`, `Id(enum)`; every method also takes the game's enum |
-| `IStateMachine` | Marker of a machine component: a struct of the game whose only field is a `StateMachine` (checked when its group is created) |
-| `StateMachineSystemGroup<TMachine>` | Abstract `ComponentSystemGroup`: every update applies the requested transitions of `TMachine` in a parallel Burst job, finished before its systems run, then updates its systems, the states. Declare an empty subclass per machine and place it with `[UpdateInGroup]` |
-| `StateMachinePart<TMachine, TState>` | Abstract actor part: `Initial`; builds the machine with `StateMachine.Create(Initial)`. Declare a `[Serializable]` subclass per machine |
+The types of the navigation, vision, stats, views and state machines modules are listed in the `references/api.md`
+of their skills (`pragma-dots-navigation`, `pragma-dots-stats`, `pragma-dots-views`) or in the skill itself
+(`pragma-dots-vision`, `pragma-dots-state-machines`).
 
 ## Spatial index
 
@@ -260,7 +179,7 @@ Namespace `Pragma.Dots.Utils`, assembly `Pragma.Dots.Utils.Entities` (the core).
 | `LockstepSimulation.World`, `.Tick` (simulated ticks = next tick), `.Config`, `.ComputeChecksum()` | Read only |
 | `LockstepClient.InterpolationAlpha` | Blend factor in `[0, 1]` |
 | `LockstepViewSystem` (presentation worlds, `SimulationSystemGroup` before `TransformSystemGroup`) | Mirrors actors as copies of their type's prefab (Entities Graphics); `LockstepView { Entity simulationEntity }`, `TryGetView`, `ViewCount` |
-| `EntityViewManager.TryGet(World, out manager)` (`Pragma.Dots.Views`) | GameObject views of the entities with an `EntityViewKey`: `TryGetView`, `Attach`, `Detach`, `ForceUpdate`; see `views.md` |
+| `EntityViewManager.TryGet(World, out manager)` (`Pragma.Dots.Views`) | GameObject views of the entities with an `EntityViewKey`: `TryGetView`, `Attach`, `Detach`, `ForceUpdate`; see the `pragma-dots-views` skill |
 
 ## Actor parts
 

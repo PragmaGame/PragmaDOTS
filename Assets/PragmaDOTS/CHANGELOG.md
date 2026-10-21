@@ -4,6 +4,24 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Claude Code skills for the modules: `pragma-dots-navigation`, `pragma-dots-vision`, `pragma-dots-stats`,
+  `pragma-dots-views` and `pragma-dots-state-machines`, each with the setup, the order inside the tick, examples,
+  troubleshooting and (navigation, stats, views) an API reference.
+
+### Changed
+
+- `pragma-lockstep-gameplay` keeps the lockstep module and the core; its sections on the modules moved into their
+  skills, and its views reference became that of `pragma-dots-views`.
+
+### Fixed
+
+- The README's vision example read the cells with `SystemAPI.GetBuffer(entity, true)`, an overload that does not
+  exist: it uses `SystemAPI.GetSingletonBuffer<LockstepVisionCell>(true)`.
+
 ## [0.3.0] - 2026-10-18
 
 ### Added

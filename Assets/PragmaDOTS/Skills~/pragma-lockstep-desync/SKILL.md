@@ -17,7 +17,9 @@ The types below are in namespace and assembly `Pragma.Dots.Lockstep` (the Lockst
 `PRAGMA_DOTS_LOCKSTEP`) unless noted.
 
 Related skills: `pragma-lockstep-gameplay` (how to write simulation code correctly), `pragma-dots-actors` (parts and
-placed actors), `pragma-lockstep-sessions` (settings, replays, debug window). `references/tests.md` holds determinism test templates.
+placed actors), `pragma-lockstep-sessions` (settings, replays, debug window), and the skills of the modules
+(`pragma-dots-navigation`, `pragma-dots-vision`, `pragma-dots-stats`, `pragma-dots-views`, `pragma-dots-state-machines`)
+for their own rules. `references/tests.md` holds determinism test templates.
 
 ## How detection works
 

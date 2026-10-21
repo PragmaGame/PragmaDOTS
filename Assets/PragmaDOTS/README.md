@@ -1797,9 +1797,8 @@ public partial struct VisionOwnerSystem : ISystem
 3. Ask what a slot sees with the grid and its cells:
 
 ```csharp
-var gridEntity = SystemAPI.GetSingletonEntity<LockstepVisionGrid>();
-var grid = SystemAPI.GetComponent<LockstepVisionGrid>(gridEntity);
-var cells = SystemAPI.GetBuffer<LockstepVisionCell>(gridEntity, true).AsNativeArray();
+var grid = SystemAPI.GetSingleton<LockstepVisionGrid>();
+var cells = SystemAPI.GetSingletonBuffer<LockstepVisionCell>(true).AsNativeArray();
 var canAttack = LockstepVision.IsVisible(grid, cells, slot, target.position.Xz, targetRadius);
 ```
 
@@ -2293,9 +2292,14 @@ how to work with it:
 | Skill | Use it for |
 |---|---|
 | `pragma-dots-actors` | Content as actors in any Entities game: definitions, parts, the catalog and its registry, spawning by key, tags, placed actors, the parts of the modules |
-| `pragma-lockstep-gameplay` | Writing simulation code: systems, input, commands, players, `FixedPoint` math, spawning, navigation, vision, stats, state machines; presentation and GameObject views |
+| `pragma-lockstep-gameplay` | Writing simulation code: systems, input, commands, players, `FixedPoint` math, spawning, determinism rules, interpolation |
 | `pragma-lockstep-sessions` | Offline, host, join, dedicated servers, settings, match flow, custom transports, replays |
 | `pragma-lockstep-desync` | Finding and preventing desyncs, determinism tests |
+| `pragma-dots-navigation` | The navigation grid, terrain, obstacles and building placement, agents and group orders, large bodies, avoidance, path queries |
+| `pragma-dots-vision` | The vision grid, sources and their owners, visibility checks in rules, revealing, drawing the fog of war |
+| `pragma-dots-stats` | Attributes and modifiers, resources and caps, damage and payments, grants, the stat parts, the order around the stat system |
+| `pragma-dots-views` | GameObject views: keys, prefabs and parts, update systems, catalogs, picking, lifetimes, pools, editor previews |
+| `pragma-dots-state-machines` | Machine components, their groups and state systems, requests and timing, in lockstep and in any world |
 
 The skills live in the package's `Skills~` folder. Claude Code loads project skills from `.claude/skills` in the
 project root, so copy them there once after installing (and again after updating the package). A package installed

@@ -257,5 +257,5 @@ game's). Replays need the same simulation build.
 | Disconnects when unfocused | `Application.runInBackground = false` |
 | Entities Graphics copies missing | No actor registry in the presentation world, or `waitForActorRegistry` off while the subscene loads late |
 | Actors missing from the simulation | The catalog subscene had not loaded when the simulation was created (`waitForActorRegistry`), or the run-time content (`ActorUtility.CreateRegistry`, `CreatePlaced`) was built after the session started |
-| GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` (Views module) |
+| GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` (Views module, `pragma-dots-views`) |
 | Desync errors | Use the `pragma-lockstep-desync` skill |

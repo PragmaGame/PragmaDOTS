@@ -1,4 +1,4 @@
-# GameObject views reference
+# Views API reference
 
 Namespace `Pragma.Dots.Views` (assembly `Pragma.Dots.Views`): the Views module, `PRAGMA_DOTS_VIEWS`, which needs the
 Lockstep module. `EntityViewConfigAuthoring` is in the namespace and assembly `Pragma.Dots.Views.Authoring`, the actor
