@@ -128,13 +128,13 @@ Tooling: the *Project Settings > Pragma > DOTS* page, the *Window > Pragma > Loc
 In the Package Manager choose **+ > Install package from git URL** and enter:
 
 ```
-https://github.com/PragmaGame/PragmaDOTSLokstep.git?path=Assets/PragmaDOTS
+https://github.com/PragmaGame/PragmaDOTS.git?path=Assets/PragmaDOTS
 ```
 
 Or add it to `Packages/manifest.json`:
 
 ```json
-"com.pragma.dots": "https://github.com/PragmaGame/PragmaDOTSLokstep.git?path=Assets/PragmaDOTS"
+"com.pragma.dots": "https://github.com/PragmaGame/PragmaDOTS.git?path=Assets/PragmaDOTS"
 ```
 
 Append `#<tag or commit>` to the URL to pin a revision.

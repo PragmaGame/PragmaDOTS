@@ -21,9 +21,9 @@
     "email": "pragmagame@gmail.com",
     "url": "https://github.com/PragmaGame"
   },
-  "documentationUrl": "https://github.com/PragmaGame/PragmaDOTSLokstep/blob/master/Assets/PragmaDOTS/README.md",
-  "changelogUrl": "https://github.com/PragmaGame/PragmaDOTSLokstep/blob/master/Assets/PragmaDOTS/CHANGELOG.md",
-  "licensesUrl": "https://github.com/PragmaGame/PragmaDOTSLokstep/blob/master/Assets/PragmaDOTS/LICENSE.md",
+  "documentationUrl": "https://github.com/PragmaGame/PragmaDOTS/blob/master/Assets/PragmaDOTS/README.md",
+  "changelogUrl": "https://github.com/PragmaGame/PragmaDOTS/blob/master/Assets/PragmaDOTS/CHANGELOG.md",
+  "licensesUrl": "https://github.com/PragmaGame/PragmaDOTS/blob/master/Assets/PragmaDOTS/LICENSE.md",
   "license": "MIT",
   "dependencies": {
     "com.unity.entities": "6.6.0",

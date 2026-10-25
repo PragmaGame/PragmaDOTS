@@ -33,7 +33,7 @@ Turn modules on in *Project Settings > Pragma > DOTS*.
 ## Installation
 
 ```
-https://github.com/PragmaGame/PragmaDOTSLokstep.git?path=Assets/PragmaDOTS
+https://github.com/PragmaGame/PragmaDOTS.git?path=Assets/PragmaDOTS
 ```
 
 Requires Unity 6000.6+ and Entities 6.6; playing lockstep over a network needs Netcode for Entities 6.6. See the
