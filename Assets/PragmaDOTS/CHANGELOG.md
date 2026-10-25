@@ -4,6 +4,15 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `FixedMinAttribute` and `FixedRangeAttribute` (`Pragma.Dots.Mathematics`): the limits of a `FixedPoint` field in the
+  inspector, which keeps an edit within them; `[FixedRange]` draws a slider with a number field. Unity's `[Min]` and
+  `[Range]` cannot do it: their drawers run before the type's drawer and break a fixed-point field. The limits are
+  doubles rounded to the nearest step, apply to every element of an array, and `Clamp` applies them in code.
+
 ## [0.3.1] - 2026-10-21
 
 ### Added

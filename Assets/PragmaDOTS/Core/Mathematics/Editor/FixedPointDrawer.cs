@@ -9,15 +9,7 @@ namespace Pragma.Dots.Mathematics.Editor
     {
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            var raw = property.FindPropertyRelative(nameof(FixedPoint.rawValue));
-            EditorGUI.BeginProperty(position, label, property);
-            EditorGUI.BeginChangeCheck();
-            var value = EditorGUI.DoubleField(position, label, raw.longValue / (double)FixedPoint.ONE_RAW);
-            if (EditorGUI.EndChangeCheck())
-            {
-                raw.longValue = ((FixedPoint)value).rawValue;
-            }
-            EditorGUI.EndProperty();
+            FixedPointDrawerUtility.DrawNumber(position, property, label, FixedPoint.MinValue, FixedPoint.MaxValue);
         }
     }
 }

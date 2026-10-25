@@ -154,6 +154,10 @@ outside), `GetCellMin`, `GetCellCenter`, `ClampToGrid`.
 vectors and `FixedQuaternion` as Euler angles in degrees, and stores raw values: serialized authoring fields (actor
 parts) can be fixed-point directly, with no float conversion at bake time.
 
+Limit a `FixedPoint` field with `[FixedMin(min)]` or `[FixedRange(min, max)]` (a slider), never with Unity's `[Min]` or
+`[Range]`: their drawers run before the type's drawer and break the field (a raw struct, an error label). The limits
+are doubles rounded to the nearest step; on an array they apply to every element; `Clamp(value)` applies them in code.
+
 ## Recipes and pitfalls
 
 - **Move toward a target:** `position = FixedMath.MoveTowards(position, target, speed * time.deltaTime);` (`time` is

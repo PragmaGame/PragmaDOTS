@@ -61,8 +61,9 @@ public struct Health : IComponentData
 ```
 
 The part menu then offers *Combat/Health* (`ActorComponentPart<Health>`, or `ActorBufferPart<T>` for an
-`IBufferElementData`), and the inspector edits its public fields; `FixedPoint` fields show as numbers. `[Serializable]`
-is required, or Unity keeps no values.
+`IBufferElementData`), and the inspector edits its public fields; `FixedPoint` fields show as numbers, limited by
+`[FixedMin]` / `[FixedRange]` (Unity's `[Min]` / `[Range]` break them). `[Serializable]` is required, or Unity keeps no
+values.
 
 **A part with logic** (several components, values worked out from others, references to other actors) derives from
 `ActorPart`:

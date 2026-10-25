@@ -48,7 +48,8 @@ ghosts) uses it alone.
 - **[Fixed-point math](#fixed-point-math)** (`Pragma.Dots.Mathematics`). `FixedPoint` (Q47.16), `FixedVector2`,
   `FixedVector3`, `FixedQuaternion`, `FixedPose` and `FixedMath`, shaped after `Mathf`: `Sqrt`, trigonometry, `Exp`,
   `Log` and `Pow` in integer math, bit-identical in Mono, IL2CPP and Burst. `FixedRandom`, a deterministic PCG32
-  generator, and `FixedGrid`. The inspector edits fixed-point fields as numbers. No Entities dependency.
+  generator, and `FixedGrid`. The inspector edits fixed-point fields as numbers, within the limits of `[FixedMin]` and `[FixedRange]`. No
+  Entities dependency.
 - **[Actors](#actors)** (`Pragma.Dots.Actors`). Units, buildings and map objects described in assets, without code:
   an `ActorDefinition` with a key, tags and parts (any component of the game, a path-finding agent, a view),
   inheriting from a parent. A catalog makes them the types a world spawns by key, maps place them with overrides, and
@@ -286,6 +287,17 @@ PCG32 (XSH-RR) with 128 bits of state, seeded through SplitMix64.
 
 `FixedPoint` fields are edited as decimal numbers, `FixedVector2`/`FixedVector3` as vectors and `FixedQuaternion` as Euler angles in degrees.
 The editor converts once and stores raw values.
+
+Unity's `[Min]` and `[Range]` do not work on fixed-point fields: their drawers come before the drawer of the field's
+type and handle only float and int (and, for `[Min]`, vector) fields. `[FixedMin(min)]` and `[FixedRange(min, max)]`
+limit a `FixedPoint` field: an edit outside the limits becomes the nearest one, and `[FixedRange]` draws a slider with a
+number field. The limits are doubles rounded to the nearest step (`Min`, `Max`); on an array they apply to every
+element, and `Clamp` applies them in code.
+
+```csharp
+[SerializeField, FixedMin(0)] private FixedPoint _speed = 2;
+[SerializeField, FixedRange(0, 1)] private FixedPoint _chance = FixedPoint.Half;
+```
 
 ## Actors
 
