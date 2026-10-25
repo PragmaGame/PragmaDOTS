@@ -48,6 +48,29 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Index_LoadsDefinitionsThatAreNotInMemory()
+        {
+            var scout = Create("Scout", "key_test_unloaded");
+            AssetDatabase.SaveAssets();
+            Resources.UnloadAsset(scout);
+            var validated = 0;
+            void OnChanged(ActorDefinition definition) => validated++;
+            ActorDefinition.EditorChanged += OnChanged;
+            try
+            {
+                var found = ActorKeyIndex.Find("key_test_unloaded");
+
+                Assert.Greater(validated, 0, "loading validates a definition, which resets the index while it is built");
+                Assert.IsNotNull(found);
+                Assert.AreEqual($"{FOLDER}/Scout.asset", AssetDatabase.GetAssetPath(found));
+            }
+            finally
+            {
+                ActorDefinition.EditorChanged -= OnChanged;
+            }
+        }
+
+        [Test]
         public void Drawer_StoresTheKeyOfThePickedDefinition()
         {
             var scout = Create("Scout", "key_test_scout");

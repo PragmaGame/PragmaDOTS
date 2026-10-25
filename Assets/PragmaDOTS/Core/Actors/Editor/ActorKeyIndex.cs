@@ -18,12 +18,14 @@ namespace Pragma.Dots.Actors.Editor
             }
 
             // A definition found earlier may have been deleted or given another key since.
-            if (_definitions == null || _definitions.TryGetValue(key, out var cached) && (cached == null || cached.Key != key))
+            var definitions = _definitions;
+            if (definitions == null || definitions.TryGetValue(key, out var cached) && (cached == null || cached.Key != key))
             {
-                Rebuild();
+                definitions = Build();
+                _definitions = definitions;
             }
 
-            return _definitions.TryGetValue(key, out var definition) ? definition : null;
+            return definitions.TryGetValue(key, out var definition) ? definition : null;
         }
 
         /// <summary>Forgets the index: the next search lists the definitions again.</summary>
@@ -32,17 +34,19 @@ namespace Pragma.Dots.Actors.Editor
             _definitions = null;
         }
 
-        private static void Rebuild()
+        // Built aside: loading a definition validates it, and its EditorChanged resets the index while it is being built.
+        private static Dictionary<string, ActorDefinition> Build()
         {
-            _definitions = new Dictionary<string, ActorDefinition>(StringComparer.Ordinal);
+            var definitions = new Dictionary<string, ActorDefinition>(StringComparer.Ordinal);
             foreach (var guid in AssetDatabase.FindAssets("t:" + nameof(ActorDefinition)))
             {
                 var definition = AssetDatabase.LoadAssetAtPath<ActorDefinition>(AssetDatabase.GUIDToAssetPath(guid));
-                if (definition != null && !string.IsNullOrEmpty(definition.Key) && !_definitions.ContainsKey(definition.Key))
+                if (definition != null && !string.IsNullOrEmpty(definition.Key) && !definitions.ContainsKey(definition.Key))
                 {
-                    _definitions.Add(definition.Key, definition);
+                    definitions.Add(definition.Key, definition);
                 }
             }
+            return definitions;
         }
 
         // A key typed into a definition or a new definition must be found without waiting for a domain reload.
