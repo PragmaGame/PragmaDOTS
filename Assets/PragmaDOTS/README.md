@@ -352,6 +352,21 @@ public struct Health : IComponentData
 }
 ```
 
+A field of such a component (or of any serialized struct, a config) that names another actor type is its key, a
+`FixedString32Bytes` with `[ActorKey]`: the inspector shows it as a reference to the definition with that key, a pick
+stores the definition's key, and a key no definition has gets a warning icon. The field keeps the key, not the asset,
+so a definition whose key changes leaves it with the old one; a part with an `ActorDefinition` field keeps the
+reference and converts it in `Build`.
+
+```csharp
+[Serializable, ActorComponent("Combat/Spawner")]
+public struct Spawner : IComponentData
+{
+    [ActorKey] public FixedString32Bytes unitKey;
+    public int count;
+}
+```
+
 A part with logic (several components, values worked out from others, references to other actors) derives from
 `ActorPart`. `IActorBuilder` is the actor being built: its `Key`, whether it `IsPlaced`, its `Placement` (a
 `FixedPose`) and `PlacementScale` (along its local axes; X where a uniform scale is needed), `HasPart<T>()`,

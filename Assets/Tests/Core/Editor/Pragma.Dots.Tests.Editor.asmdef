@@ -3,6 +3,7 @@
     "rootNamespace": "Pragma.Dots.Tests",
     "references": [
         "Pragma.Dots.Actors",
+        "Pragma.Dots.Actors.Editor",
         "Pragma.Dots.Mathematics",
         "Pragma.Dots.Utils",
         "Pragma.Dots.Utils.Editor",

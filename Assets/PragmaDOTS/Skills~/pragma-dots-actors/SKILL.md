@@ -101,7 +101,9 @@ Rules for `Build`:
   added; its other settings win), `CreateOverride()` the empty override the inspector starts from. Never change
   either input: they are the parts of assets.
 - Reference other actors by an `ActorDefinition` field and store their key (`FixedString32Bytes`); the entity of
-  another type is spawned by key later. Never store an `Entity` of another actor in a part.
+  another type is spawned by key later. Never store an `Entity` of another actor in a part. A serialized component or
+  config with no part to convert a reference holds the key itself, with `[ActorKey]`: the inspector picks the
+  definition and stores its key (a renamed key is not followed: the inspector marks a key no definition has).
 - Parts are serialized by reference (`[SerializeReference]`): renaming or moving a part class, its namespace or its
   assembly loses its data in every asset unless the class gets
   `[UnityEngine.Scripting.APIUpdating.MovedFrom(...)]` with the old names.

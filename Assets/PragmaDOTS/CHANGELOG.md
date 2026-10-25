@@ -12,6 +12,9 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inspector, which keeps an edit within them; `[FixedRange]` draws a slider with a number field. Unity's `[Min]` and
   `[Range]` cannot do it: their drawers run before the type's drawer and break a fixed-point field. The limits are
   doubles rounded to the nearest step, apply to every element of an array, and `Clamp` applies them in code.
+- `ActorKeyAttribute` (`Pragma.Dots.Actors`): a `FixedString32Bytes` field that names an actor type shows in the
+  inspector as a reference to the definition with that key; a pick stores the key, a key no definition has gets a
+  warning icon. A serialized component or config names another type without a part that converts a reference.
 
 ## [0.3.1] - 2026-10-21
 

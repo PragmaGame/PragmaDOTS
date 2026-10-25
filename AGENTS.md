@@ -18,7 +18,7 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 |------|----------|
 | `Assets/PragmaDOTS/Core/Mathematics` | `Pragma.Dots.Mathematics` (`Runtime`): `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid`, the inspector limits `FixedMinAttribute` and `FixedRangeAttribute`. No Entities dependency. `Pragma.Dots.Mathematics.Editor` (`Editor`): fixed-point drawers, also of the limits |
 | `Assets/PragmaDOTS/Core/Utils` | `Pragma.Dots.Utils` (`Runtime`): `FixedDictionary4096Bytes`, `OptionalValue`, `EnumId` (enum values as ints, Burst-compatible). `Pragma.Dots.Utils.Editor` (`Editor`): fixed list and fixed string drawers. `Pragma.Dots.Utils.Physics` (`Physics`, only with `com.unity.physics`): `CollisionMatrixToFilter`. `Pragma.Dots.Utils.Entities` (`Entities`): signals (`Signals`, `SignalTag`, `SignalCleanupSystem`), `BufferDictionary`, `EntityManagerExtensions` |
-| `Assets/PragmaDOTS/Core/Actors` | `Pragma.Dots.Actors` (`Runtime`): `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` (registry and placed actors at run time), components in `Components`. `Pragma.Dots.Actors.Authoring` (`Authoring`): `ActorCatalogAuthoring`, the actor bakers (catalog into registry, `ActorAuthoring` into placed actor) and the baking builder. `Pragma.Dots.Actors.Editor` (`Editor`): the actor inspectors |
+| `Assets/PragmaDOTS/Core/Actors` | `Pragma.Dots.Actors` (`Runtime`): `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorKeyAttribute`, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` (registry and placed actors at run time), components in `Components`. `Pragma.Dots.Actors.Authoring` (`Authoring`): `ActorCatalogAuthoring`, the actor bakers (catalog into registry, `ActorAuthoring` into placed actor) and the baking builder. `Pragma.Dots.Actors.Editor` (`Editor`): the actor inspectors and the key field drawer |
 | `Assets/PragmaDOTS/Core/Editor` | `Pragma.Dots.Editor`: *Project Settings > Pragma > DOTS* (module defines) |
 | `Assets/PragmaDOTS/Modules/Lockstep/Runtime` | `PRAGMA_DOTS_LOCKSTEP`. `Pragma.Dots.Lockstep`, the lockstep assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components`. `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`, `LockstepActorUtility` (the registry and placed actors copied into the simulation). `Parts`: the Transform and Entity Id actor parts. `Spatial`: `LockstepSpatialIndex` |
 | `Assets/PragmaDOTS/Modules/Lockstep/Editor` | `Pragma.Dots.Lockstep.Editor`: *Window > Pragma > Lockstep Sessions* |
@@ -149,7 +149,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
 
 - The EditMode suites: `Assets/Tests/Core/Editor` (math, utilities and actors) and `Assets/Tests/Modules/<Module>/Editor`
   (each module; the vision suite also needs navigation, its session moves the sources with agents). They
-  cover math accuracy and Burst equality, golden results, serialization, inspector limits, actors (inheritance, mergeable parts, the catalog and its
+  cover math accuracy and Burst equality, golden results, serialization, inspector limits, actors (actor keys in the inspector, inheritance, mergeable parts, the catalog and its
   registry, the registry query of a system, placed actors and overrides, the module parts, a session spawning by key and tag),
   checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session), stats (formula,
@@ -160,7 +160,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   GameObject views (component and buffer parts), offline mode and a real Netcode server with two clients (including a command larger than the
   reliable window).
 - The suites reach internals through `InternalsVisibleTo` in `Modules/Lockstep/Runtime/AssemblyInfo.cs` (and
-  `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its
+  `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Actors/Editor/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its
   own `AssemblyInfo.cs`. A new test assembly needs its entries there.
 - Every test assembly that declares systems has `[assembly: DisableAutoCreation]` in its `AssemblyInfo.cs`: test
   systems enter simulations only through `LockstepSimulationOptions.AdditionalSystems`. In the lockstep `Support`,
