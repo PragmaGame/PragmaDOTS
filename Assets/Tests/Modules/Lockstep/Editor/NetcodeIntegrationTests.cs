@@ -3,6 +3,7 @@ using Pragma.Dots.Lockstep.Netcode;
 
 #if PRAGMA_DOTS_UNITY_NETCODE
 using System.Collections.Generic;
+using System.Diagnostics;
 using NUnit.Framework;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Lockstep.Netcode;
@@ -186,22 +187,40 @@ namespace Pragma.Dots.Tests
             {
                 a.AddCommand(new TestCommand { value = 1 }, data);
             }
-            Tick(60 * 3);
+
+            // The burst goes over real UDP on loopback: the OS may drop part of it, and the reliable pipeline resends on
+            // real time, while the test ticks far faster than real time. Tick until both clients have the command, within
+            // a real-time bound, instead of a fixed number of frames.
+            var timer = Stopwatch.StartNew();
+            do
+            {
+                Tick(60);
+            }
+            while ((ReceivedState(a, a.LocalSlot).commandDataCount != count || ReceivedState(b, a.LocalSlot).commandDataCount != count) &&
+                   timer.Elapsed.TotalSeconds < 20);
 
             Assert.AreEqual(LockstepClientState.Running, a.State);
             Assert.AreEqual(LockstepClientState.Running, b.State);
             Assert.IsFalse(a.IsDesynced || b.IsDesynced);
             foreach (var client in new[] { a, b })
             {
-                // The sessions run without test systems: replay what each client received with them.
-                using (var replay = LockstepReplay.Read(client.ExportReplay()))
-                using (var player = new LockstepReplayPlayer(replay, TestUtility.Options(typeof(TestGameplaySystem))) { VerifyChecksums = false })
-                {
-                    player.SimulateToEnd();
-                    var state = TestUtility.PlayerState(player.Simulation, a.LocalSlot);
-                    Assert.AreEqual(count, state.commandDataCount);
-                    Assert.AreEqual(sum, state.commandDataSum);
-                }
+                var state = ReceivedState(client, a.LocalSlot);
+                Assert.AreEqual(count, state.commandDataCount);
+                Assert.AreEqual(sum, state.commandDataSum);
+            }
+        }
+
+        /// <summary>
+        /// The state of <paramref name="slot"/> after what <paramref name="client"/> has received so far. The sessions run
+        /// without test systems: their replay is played with them.
+        /// </summary>
+        private static TestPlayerState ReceivedState(LockstepClient client, int slot)
+        {
+            using (var replay = LockstepReplay.Read(client.ExportReplay()))
+            using (var player = new LockstepReplayPlayer(replay, TestUtility.Options(typeof(TestGameplaySystem))) { VerifyChecksums = false })
+            {
+                player.SimulateToEnd();
+                return TestUtility.PlayerState(player.Simulation, slot);
             }
         }
     }

@@ -42,7 +42,7 @@ namespace Pragma.Dots.Tests
         public void Fog_ShowsTheSmoothedPlaneOfItsSlotAtOnce()
         {
             var grid = CreateGrid();
-            using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.Temp))
+            using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.TempJob))
             using (var fog = new LockstepVisionFog())
             {
                 SetSeen(grid, cells, true);
@@ -75,7 +75,7 @@ namespace Pragma.Dots.Tests
         public void Fog_FadesTowardTheNewTickAndSettles()
         {
             var grid = CreateGrid();
-            using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.Temp))
+            using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.TempJob))
             using (var fog = new LockstepVisionFog { FadeSeconds = 1f })
             {
                 SetSeen(grid, cells, true);
@@ -105,7 +105,7 @@ namespace Pragma.Dots.Tests
         {
             var grid = CreateGrid();
             grid.isRevealed = true;
-            using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.Temp))
+            using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.TempJob))
             using (var fog = new LockstepVisionFog())
             {
                 Assert.IsTrue(fog.TryUpdate(grid, cells, 0, 0, 0.01f));
