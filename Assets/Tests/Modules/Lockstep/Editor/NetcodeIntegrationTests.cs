@@ -10,7 +10,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Core;
 using Unity.Entities;
-using Unity.NetCode;
+using Unity.Netcode;
 using Unity.Networking.Transport;
 
 namespace Pragma.Dots.Tests
@@ -21,6 +21,7 @@ namespace Pragma.Dots.Tests
         private readonly List<World> _worlds = new List<World>();
         private double _time;
         private bool _runInBackground;
+        private ushort _autoConnectPort;
 
         [SetUp]
         public void SetUp()
@@ -28,6 +29,9 @@ namespace Pragma.Dots.Tests
             // Netcode logs an error when the application would stall without focus.
             _runInBackground = UnityEngine.Application.runInBackground;
             UnityEngine.Application.runInBackground = true;
+            // Worlds created with a non-zero auto connect port listen and connect by themselves; the test does it.
+            _autoConnectPort = ClientServerBootstrap.AutoConnectPort;
+            ClientServerBootstrap.AutoConnectPort = 0;
         }
 
         [TearDown]
@@ -42,6 +46,7 @@ namespace Pragma.Dots.Tests
             }
             _worlds.Clear();
             UnityEngine.Application.runInBackground = _runInBackground;
+            ClientServerBootstrap.AutoConnectPort = _autoConnectPort;
         }
 
         private World Track(World world)

@@ -116,9 +116,9 @@ Tooling: the *Project Settings > Pragma > DOTS* page, the *Window > Pragma > Loc
 
 ## Requirements
 
-- Unity 6000.6 (Unity 6.6) or newer.
-- Entities 6.6 (installed as a dependency).
-- Netcode for Entities 6.6 to play lockstep over a network: install `com.unity.netcode` yourself, and the Netcode
+- Unity 7000.0 (Unity 7) or newer.
+- Entities 6.7 (installed as a dependency).
+- Netcode for Entities 7.0 or newer to play lockstep over a network: install `com.unity.netcode` yourself, and the Netcode
   integration of the lockstep module compiles. Offline mode, replays and custom transports do without it.
 - Burst is recommended: the per-tick systems of the package (frame application, transform history, entity ids,
   navigation, vision, stats) are Burst-compiled, and `FixedPoint` math gives the same bits with or without Burst.
@@ -795,6 +795,7 @@ settings.MaxPlayers = 4;
 settings.InputSize = UnsafeUtility.SizeOf<GameInput>();
 settings.MinPlayersToStart = 2;
 
+ClientServerBootstrap.AutoConnectPort = 0; // Listen and Connect below, not when the worlds are created
 var server = ClientServerBootstrap.CreateServerWorld("Server");
 var client = ClientServerBootstrap.CreateClientWorld("Client");
 LockstepNetcode.HostSession(server, settings);
@@ -1168,7 +1169,13 @@ The same can be done with components: create `LockstepServerConfig { settings }`
 **Bootstrap.** Netcode's automatic bootstrap creates client and server worlds when the game starts (in the editor,
 according to the PlayMode Tools). Either use those worlds, or disable the automatic bootstrap with an
 `OverrideAutomaticNetcodeBootstrap` component in the scene (or your own `ClientServerBootstrap`) and create worlds on
-demand with `ClientServerBootstrap.CreateServerWorld` / `CreateClientWorld`.
+demand with `ClientServerBootstrap.CreateServerWorld` / `CreateClientWorld`. A server world listens and a client world
+connects to `ClientServerBootstrap.AutoConnectPort` (7979 by default) as soon as it is created: set the port to 0
+before creating worlds that `Listen` / `Connect` themselves (a driver binds only once), or to your port to let them
+connect by themselves. A host needs separate server and client worlds — the lockstep server and client systems
+share RPC entities and connections inside one world — so select *Binary Worlds* in the Netcode config (*Project
+Settings > Multiplayer*, *Host World Mode Selection*; Netcode 7 hosts in a single world by default) or create both
+worlds yourself.
 
 **Dedicated server.** Create only a server world (a server build, or `ClientServerBootstrap.CreateServerWorld`),
 `HostSession` with `MinPlayersToStart` set to the number of expected players (or call `RequestStart` from your own

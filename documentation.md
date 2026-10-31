@@ -22,7 +22,7 @@ ECV, the view layer of the author's own earlier RTS, adapted to lockstep.
 
 ## Goals and constraints
 
-- Deterministic lockstep for **Unity Entities 6.6**, with **Netcode for Entities 6.6** as its transport, not a custom
+- Deterministic lockstep for **Unity Entities 6.7**, with **Netcode for Entities 7** as its transport, not a custom
   ECS: gameplay is written as ordinary `ISystem`s and components, and content as actors made of parts.
 - Netcode provides what it is good at (connections, handshake, transport, client/server/thin-client worlds); the
   lockstep protocol must not depend on it, so offline play, tests and other transports use the same code.

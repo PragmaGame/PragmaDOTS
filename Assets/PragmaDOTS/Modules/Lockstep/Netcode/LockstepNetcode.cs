@@ -1,6 +1,6 @@
 using Unity.Collections;
 using Unity.Entities;
-using Unity.NetCode;
+using Unity.Netcode;
 using Unity.Networking.Transport;
 
 namespace Pragma.Dots.Lockstep.Netcode

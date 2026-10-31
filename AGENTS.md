@@ -8,7 +8,7 @@ The development project of the Unity package `com.pragma.dots` (Pragma DOTS): bu
 Entities. The core (fixed-point math, actors, utilities) is always compiled; deterministic lockstep (with a Netcode for
 Entities transport), navigation, vision, stats, GameObject views and state machines are opt-in modules. The package is
 `Assets/PragmaDOTS` and is consumed through a git URL with `?path=Assets/PragmaDOTS`; everything else in the project
-(tests, research notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 6000.6, Entities 6.6, Netcode for Entities 6.6).
+(tests, research notes) is not shipped. Editor version: `ProjectSettings/ProjectVersion.txt` (Unity 7000.0, Entities 6.7, Netcode for Entities 7.1).
 
 The package is unreleased: backward compatibility is not required yet, prefer clean renames over compatibility shims.
 

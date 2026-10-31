@@ -14,7 +14,7 @@ through `ILockstepTransport`, so the same session runs over Netcode for Entities
 The lockstep module is opt-in: turn on *Lockstep (PRAGMA_DOTS_LOCKSTEP)* in *Project Settings > Pragma > DOTS* (off
 in a new project) and reference `Pragma.Dots.Lockstep`; nothing below compiles without it. The Netcode part
 (`LockstepNetcode`, the config, request and status components) is namespace and assembly
-`Pragma.Dots.Lockstep.Netcode`, compiled only when `com.unity.netcode` 6.6.0 or later is installed.
+`Pragma.Dots.Lockstep.Netcode`, compiled only when `com.unity.netcode` 7.0.0 or later is installed.
 
 Deeper reference:
 
@@ -62,6 +62,7 @@ settings.MaxPlayers = 4;
 settings.InputSize = UnsafeUtility.SizeOf<GameInput>();
 settings.MinPlayersToStart = 2;      // 0: start only through RequestStart
 
+ClientServerBootstrap.AutoConnectPort = 0; // Listen and Connect below, not when the worlds are created
 var server = ClientServerBootstrap.CreateServerWorld("Server");
 var client = ClientServerBootstrap.CreateClientWorld("Client");
 LockstepNetcode.HostSession(server, settings);
@@ -82,12 +83,17 @@ LockstepNetcode.Connect(remote, NetworkEndpoint.Parse(address, 7979));
   yourself is equivalent (from a subscene, with a baker of your own).
 - The client joins as soon as its world is connected (`NetworkId` exists) and leaves when the config or the
   connection goes away.
-- **Netcode.** The package does not install Netcode for Entities: add `com.unity.netcode` (6.6.0 or later) to the
+- **Netcode.** The package does not install Netcode for Entities: add `com.unity.netcode` (7.0.0 or later) to the
   project, and with the Lockstep module on, `Pragma.Dots.Lockstep.Netcode` (`LockstepNetcode`, the Netcode systems)
   compiles. Offline mode, replays and custom transports work without it.
 - **Bootstrap.** Netcode's automatic bootstrap creates client/server worlds at start (in the editor per the PlayMode
   Tools). Either configure those worlds, or add `OverrideAutomaticNetcodeBootstrap` (*Disable*) to the scene or write a
-  `ClientServerBootstrap` subclass, and create worlds on demand as above.
+  `ClientServerBootstrap` subclass, and create worlds on demand as above. A host needs separate server and client
+  worlds: the lockstep server and client systems share RPC entities and connections inside one world, so select
+  *Binary Worlds* in the Netcode config (*Project Settings > Multiplayer*, *Host World Mode Selection*) — Netcode 7
+  hosts in a single world by default — or create both worlds yourself. Worlds listen and connect on
+  `ClientServerBootstrap.AutoConnectPort` (7979 by default) as they are created; set it to 0 before creating worlds
+  you `Listen` / `Connect` yourself, since a driver binds only once.
 - **Dedicated server.** Only the server world. Set `MinPlayersToStart` or call `LockstepNetcode.RequestStart` from
   lobby logic. The server compares the clients' `LockstepSimulation.DefaultSimulationHash` with its own, so build it
   from the same code and with the same modules (or set `ValidateSimulationHash = false`). The module defines are per

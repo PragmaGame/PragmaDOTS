@@ -1,3 +1,4 @@
+%UNITY 7.0
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!114 &1
@@ -15,7 +16,7 @@ MonoBehaviour:
   FilterSettings:
     ExcludedBakingSystemAssemblies: []
   AdditionalScriptingDefines: []
-  GlobalNetCodeConfig: {fileID: 0}
+  GlobalNetcodeConfig: {fileID: 11400000, guid: c1ce8d68647ae134fbcb85b7d136bae2, type: 2}
   CurrentImportanceSuggestions:
   - MinValue: 1
     MaxValue: 4

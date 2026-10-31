@@ -1,7 +1,7 @@
 using Unity.Entities;
 using UnityEngine;
 #if PRAGMA_DOTS_UNITY_NETCODE
-using Unity.NetCode.Hybrid;
+using Unity.Netcode.Hybrid;
 #endif
 
 namespace Pragma.Dots.Views.Authoring

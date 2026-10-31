@@ -16,6 +16,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   inspector as a reference to the definition with that key; a pick stores the key, a key no definition has gets a
   warning icon. A serialized component or config names another type without a part that converts a reference.
 
+### Changed
+
+- Requires Unity 7000.0 (Unity 7) and Entities 6.7; the Netcode integration requires Netcode for Entities 7.0 or
+  later: `Pragma.Dots.Lockstep.Netcode` and the server check of `EntityViewConfigAuthoring` use the `Unity.Netcode`
+  namespace, and `PRAGMA_DOTS_UNITY_NETCODE` is defined from `com.unity.netcode` 7.0.0. Netcode 7 worlds listen and
+  connect on `ClientServerBootstrap.AutoConnectPort` (7979 by default) when they are created, so the session examples
+  set it to 0 before `LockstepNetcode.Listen` / `Connect`.
+
 ## [0.3.1] - 2026-10-21
 
 ### Added

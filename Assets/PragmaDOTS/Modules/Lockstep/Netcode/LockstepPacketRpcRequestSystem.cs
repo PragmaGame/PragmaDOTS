@@ -1,7 +1,7 @@
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Entities;
-using Unity.NetCode;
+using Unity.Netcode;
 
 namespace Pragma.Dots.Lockstep.Netcode
 {
