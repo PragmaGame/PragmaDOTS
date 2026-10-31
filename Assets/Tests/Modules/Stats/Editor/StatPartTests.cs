@@ -137,6 +137,21 @@ namespace Pragma.Dots.Tests
                 Assert.AreEqual(FixedPoint.Zero, health.max);
                 Assert.IsTrue(entityManager.GetBuffer<LockstepStat>(Place(entityManager, tower)).TryGet(TestStat.Health, out health));
                 Assert.Less(health.max, FixedPoint.Zero, "without an amount it fills on the first update");
+                Assert.IsTrue(health.IsPending);
+            }
+        }
+
+        [Test]
+        public void StatsPart_Resource_RegeneratesByItsAttribute()
+        {
+            var part = Infantry();
+            part.Attributes.Add(new StatAttributeEntry<TestStat>(TestStat.HealthRegen, 2));
+            part.Resources[0] = new StatResourceEntry<TestStat>(TestStat.Health, TestStat.MaxHealth) { Regen = TestStat.HealthRegen };
+            var medic = Definition("medic", null, part);
+            using (var world = new World("Stat Parts"))
+            {
+                Assert.IsTrue(world.EntityManager.GetBuffer<LockstepStat>(Place(world.EntityManager, medic)).TryGet(TestStat.Health, out var health));
+                Assert.AreEqual(LockstepStats.Id(TestStat.HealthRegen), health.regen);
             }
         }
 
@@ -146,13 +161,14 @@ namespace Pragma.Dots.Tests
             var part = new TestStatsPart
             {
                 Attributes = { new StatAttributeEntry<TestStat>(TestStat.Speed, 4), new StatAttributeEntry<TestStat>(TestStat.Speed, 6) },
-                Resources = { new StatResourceEntry<TestStat>(TestStat.Health, TestStat.MaxHealth) },
+                Resources = { new StatResourceEntry<TestStat>(TestStat.Health, TestStat.MaxHealth) { Regen = TestStat.HealthRegen } },
             };
             var broken = Definition("broken", null, part);
             using (var world = new World("Stat Parts"))
             {
                 LogAssert.Expect(LogType.Warning, new Regex("lists the stat Speed twice"));
                 LogAssert.Expect(LogType.Warning, new Regex("Health .* capped by MaxHealth, which is not an attribute"));
+                LogAssert.Expect(LogType.Warning, new Regex("Health .* regenerates by HealthRegen, which is not an attribute"));
                 var stats = world.EntityManager.GetBuffer<LockstepStat>(Place(world.EntityManager, broken));
                 Assert.IsTrue(stats.TryGetBase(TestStat.Speed, out var speed));
                 Assert.AreEqual((FixedPoint)6, speed, "the last one counts");

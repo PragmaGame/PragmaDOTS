@@ -18,6 +18,8 @@ namespace Pragma.Dots.Tests
         private const int MAX_ENERGY = 4;
         private const int ENERGY = 5;
         private const int GOLD = 6;
+        private const int REGEN = 7;
+        private const int INCOME = 8;
 
         private const int INFANTRY = 1;
         private const int VEHICLE = 2;
@@ -432,6 +434,79 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Resource_RegeneratesByItsAttributeUntilItIsFull()
+        {
+            using (var simulation = CreateSimulation())
+            {
+                var entityManager = simulation.World.EntityManager;
+                var unit = CreateEntity(entityManager,
+                    LockstepStat.Attribute(MAX_HEALTH, 100), LockstepStat.Attribute(REGEN, 30), LockstepStat.Attribute(INCOME, 15),
+                    LockstepStat.Resource(HEALTH, MAX_HEALTH, LockstepStatCapPolicy.KeepRatio).WithRegen(REGEN),
+                    LockstepStat.Resource(GOLD, 0).WithRegen(INCOME));
+                TestUtility.Step(simulation);
+                var deltaTime = TimeStep(entityManager);
+                AssertResource(entityManager, unit, HEALTH, 100, 100, "a full resource does not grow");
+                Assert.AreEqual(15 * deltaTime, Value(entityManager, unit, GOLD), "an uncapped one grows from its first update");
+
+                AddChanges(entityManager, unit, (HEALTH, -10));
+                TestUtility.Step(simulation);
+                Assert.AreEqual((FixedPoint)90, Value(entityManager, unit, HEALTH), "a full resource is damaged before it would grow");
+                Assert.IsTrue(Pending(entityManager, unit, HEALTH, out var pending));
+                Assert.AreEqual((FixedPoint)90, pending, "the pending value leaves out the regeneration, which only adds");
+
+                TestUtility.Step(simulation);
+                Assert.AreEqual(90 + 30 * deltaTime, Value(entityManager, unit, HEALTH));
+                for (var i = 0; i < 20; i++)
+                {
+                    TestUtility.Step(simulation);
+                }
+                AssertResource(entityManager, unit, HEALTH, 100, 100, "it stops at the cap");
+                Assert.AreEqual(23 * 15 * deltaTime, Value(entityManager, unit, GOLD), "the uncapped one grows on every tick");
+
+                // Without a rate, a full resource and a stopped one leave the stats unwritten.
+                entityManager.GetBuffer<LockstepStat>(unit).TrySetBase(INCOME, -5);
+                TestUtility.Step(simulation);
+                var version = StatVersion(entityManager, unit);
+                TestUtility.Step(simulation);
+                Assert.AreEqual(version, StatVersion(entityManager, unit), "nothing grows, nothing is written");
+            }
+        }
+
+        [Test]
+        public void Resource_IsPendingUntilItIsFilledAndDepletedWhenItRunsOut()
+        {
+            using (var simulation = CreateSimulation())
+            {
+                var entityManager = simulation.World.EntityManager;
+                var unit = CreateEntity(entityManager,
+                    LockstepStat.Attribute(MAX_HEALTH, 100), LockstepStat.Resource(HEALTH, MAX_HEALTH, LockstepStatCapPolicy.KeepRatio),
+                    LockstepStat.Attribute(MAX_ENERGY, 50), LockstepStat.Resource(ENERGY, MAX_ENERGY, LockstepStatCapPolicy.Clamp, 0),
+                    LockstepStat.Resource(GOLD, 0));
+                var stats = entityManager.GetBuffer<LockstepStat>(unit, true);
+                Assert.IsTrue(stats.TryGet(HEALTH, out var health));
+                Assert.IsTrue(health.IsPending, "a resource that starts full is not filled before the update");
+                Assert.IsFalse(health.IsDepleted, "nor empty");
+                Assert.IsTrue(stats.TryGet(ENERGY, out var energy));
+                Assert.IsFalse(energy.IsPending, "a resource that starts with an amount has it at once");
+                Assert.IsTrue(energy.IsDepleted);
+                Assert.IsTrue(stats.TryGet(GOLD, out var gold));
+                Assert.IsTrue(gold.IsDepleted);
+                Assert.IsTrue(stats.TryGet(MAX_HEALTH, out var maxHealth));
+                Assert.IsFalse(maxHealth.IsPending || maxHealth.IsDepleted, "attributes are neither");
+
+                TestUtility.Step(simulation);
+                Assert.IsTrue(entityManager.GetBuffer<LockstepStat>(unit, true).TryGet(HEALTH, out health));
+                Assert.IsFalse(health.IsPending);
+                Assert.IsFalse(health.IsDepleted);
+
+                AddChanges(entityManager, unit, (HEALTH, -500));
+                TestUtility.Step(simulation);
+                Assert.IsTrue(entityManager.GetBuffer<LockstepStat>(unit, true).TryGet(HEALTH, out health));
+                Assert.IsTrue(health.IsDepleted);
+            }
+        }
+
+        [Test]
         public void Grants_ReachTheTargetedReceiversAlsoTheLaterOnes()
         {
             using (var simulation = CreateSimulation())
@@ -777,6 +852,14 @@ namespace Pragma.Dots.Tests
             Assert.IsTrue(stat.IsResource);
             Assert.AreEqual((FixedPoint)value, stat.value, message);
             Assert.AreEqual((FixedPoint)max, stat.max, message);
+        }
+
+        private static FixedPoint TimeStep(EntityManager entityManager)
+        {
+            using (var query = entityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepTime>()))
+            {
+                return query.GetSingleton<LockstepTime>().deltaTime;
+            }
         }
 
         private static uint StatVersion(EntityManager entityManager, Entity unit)

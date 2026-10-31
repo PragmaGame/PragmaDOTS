@@ -15,9 +15,35 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ActorKeyAttribute` (`Pragma.Dots.Actors`): a `FixedString32Bytes` field that names an actor type shows in the
   inspector as a reference to the definition with that key; a pick stores the key, a key no definition has gets a
   warning icon. A serialized component or config names another type without a part that converts a reference.
+- `FixedMath.Yaw` of a rotation, a direction or its X and Z: the heading on the ground in radians from +Z toward +X,
+  the angle `FixedQuaternion.RotateY` takes; and `FixedMath.WrapAngle` into `[-π, π)`. The bearing of a point from a unit
+  is `DeltaAngle(Yaw(rotation), Yaw(offset.Xz))`. Existing results do not change.
+- `EntityViewManager.TryGetPrefab(key, out prefab)` (Views): the view prefab an entity with the key gets, picked as the
+  manager picks it (baked registries first, then `EntityViewConfigs`, with the same checks), for what shows an entity
+  that does not exist yet, such as the ghost of a building being placed. It works without a session and reads a
+  catalog changed since the last update first.
+- Navigation for gameplay: `LockstepNavGridView`, the grid with its cells and heights in one value (`CreateQuery`,
+  `Get`; `IsWalkable`, `IsPassable`, `GetClearance`, `ToGround`, `ToPassable`), open ground without a grid or before its
+  cells are built; the geometry of `LockstepNavObstacleFootprint` (`ClosestPoint`, `DistanceSquared`, the walk around it:
+  `Perimeter`, `GetPerimeterOffset`, `GetPerimeterPoint`, `GetPerimeterDistance`); places around a footprint that
+  bodies take without overlapping (`LockstepNavGridView.TryFindPerimeterPlace`, `IsPerimeterPlaceOpen`,
+  `LockstepNavPerimeterPlace`) at `LockstepNavigation.GetOpenDistance`, the distance at which a footprint blocks no
+  cell by the module's own rule; and `LockstepNavReach`, whether a path reaches a point completely.
+- Stats: resource regeneration. `LockstepStat.regen` (`WithRegen`, *Regen* of a resource in `StatsPart`) names the
+  attribute the amount grows by per second; `LockstepStatSystem` applies it while the resource is below its cap, before
+  the tick's changes, and touches the chunk on every tick until it is full. `TryGetPendingValue` leaves it out.
+- `LockstepStat.IsPending` (a resource that starts full and has not been filled yet, as on the tick an entity appears
+  after `LockstepStatSystem`) and `IsDepleted` (a resource that is not pending and holds zero): the check of a unit's
+  death or a squad's morale without testing `max`.
+- `LockstepVisionFog` (Vision): the fog of war of one slot as an R8 texture with a texel per cell, smoothed over the
+  neighbouring cells and fading in time, computed in Burst jobs and uploaded only when it changes, with the same
+  visibility as numbers for a minimap. It needs no render pipeline: the game shades `Texture` over `Area`.
 
 ### Changed
 
+- `LockstepStat` has a `regen` field and `LockstepStatSystem` reads `LockstepTime.deltaTime`: the stat buffers and the
+  state hash change.
+- `EntityViewManager` is created by its system only (its constructor is internal).
 - Requires Unity 7000.0 (Unity 7) and Entities 6.7; the Netcode integration requires Netcode for Entities 7.0 or
   later: `Pragma.Dots.Lockstep.Netcode` and the server check of `EntityViewConfigAuthoring` use the `Unity.Netcode`
   namespace, and `PRAGMA_DOTS_UNITY_NETCODE` is defined from `com.unity.netcode` 7.0.0. Netcode 7 worlds listen and

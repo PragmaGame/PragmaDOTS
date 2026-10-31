@@ -54,8 +54,8 @@ namespace Pragma.Dots.Stats
         /// The amount a resource will have once <see cref="LockstepStatSystem"/> applies the changes in
         /// <paramref name="changes"/>, with its cap as of the last update; an attribute gives its value. Check a payment
         /// against it in a system before <see cref="LockstepStatSystem"/>: <c>TryGetValue</c> does not see the payments
-        /// already added on this tick, so two of them could spend the same amount. False when the entity does not have
-        /// the stat.
+        /// already added on this tick, so two of them could spend the same amount. The regeneration of the tick
+        /// (<see cref="LockstepStat.regen"/>) is left out: it only adds. False when the entity does not have the stat.
         /// </summary>
         public static bool TryGetPendingValue(this DynamicBuffer<LockstepStat> stats, DynamicBuffer<LockstepStatChange> changes, int type,
                                               out FixedPoint value)
@@ -67,7 +67,9 @@ namespace Pragma.Dots.Stats
                 return false;
             }
             var stat = stats[index];
-            value = stat.IsResource ? ResolveResource(stats, stat, changes.IsCreated ? changes.AsNativeArray() : default, out _, out _) : stat.value;
+            value = stat.IsResource
+                ? ResolveResource(stats, stat, changes.IsCreated ? changes.AsNativeArray() : default, FixedPoint.Zero, out _, out _)
+                : stat.value;
             return true;
         }
 
@@ -220,13 +222,18 @@ namespace Pragma.Dots.Stats
             return true;
         }
 
-        // The amount of a resource after fitting it to its cap and applying changes (default: none). The one rule of
-        // LockstepStatSystem and TryGetPendingValue, so a checked payment is exactly what the update leaves.
+        // The amount of a resource after fitting it to its cap, regenerating for deltaTime and applying changes (default:
+        // none). The one rule of LockstepStatSystem and TryGetPendingValue, so a checked payment is what the update leaves:
+        // the check leaves out the regeneration of the tick, which only adds.
         internal static FixedPoint ResolveResource(DynamicBuffer<LockstepStat> stats, in LockstepStat stat, NativeArray<LockstepStatChange> changes,
-                                                   out bool isCapped, out FixedPoint cap)
+                                                   FixedPoint deltaTime, out bool isCapped, out FixedPoint cap)
         {
             isCapped = TryGetCap(stats, stat.cap, out cap);
             var amount = isCapped ? Fit(stat, cap) : stat.value;
+            if (deltaTime.rawValue > 0 && (!isCapped || amount < cap))
+            {
+                amount += GetRegenRate(stats, stat) * deltaTime;
+            }
             if (changes.IsCreated)
             {
                 amount += Sum(changes, stat.type);
@@ -237,6 +244,27 @@ namespace Pragma.Dots.Stats
                 amount = FixedMath.Min(amount, cap);
             }
             return amount;
+        }
+
+        // The resource grows on this update: it has a positive rate and is below its cap, or is uncapped. Whether an update
+        // has to touch the stats of an entity nothing else changed.
+        internal static bool Regenerates(DynamicBuffer<LockstepStat> stats, in LockstepStat stat)
+        {
+            if (!stat.IsResource || GetRegenRate(stats, stat).rawValue <= 0)
+            {
+                return false;
+            }
+            return !TryGetCap(stats, stat.cap, out var cap) || Fit(stat, cap) < cap;
+        }
+
+        // Amount per second; a missing attribute or a rate below zero regenerates nothing.
+        private static FixedPoint GetRegenRate(DynamicBuffer<LockstepStat> stats, in LockstepStat stat)
+        {
+            if (stat.regen == LockstepStat.NONE || !stats.TryGet(stat.regen, out var attribute) || !attribute.IsAttribute)
+            {
+                return FixedPoint.Zero;
+            }
+            return FixedMath.Max(attribute.value, FixedPoint.Zero);
         }
 
         private static bool TryGetCap(DynamicBuffer<LockstepStat> stats, int type, out FixedPoint cap)

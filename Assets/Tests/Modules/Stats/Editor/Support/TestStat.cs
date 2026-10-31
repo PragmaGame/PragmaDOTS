@@ -7,5 +7,6 @@ namespace Pragma.Dots.Tests
         Speed = 2,
         Health = 3,
         Gold = 4,
+        HealthRegen = 5,
     }
 }

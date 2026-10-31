@@ -477,6 +477,24 @@ namespace Pragma.Dots.Navigation
             return outsideX * outsideX + outsideZ * outsideZ <= grid.agentRadius * grid.agentRadius;
         }
 
+        /// <summary>
+        /// How far from the edge of the footprint every cell is clear of it, however the footprint lies on the grid: the
+        /// agent radius it blocks by (<see cref="Covers"/>), three quarters of a cell (more than half its diagonal, the
+        /// farthest a point lies from the centre of its cell) and what a footprint thinner than a cell grows by. Places
+        /// that far around a building (<see cref="LockstepNavObstacleFootprint.GetPerimeterPoint"/>) stand on cells the
+        /// building leaves walkable on every side; other obstacles may still block them. Zero for an invalid grid.
+        /// </summary>
+        public static FixedPoint GetOpenDistance(in LockstepNavGrid grid, in LockstepNavObstacleFootprint footprint)
+        {
+            if (!grid.IsValid)
+            {
+                return FixedPoint.Zero;
+            }
+            var blocking = GetBlockingHalfSize(grid, footprint);
+            var growth = FixedMath.Max(blocking.x - footprint.halfSize.x, blocking.y - footprint.halfSize.y);
+            return grid.agentRadius + grid.cellSize * 3 / 4 + growth;
+        }
+
         // The half size of the rectangle that blocks cells: grown by the agent radius, each side spans at least a cell, and
         // a band a cell wide holds a cell centre on every row and column it crosses.
         private static FixedVector2 GetBlockingHalfSize(in LockstepNavGrid grid, in LockstepNavObstacleFootprint footprint)

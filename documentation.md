@@ -327,7 +327,10 @@ These came up while building on Entities; neither reference package deals with t
     visible when a circle of sight reaches into it, not only over its centre, so everything within a source's radius
     lies in a visible cell and a unit never fights what its player cannot see. Sight is a radius on the XZ plane:
     blocking it by ground or obstacles (line of sight per cell) is left to games that need it. The fog of war itself,
-    the drawing and the hiding of views, stays in the presentation, which reads the planes.
+    the drawing and the hiding of views, stays in the presentation, which reads the planes. The module brings the part
+    every game would write the same way, the fog of a slot as a texture with soft edges and a fade
+    (`LockstepVisionFog`), and stops there: how the texture is shaded depends on the render pipeline, and which views
+    to hide on the game's rules of ownership, so the module depends on neither a pipeline nor the Views module.
 
 14. **Stats as buffers with change versions.** Upgrades, research, abilities and auras all change numbers of units,
     and patching component fields by hand loses track of who changed what and leaves no way to end an effect. Each
@@ -344,7 +347,10 @@ These came up while building on Entities; neither reference package deals with t
       health attribute: health, morale, energy and money share one pool rule (never below zero, capped, fitted when the
       cap changes by keeping the share or the amount) and one way to change them, one-tick `LockstepStatChange`s summed
       per tick, so the result never depends on the order attackers were processed in. Modifiers apply to attributes
-      only, which keeps "a buff to current health" meaningless rather than surprising.
+      only, which keeps "a buff to current health" meaningless rather than surprising. Regeneration belongs to the
+      pool rule too: a resource names the attribute it grows by, like the one that caps it, and the stat system adds
+      it while the resource is below its cap. A system of the game would need a change source of its own and a pass
+      over every stat each tick to find what grows, which the stat system already makes.
     - **Grants instead of copies.** A research applies to all units of a type, including those built later, and a
       squad ability to every member, reinforcements included. Copying modifiers into each unit would make every spawn
       path know every effect; instead the player or squad entity holds `LockstepStatGrant`s and receivers name it in

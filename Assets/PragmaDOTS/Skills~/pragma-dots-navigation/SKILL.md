@@ -1,6 +1,6 @@
 ---
 name: pragma-dots-navigation
-description: Walk units around obstacles inside a lockstep simulation with the Navigation module of Pragma DOTS (package com.pragma.dots, define PRAGMA_DOTS_NAVIGATION, assembly Pragma.Dots.Navigation) - the walkability grid of a map (LockstepNavGrid, the Navigation/Grid part) with terrain heights and steep slopes, obstacles that block cells while their entity exists (buildings, walls), agents (LockstepNavAgent, the Navigation/Agent part) sent alone or as a group with SetDestination, large bodies and clearance, keeping apart and local avoidance (LockstepNavAvoidance), building placement checks (IsClear, footprints), line of sight, nearest walkable cells and LockstepPathfinder for paths outside agents. Use it whenever units walk, follow move orders, get stuck, overlap or jam in passages, when buildings or walls are placed, a terrain is added, or the AI needs paths, reachability or line of sight - even if the user only says "pathfinding", "NavMesh", "move command", "formation" or "units clump together".
+description: Walk units around obstacles inside a lockstep simulation with the Navigation module of Pragma DOTS (package com.pragma.dots, define PRAGMA_DOTS_NAVIGATION, assembly Pragma.Dots.Navigation) - the walkability grid of a map (LockstepNavGrid, the Navigation/Grid part) with terrain heights and steep slopes, obstacles that block cells while their entity exists (buildings, walls), agents (LockstepNavAgent, the Navigation/Agent part) sent alone or as a group with SetDestination, large bodies and clearance, keeping apart and local avoidance (LockstepNavAvoidance), building placement checks (IsClear, footprints), units standing around a building (perimeter places), whether an order can reach its target (LockstepNavReach), the grid as gameplay reads it (LockstepNavGridView), line of sight, nearest walkable cells and LockstepPathfinder for paths outside agents. Use it whenever units walk, follow move orders, get stuck, overlap or jam in passages, when buildings or walls are placed, a terrain is added, or the AI needs paths, reachability or line of sight - even if the user only says "pathfinding", "NavMesh", "move command", "formation" or "units clump together".
 ---
 
 # Navigation in Pragma DOTS
@@ -34,6 +34,9 @@ Deeper reference:
 | `LockstepNavAvoidance` | Singleton that turns avoidance on; without it agents walk their paths as if alone |
 | `LockstepNavSystemGroup` | In `LockstepSimulationSystemGroup`: obstacles, paths, avoidance, walking, keeping apart |
 | `LockstepNavigation` | Grid and ground queries for systems of your own |
+| `LockstepNavGridView` | The grid, its cells and heights in one value for gameplay; open ground without a grid or before its cells are built |
+| `LockstepNavObstacleFootprint` | The world rectangle of an obstacle: nearest point, distance, the walk around it (places at a building) |
+| `LockstepNavReach` | Whether an order's target can be reached at all (the path is `Complete`) |
 | `LockstepPathfinder`, `LockstepNavPathMap` | The search itself, for paths outside agents (AI, previews) |
 
 | Part (menu) | Put it on |
@@ -142,19 +145,35 @@ public partial struct MoveOrderSystem : ISystem
   is blocked. An idle or arrived agent whose cell becomes blocked (a building placed on it, a unit spawned inside one)
   walks to the nearest free cell by itself.
 
-## Ground
+## Reading the grid in gameplay
 
-With heights, positions depend on the ground. Put whatever you place on the map on it, and compare positions on X and
-Z only:
+Take a `LockstepNavGridView` instead of fetching the grid, its cells and heights and checking each of them: build its
+query in `OnCreate`, get the view in `OnUpdate`. Without a grid, or before its cells are built (the tick the first
+player joins on), it is open ground: walkable and reachable everywhere, nothing moves.
 
 ```csharp
-var grid = SystemAPI.GetSingleton<LockstepNavGrid>();
-var heights = SystemAPI.TryGetSingletonBuffer<LockstepNavHeight>(out var heightBuffer, true)
-    ? heightBuffer.AsNativeArray()
-    : default;
-var position = LockstepNavigation.ToGround(grid, heights, spawnPoint); // unchanged without heights
-var near = FixedMath.DistanceSquared(a.position.Xz, b.position.Xz) < range * range;
+private EntityQuery _gridQuery;
+
+public void OnCreate(ref SystemState state)
+{
+    _gridQuery = LockstepNavGridView.CreateQuery(ref state);
+}
+
+public void OnUpdate(ref SystemState state)
+{
+    var grid = LockstepNavGridView.Get(state.EntityManager, _gridQuery);
+    var spawn = grid.ToGround(grid.ToPassable(exit, radius)); // a cell the body fits on, on the ground
+    var canStand = grid.IsPassable(position, grid.GetClearance(radius));
+}
 ```
+
+The view reads the buffers in place: get it again after a structural change. It is read-only in jobs.
+
+## Ground
+
+With heights, positions depend on the ground. Put whatever you place on the map on it (`grid.ToGround(position)`, or
+`LockstepNavigation.ToGround(grid, heights, position)`; unchanged without heights), and compare positions on X and Z
+only: `FixedMath.DistanceSquared(a.position.Xz, b.position.Xz) < range * range`.
 
 `GetHeight(grid, heights, xz)` is the height anywhere (bilinear inside a cell, the edge beyond the grid). Heights are
 static: they are read when the cells are built.
@@ -183,6 +202,41 @@ if (LockstepNavigation.IsClear(grid, cells, footprint))
 - Never stamp the simulation's cells yourself: `LockstepNavigation.Stamp` is for previews and tests. Cells you stamp
   into a copy need `UpdateClearance` afterwards.
 
+## Working at a building
+
+A footprint (`LockstepNavObstacleFootprint.Create(obstacle, transform)`) answers where a unit reaches a building:
+`ClosestPoint(position)` (Y kept) and `DistanceSquared(position)` (zero inside). Units that work at it (melee
+attackers, builders) should stand around it, each on its own place, instead of crowding at the nearest edge. A place is
+an offset along the walk around the rectangle (`Perimeter`, from the local (-X, -Z) corner):
+
+```csharp
+// taken: the places already held around this building, the unit's own excluded (gameplay keeps who holds which).
+var distance = LockstepNavigation.GetOpenDistance(navGrid, footprint); // or the unit's reach
+if (grid.TryFindPerimeterPlace(footprint, unitPosition.Xz, radius, distance, taken, out var offset))
+{
+    var point = footprint.GetPerimeterPoint(offset, distance);
+    agent.SetDestination(new FixedVector3(point.x, unitPosition.y, point.y));
+}
+```
+
+- `GetOpenDistance` is the package's own rule of how far obstacles block, plus what a thin footprint grows by: at that
+  distance the building leaves every cell walkable, however it lies on the grid.
+- The search starts at the edge point nearest the unit and goes both ways round; bodies on taken places do not overlap
+  along the perimeter, and the point must fit the body (`IsPerimeterPlaceOpen`). False: the building is surrounded.
+- Keep a held place while `grid.IsPerimeterPlaceOpen(footprint, offset, distance, clearance)` and search again when it
+  is not (another obstacle came there).
+
+## Can an order reach its target?
+
+`LockstepNavReach` searches one path per question and says whether it is `Complete`: reject a move order to a point in
+an obstacle, beyond the edge or on ground cut off from the unit, instead of sending it to the nearest edge.
+
+```csharp
+var reach = LockstepNavReach.Create(grid, Allocator.Temp); // grid: a LockstepNavGridView
+var isValid = reach.CanReach(firstUnitPosition, order.target);
+reach.Dispose();
+```
+
 ## Large bodies
 
 A radius larger than the grid's agent radius needs clearance: `LockstepNavigation.GetClearance(grid, radius)` gives one
@@ -190,8 +244,8 @@ more ring of free cells for every cell size the radius exceeds the agent radius.
 of obstacles keep such an agent to cells with that clearance: a vehicle goes round through a wide gap where infantry
 squeeze through a narrow one.
 
-- Spawn a large agent on a cell it fits: `IsPassable(grid, cells, position, clearance)`, else
-  `TryFindNearestPassable(grid, cells, cell, clearance, out nearest)`.
+- Spawn a large agent on a cell it fits: `gridView.ToPassable(position, radius)`, or by hand
+  `IsPassable(grid, cells, position, clearance)`, else `TryFindNearestPassable(grid, cells, cell, clearance, out nearest)`.
 - A weapon that strikes from the centre of a large body needs a reach longer than the body and the clearance around it,
   or the vehicle cannot reach what stands next to a wall.
 
@@ -216,6 +270,7 @@ squeeze through a narrow one.
 | Nearest place it can stand | `TryFindNearestWalkable`, `TryFindNearestPassable` |
 | Is the way straight and free? | `HasLineOfSight(grid, cells, from, to)` (walls only, not vision); `HasLineOfSight(grid, cells, fromXz, toXz, clearance)` for a body |
 | A step that slides along walls | `TryStep(grid, cells, from, step[, clearance], out position)` |
+| Can a point be reached at all? | `LockstepNavReach.CanReach(start, target)` |
 | A path without an agent | `LockstepPathfinder` (below) |
 
 ```csharp
@@ -257,7 +312,8 @@ the gaps need.
 | A vehicle is stuck after spawning | Spawned on a cell without room for its body: spawn with `TryFindNearestPassable` |
 | Units float or sink on hills | Spawned at a fixed Y: use `ToGround`; or the terrain does not cover the grid exactly |
 | Two buildings overlap when placed on one tick | `IsClear` sees only stamped cells: compare the tick's footprints with `GetCoverage` / `Covers` |
-| `IsClear` false on tick 0, or an index out of range in a query | The cells are sized on the first navigation update: check `cells.Length == grid.CellCount` |
+| `IsClear` false on tick 0, or an index out of range in a query | The cells are sized on the first navigation update: check `cells.Length == grid.CellCount`, or read through `LockstepNavGridView` |
+| Melee units crowd at one edge of a building | Each should hold its own place around it: `TryFindPerimeterPlace` with the places already taken |
 | An agent jumps back after a knockback | Its `LockstepTransform` was written while it walked: `Stop()` it first |
 | A group order is slow | Agents sent alone (`SetDestination(destination)`) or with different `groupGoal`s: give one order one goal |
 

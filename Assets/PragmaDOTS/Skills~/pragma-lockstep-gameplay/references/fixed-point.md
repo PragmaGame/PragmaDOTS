@@ -83,7 +83,7 @@ public static class Tuning
 | Modulo | `Remainder` (sign of the dividend, like `%`), `Mod` (in `[0, Abs(y))`), `Wrap(x, min, max)` |
 | Powers | `Sqrt` (±1 step below about 2e9), `Rsqrt`, `Exp`, `Exp2`, `Log`, `Log2`, `Log10`, `Pow(FixedPoint, FixedPoint)`, `Pow(FixedPoint, int)` |
 | Trigonometry | `Sin`, `Cos`, `SinCos`, `Tan`, `Asin`, `Acos`, `Atan`, `Atan2(y, x)` - radians |
-| Angles | `ToRadians(degrees)`, `ToDegrees(radians)`, `DeltaAngle(from, to)` in `[-Pi, Pi)` |
+| Angles | `ToRadians(degrees)`, `ToDegrees(radians)`, `DeltaAngle(from, to)` and `WrapAngle(angle)` in `[-Pi, Pi)`; `Yaw(rotation)`, `Yaw(direction)`, `Yaw(directionXz)`: the heading on the ground, radians from +Z toward +X (what `FixedQuaternion.RotateY` takes); bearing of a point = `DeltaAngle(Yaw(rotation), Yaw(offset.Xz))` |
 | Constants | `Pi`, `TwoPi`, `HalfPi`, `E`, `Ln2`, `Ln10`, `Sqrt2`, `Rad2Deg`, `Deg2Rad`, `Epsilon` |
 | Raw | `MulShiftRound(a, b, shift)`, `DivideRaw(a, b)`, `SqrtRounded(ulong)` |
 

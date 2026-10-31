@@ -144,7 +144,7 @@ namespace Pragma.Dots.Stats
                 var created = cap == LockstepStat.NONE ? LockstepStat.Resource(stat, resource.Amount)
                     : resource.Amount.rawValue > 0 ? LockstepStat.Resource(stat, cap, resource.CapPolicy, resource.Amount)
                     : LockstepStat.Resource(stat, cap, resource.CapPolicy);
-                Add(stats, created, resource.Stat, actor);
+                Add(stats, created.WithRegen(resource.Regen), resource.Stat, actor);
             }
             foreach (var resource in _resources)
             {
@@ -153,6 +153,12 @@ namespace Pragma.Dots.Stats
                 {
                     Debug.LogWarning($"[Stats] The resource {resource.Stat} of the actor '{actor}' is capped by {resource.Cap}, " +
                         "which is not an attribute of the actor: the resource is uncapped.");
+                }
+                var regen = LockstepStats.Id(resource.Regen);
+                if (regen != LockstepStat.NONE && !stats.Exists(stat => stat.type == regen && stat.IsAttribute))
+                {
+                    Debug.LogWarning($"[Stats] The resource {resource.Stat} of the actor '{actor}' regenerates by {resource.Regen}, " +
+                        "which is not an attribute of the actor: the resource does not regenerate.");
                 }
             }
             return stats;

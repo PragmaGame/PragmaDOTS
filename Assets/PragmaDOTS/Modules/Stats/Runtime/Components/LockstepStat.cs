@@ -26,20 +26,57 @@ namespace Pragma.Dots.Stats
         public LockstepStatCapPolicy capPolicy;
         /// <summary>Resources: the <see cref="type"/> of the attribute of the same entity that caps the amount, or <see cref="NONE"/>.</summary>
         public int cap;
+        /// <summary>
+        /// Resources: the <see cref="type"/> of the attribute of the same entity whose value the amount grows by every second
+        /// while it is below its cap (health regeneration, morale recovery), or <see cref="NONE"/>; set it with
+        /// <see cref="WithRegen(int)"/>. A rate of zero or less does nothing; an uncapped resource grows without end.
+        /// </summary>
+        public int regen;
         /// <summary>Attributes: the value without modifiers, authored or changed with <see cref="LockstepStats.TrySetBase(DynamicBuffer{LockstepStat}, int, FixedPoint)"/>.</summary>
         public FixedPoint baseValue;
         /// <summary>Attributes: the base value with the modifiers applied. Resources: the amount.</summary>
         public FixedPoint value;
         /// <summary>
         /// Capped resources: the cap the amount was last fitted to, as of the last <see cref="LockstepStatSystem"/> update,
-        /// which is the maximum a bar shows. Negative for a resource that starts full, until the first update fills it;
-        /// zero for one that starts with an amount, which the first update keeps under the cap.
+        /// which is the maximum a bar shows. Negative for a resource that starts full, until the first update fills it
+        /// (<see cref="IsPending"/>); zero for one that starts with an amount, which the first update keeps under the cap.
         /// </summary>
         public FixedPoint max;
 
         public bool IsAttribute => kind == LockstepStatKind.Attribute;
 
         public bool IsResource => kind == LockstepStatKind.Resource;
+
+        /// <summary>
+        /// A capped resource that starts full and has not been filled yet: its <see cref="value"/> is zero, not its amount,
+        /// until the first <see cref="LockstepStatSystem"/> update after the entity was created. An entity created after that
+        /// system on a tick stays pending until the next tick, so a check of the amount (is the unit dead, is the squad
+        /// broken) skips it; <see cref="IsDepleted"/> does. A resource whose cap attribute the entity lacks is never filled.
+        /// </summary>
+        public bool IsPending => IsResource && max.rawValue < 0;
+
+        /// <summary>
+        /// A resource that has run out: its amount is zero. False for an attribute and for a resource still
+        /// <see cref="IsPending"/>, which is full rather than empty.
+        /// </summary>
+        public bool IsDepleted => IsResource && max.rawValue >= 0 && value.rawValue <= 0;
+
+        /// <summary>
+        /// This resource with <see cref="regen"/> set to <paramref name="rate"/>: it grows by that attribute's value every
+        /// second while it is below its cap.
+        /// </summary>
+        public LockstepStat WithRegen(int rate)
+        {
+            var stat = this;
+            stat.regen = rate;
+            return stat;
+        }
+
+        /// <inheritdoc cref="WithRegen(int)"/>
+        public LockstepStat WithRegen<TType>(TType rate) where TType : unmanaged, Enum
+        {
+            return WithRegen(LockstepStats.Id(rate));
+        }
 
         /// <summary>An attribute without modifiers yet: its value is the base value.</summary>
         public static LockstepStat Attribute(int type, FixedPoint baseValue)

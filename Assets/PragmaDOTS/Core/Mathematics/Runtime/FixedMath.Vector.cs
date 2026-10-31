@@ -297,6 +297,25 @@ namespace Pragma.Dots.Mathematics
 
         public static FixedVector3 Right(FixedQuaternion q) => Rotate(q, FixedVector3.Right);
 
+        /// <summary>
+        /// The heading of a direction on the XZ plane: radians from +Z, positive toward +X (clockwise seen from above), in
+        /// (-π, π]. It is the angle <see cref="FixedQuaternion.RotateY"/> takes to face that way; Y is ignored, and a
+        /// vertical or zero direction gives zero.
+        /// </summary>
+        public static FixedPoint Yaw(FixedVector3 direction) => Atan2(direction.x, direction.z);
+
+        /// <summary>
+        /// <see cref="Yaw(FixedVector3)"/> of a direction given as its X and Z (<see cref="FixedVector3.Xz"/>), such as the
+        /// offset from a unit to its target on the ground.
+        /// </summary>
+        public static FixedPoint Yaw(FixedVector2 directionXz) => Atan2(directionXz.x, directionXz.y);
+
+        /// <summary>
+        /// The heading the rotation faces: <see cref="Yaw(FixedVector3)"/> of its forward direction. To turn toward a
+        /// point, compare it with the yaw of the offset to the point through <see cref="DeltaAngle"/>.
+        /// </summary>
+        public static FixedPoint Yaw(FixedQuaternion q) => Yaw(Forward(q));
+
         // sqrt(x² + y² + z²) on raw values. Scaling keeps the squares below 2^62, so it never overflows.
         private static long LengthRaw(long x, long y, long z)
         {

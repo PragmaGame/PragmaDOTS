@@ -144,6 +144,9 @@ namespace Pragma.Dots.Mathematics
         /// <summary>Shortest signed difference between two angles in radians, in [-π, π).</summary>
         public static FixedPoint DeltaAngle(FixedPoint from, FixedPoint to) => Wrap(to - from, -Pi, Pi);
 
+        /// <summary>The same angle in radians, in [-π, π).</summary>
+        public static FixedPoint WrapAngle(FixedPoint angle) => Wrap(angle, -Pi, Pi);
+
         /// <summary>
         /// <c>(a * b) &gt;&gt; shift</c> with a 128-bit intermediate and rounding to nearest, for 0 &lt; shift &lt; 64.
         /// Slower than the plain operators; used where the 64-bit product could overflow.

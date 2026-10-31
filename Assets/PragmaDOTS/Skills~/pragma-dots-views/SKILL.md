@@ -105,8 +105,9 @@ if (view != null && view.IsBound && view.TryGetData<LockstepEntityId>(out var id
 
 `view.TryGetData<T>` and `view.TryGetBuffer<T>` read any component or buffer of the entity from the simulation world.
 `EntityViewManager.TryGet(presentationWorld, out var manager)` gives `TryGetView(entity, out view)`, `Views`,
-`Attach(entity, view)` (a HUD panel you own shows the same data, never pooled), `Detach(view)` and
-`ForceUpdate(entity)`.
+`Attach(entity, view)` (a HUD panel you own shows the same data, never pooled), `Detach(view)`,
+`ForceUpdate(entity)` and `TryGetPrefab(key, out prefab)`: the prefab the catalogs bind to a key, for a ghost of what
+is not spawned yet (a building being placed). Do not walk the catalogs yourself: the manager's order and checks apply.
 
 ## Lifetimes
 

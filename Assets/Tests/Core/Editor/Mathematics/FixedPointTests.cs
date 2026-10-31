@@ -299,6 +299,24 @@ namespace Pragma.Dots.Tests
             Assert.AreEqual((FixedPoint)10, FixedMath.MoveTowards((FixedPoint)9, (FixedPoint)10, (FixedPoint)2));
             Assert.AreEqual(FixedPoint.FromFraction(1, 2), FixedMath.Wrap(FixedPoint.FromFraction(5, 2), FixedPoint.Zero, (FixedPoint)2));
             Assert.AreEqual(FixedPoint.FromFraction(3, 2), FixedMath.Wrap(FixedPoint.FromFraction(-1, 2), FixedPoint.Zero, (FixedPoint)2));
+            Assert.AreEqual(-Math.PI / 2, (double)FixedMath.WrapAngle(FixedMath.Pi + FixedMath.HalfPi), 2 * STEP);
+            Assert.AreEqual(-Math.PI, (double)FixedMath.WrapAngle(FixedMath.Pi), 2 * STEP, "π wraps to the start of the range");
+        }
+
+        [Test]
+        public void Yaw_IsTheAngleOfRotateY()
+        {
+            for (var degrees = -170; degrees <= 180; degrees += 25)
+            {
+                var angle = FixedMath.ToRadians(degrees);
+                var rotation = FixedQuaternion.RotateY(angle);
+                Assert.AreEqual((double)angle, (double)FixedMath.Yaw(rotation), 1e-3, $"{degrees} degrees");
+                Assert.AreEqual((double)angle, (double)FixedMath.Yaw(FixedMath.Forward(rotation).Xz), 1e-3, $"{degrees} degrees on XZ");
+            }
+            Assert.AreEqual(Math.PI / 2, (double)FixedMath.Yaw(FixedVector3.Right), 2 * STEP, "+X is a quarter turn clockwise from +Z");
+            Assert.AreEqual(0.0, (double)FixedMath.Yaw(FixedVector3.Up), 0.0, "a vertical direction has no heading");
+            var bearing = FixedMath.DeltaAngle(FixedMath.Yaw(FixedQuaternion.RotateY(FixedMath.HalfPi)), FixedMath.Yaw(new FixedVector2(0, -1)));
+            Assert.AreEqual(Math.PI / 2, (double)bearing, 2 * STEP, "facing +X, a point at -Z lies a quarter turn to the right");
         }
 
         [Test]

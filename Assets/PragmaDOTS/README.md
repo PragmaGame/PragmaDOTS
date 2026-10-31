@@ -155,7 +155,7 @@ reference.
 | `Pragma.Dots.Lockstep` | Lockstep | The protocol, the simulation world, its components, checksums, replays, offline mode, presentation helpers, the spatial index, the Transform and Entity Id actor parts and the copy of actors into the simulation | simulation and presentation code |
 | `Pragma.Dots.Lockstep.Netcode` | Lockstep, with `com.unity.netcode` | The Netcode for Entities RPC, the server and client systems, `LockstepNetcode` | bootstrap code |
 | `Pragma.Dots.Navigation` | Navigation | The walkability grid, obstacles, agents, `LockstepPathfinder`, the navigation systems and their actor parts | simulation code |
-| `Pragma.Dots.Vision` | Vision | The vision grid, vision sources, `LockstepVisionSystem`, the `LockstepVision` queries and their actor parts | simulation code, and presentation code that draws the fog of war |
+| `Pragma.Dots.Vision` | Vision | The vision grid, vision sources, `LockstepVisionSystem`, the `LockstepVision` queries, their actor parts and the fog texture `LockstepVisionFog` | simulation code, and presentation code that draws the fog of war |
 | `Pragma.Dots.Stats` | Stats | Attributes, resources, modifiers, changes and grants, `LockstepStatSystem` and the `LockstepStats` helpers | simulation code, and presentation code that shows stats |
 | `Pragma.Dots.Views` | Views | `EntityView`, view parts, `EntityViewKey`, the view manager, catalogs, the pool abstraction, the View actor part | presentation code, and simulation code that sets an `EntityViewKey` |
 | `Pragma.Dots.Views.Authoring` | Views | `EntityViewConfigAuthoring` | authoring code, if any |
@@ -241,7 +241,7 @@ public static class Rules
 | Modulo | `Remainder` (sign of the dividend, like `%`), `Mod` (always in `[0, Abs(y))`), `Wrap(x, min, max)` |
 | Powers | `Sqrt`, `Rsqrt`, `Exp`, `Exp2`, `Log`, `Log2`, `Log10`, `Pow(FixedPoint, FixedPoint)`, `Pow(FixedPoint, int)` |
 | Trigonometry | `Sin`, `Cos`, `SinCos`, `Tan`, `Asin`, `Acos`, `Atan`, `Atan2` |
-| Angles | `ToRadians`, `ToDegrees`, `DeltaAngle` |
+| Angles | `ToRadians`, `ToDegrees`, `DeltaAngle`, `WrapAngle` (into `[-π, π)`), `Yaw` of a rotation, a direction or its X and Z: the heading on the ground in radians from +Z, positive toward +X, the angle `FixedQuaternion.RotateY` takes. The bearing of a point from a unit is `DeltaAngle(Yaw(rotation), Yaw(offset.Xz))` |
 | Constants | `Pi`, `TwoPi`, `HalfPi`, `E`, `Ln2`, `Ln10`, `Sqrt2`, `Rad2Deg`, `Deg2Rad`, `Epsilon` |
 | `FixedVector2` | `Dot`, `Cross` (z of the 3D cross), `Length`, `LengthSquared`, `Distance`, `DistanceSquared`, `Normalize`, `NormalizeSafe`, `ClampLength`, `MoveTowards`, `Rotate`, `Perpendicular`, `Reflect`, `Direction(angle)`, `Angle(v)`, `Abs`, `Min`, `Max`, `Clamp`, `Lerp`, `Floor`, `Round` |
 | `FixedVector3` | `Dot`, `Cross`, `Length`, `LengthSquared`, `Distance`, `DistanceSquared`, `Normalize`, `NormalizeSafe`, `ClampLength`, `MoveTowards`, `Reflect`, `Project`, `ProjectOnPlane`, `Angle(a, b)`, `Abs`, `Min`, `Max`, `Clamp`, `Lerp`, `Floor`, `Round` |
@@ -1642,7 +1642,10 @@ in the part menu.
 | `LockstepNavAvoidance` | Singleton that turns avoidance on: how many seconds ahead agents look (`timeHorizon`), how far (`neighbourDistance`) and how many neighbours they avoid (`maxNeighbours`), what a standing agent costs a path (`crowdCost`); `Default`. Without it agents plan and walk their paths as if they were alone |
 | `LockstepNavSystemGroup` | Inside `LockstepSimulationSystemGroup`: `LockstepNavObstacleSystem` stamps obstacles and keeps the clearance of the cells, `LockstepNavPathSystem` plans and checks paths in parallel, `LockstepNavAvoidanceSystem` picks the velocities of avoiding agents in parallel, `LockstepNavMoveSystem` walks agents, `LockstepNavSeparationSystem` pushes overlapping agents apart |
 | `LockstepPathfinder`, `LockstepNavPathMap` | The search: one agent's path (`FindPath`), the search of a group (`SearchGroup`, `GetChain`, `FollowChain`), and the grid as one agent plans on it (its clearance, the crowds and what they cost) |
-| `LockstepNavigation` | The grid queries (`IsWalkable`, `IsPassable`, `GetClearance`, `UpdateClearance`, `HasLineOfSight`, `TryFindNearestWalkable`, `TryFindNearestPassable`, `TryStep`, `IsClear`, `Covers`, `GetCoverage`, `Stamp`) and the ground queries (`HasHeights`, `GetHeight`, `ToGround`, `IsSteep`) for systems of your own |
+| `LockstepNavigation` | The grid queries (`IsWalkable`, `IsPassable`, `GetClearance`, `UpdateClearance`, `HasLineOfSight`, `TryFindNearestWalkable`, `TryFindNearestPassable`, `TryStep`, `IsClear`, `Covers`, `GetCoverage`, `GetOpenDistance`, `Stamp`) and the ground queries (`HasHeights`, `GetHeight`, `ToGround`, `IsSteep`) for systems of your own |
+| `LockstepNavObstacleFootprint` | The world rectangle of an obstacle (`Create(obstacle, transform)`) and its geometry: `ClosestPoint`, `DistanceSquared`, and the walk around it (`Perimeter`, `GetPerimeterOffset`, `GetPerimeterPoint`, `GetPerimeterDistance`) |
+| `LockstepNavGridView` | The grid, its cells and its heights in one value for gameplay (`CreateQuery` in `OnCreate`, `Get` in `OnUpdate`): `IsWalkable`, `IsPassable`, `GetClearance`, `ToPassable`, `ToGround`, and places around a footprint (`TryFindPerimeterPlace`, `IsPerimeterPlaceOpen`, with the taken ones as `LockstepNavPerimeterPlace`s). Without a grid, or before its cells are built, it is open ground |
+| `LockstepNavReach` | Whether a point can be reached: the path to it is `Complete`. One search per question; every point without cells |
 
 ### Setting it up
 
@@ -1688,6 +1691,40 @@ To check where a building may go, build its footprint with `LockstepNavObstacleF
 and ask `LockstepNavigation.IsClear(grid, cells, footprint)`: true when every cell it would block is inside the grid and
 walkable. Footprints that are not in the grid yet (two buildings placed on one tick) are compared cell by cell with
 `GetCoverage` and `Covers`.
+
+Gameplay that reads the grid takes a `LockstepNavGridView`: one value instead of the grid, its buffers and whether they
+exist. A world without a grid, or with cells not built yet (they are sized on the first navigation update, later in the
+tick the first player joins on), is open ground: everything is walkable and reachable, and nothing moves.
+
+```csharp
+public partial struct SpawnSystem : ISystem
+{
+    private EntityQuery _gridQuery;
+
+    public void OnCreate(ref SystemState state)
+    {
+        _gridQuery = LockstepNavGridView.CreateQuery(ref state);
+    }
+
+    public void OnUpdate(ref SystemState state)
+    {
+        var grid = LockstepNavGridView.Get(state.EntityManager, _gridQuery);
+        // A vehicle appears on a cell its body fits on, on the ground.
+        var position = grid.ToGround(grid.ToPassable(exit, vehicleRadius));
+        // ...
+    }
+}
+```
+
+Units that work at a building stand around it rather than at its nearest edge: a footprint's perimeter is walked from
+its corner at local (-X, -Z), and a place is an offset along it. `grid.TryFindPerimeterPlace(footprint, position,
+radius, distance, taken, out offset)` gives the free place nearest along the perimeter to the unit, whose body overlaps
+none of the `taken` places and whose point, `distance` out from the edge, the body fits on; the unit walks to
+`footprint.GetPerimeterPoint(offset, distance)`. For `distance`, `LockstepNavigation.GetOpenDistance(grid, footprint)`
+is the least distance at which the building itself blocks no cell, however it lies on the grid; a melee unit uses its
+reach instead. Which unit holds which place is gameplay's to keep. `LockstepNavReach` checks an order before it is
+accepted: `reach.CanReach(start, target)` is false for a target in an obstacle, beyond the edge or on ground cut off
+from the start.
 
 ### Behaviour
 
@@ -1805,6 +1842,7 @@ part menu.
 | `LockstepVisionSource` | An entity that lets a slot see: the radius of its sight on the XZ plane and the slot it sees for (-1, or any slot outside the session, sees for nobody), around its `LockstepTransform` |
 | `LockstepVisionSystem` | Last in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it and stamps every source |
 | `LockstepVision` | The queries: `IsVisible` (a point, or a body of some radius, seen by its edge), `IsCellVisible`, `GetPlane` (the cells of one slot, to draw its fog), `HasCells`, `Stamp` |
+| `LockstepVisionFog` | Presentation: the fog of one slot as a texture (`Texture`, R8, a texel per cell, over `Area`) with soft edges and a fade (`FadeSeconds`), and the same visibility as numbers (`Visibility`, `Version`) for a minimap. No render pipeline: the game shades it |
 
 ### Setting it up
 
@@ -1835,6 +1873,15 @@ var grid = SystemAPI.GetSingleton<LockstepVisionGrid>();
 var cells = SystemAPI.GetSingletonBuffer<LockstepVisionCell>(true).AsNativeArray();
 var canAttack = LockstepVision.IsVisible(grid, cells, slot, target.position.Xz, targetRadius);
 ```
+
+4. Draw the fog of the local player with a `LockstepVisionFog` the presentation keeps: call `TryUpdate(grid, cells,
+   slot, tick, Time.unscaledDeltaTime)` every frame with the grid and cells of the simulation world and the tick it
+   stands on, then hand `fog.Texture` and `fog.Area` to whatever draws it (a full-screen pass, a projector, a terrain
+   layer). Each cell's target is the share of the visible cells around it (3 by 3), so the fog has soft edges; between
+   ticks the shown visibility moves toward the target in `FadeSeconds` and stops once it caught up, so nothing is
+   uploaded until the next change. `Restart()` makes the next update show the plane at once (another slot shown, frames
+   without fog). A revealed grid shows everything. Hiding the views of what the player does not see is the game's: it
+   asks `LockstepVision.IsVisible` with its own rules of ownership.
 
 ### Behaviour
 
@@ -1867,16 +1914,16 @@ A [module](#turning-modules-on) on top of [Lockstep](#lockstep): turn it on with
 
 | Type | What it is |
 |---|---|
-| `LockstepStat` | Buffer element: one stat of the entity. Its `type` (an id the game defines, usually an enum value; 0 is `NONE`), `kind` (`Attribute` or `Resource`) and `value`; an attribute's `baseValue`; a resource's `cap` (the attribute that caps it), `capPolicy` and `max` (the cap it was fitted to). Made with `LockstepStat.Attribute` and `LockstepStat.Resource` |
+| `LockstepStat` | Buffer element: one stat of the entity. Its `type` (an id the game defines, usually an enum value; 0 is `NONE`), `kind` (`Attribute` or `Resource`) and `value`; an attribute's `baseValue`; a resource's `cap` (the attribute that caps it), `capPolicy`, `regen` (the attribute it grows by per second) and `max` (the cap it was fitted to); `IsPending` (a resource that starts full, not filled yet) and `IsDepleted` (run out). Made with `LockstepStat.Attribute` and `LockstepStat.Resource`, `WithRegen` |
 | `LockstepStatModifier` | Buffer element: a change to an attribute. Its `stat`, `type` (`Flat`, `AdditivePercent`, `MultiplicativePercent`), `value`, `stacking` (`Stack` or `Strongest`), `source` and `endTick` (`PERMANENT` by default) |
 | `LockstepStatChange` | Buffer element: a one-tick change of a resource (`stat`, `amount`, `source`): damage, healing, income, a payment |
 | `LockstepStatGrant` | Buffer element of an entity that gives modifiers to the entities inheriting from it: the `modifier` and the `target` a receiver needs (`ANY` for every receiver) |
 | `LockstepStatGrantor` | Buffer element: an entity whose grants this one receives (its player, its squad, the unit carrying it) |
 | `LockstepStatTarget` | Buffer element: a group the entity belongs to for grants (its type, its category) |
 | `LockstepStatSource` | What applied a modifier, a grant or a change: two numbers the game picks (`kind`, `id`) |
-| `LockstepStatSystem` | In `LockstepSimulationSystemGroup`: removes expired modifiers and grants, recalculates the attributes whose base values, modifiers or grants changed, fits resources to their caps and applies the tick's changes |
+| `LockstepStatSystem` | In `LockstepSimulationSystemGroup`: removes expired modifiers and grants, recalculates the attributes whose base values, modifiers or grants changed, fits resources to their caps, regenerates them and applies the tick's changes |
 | `LockstepStats` | Extensions on the stat buffer, also taking the game's enum: `TryGet`, `TryGetValue`, `TryGetPendingValue`, `TryGetBase`, `TrySetBase`; `RemoveModifiers`, `RemoveGrants`, `Calculate` (the formula, for tooltips and previews), `Id` |
-| `StatsPart<TStat, TTarget>` | Base of the game's actor part with the stats of an actor: attributes (stat, base value), resources (stat, the attribute that caps it, its policy, the amount of an uncapped one), the targets grants reach it as, whether it receives grants. Mergeable |
+| `StatsPart<TStat, TTarget>` | Base of the game's actor part with the stats of an actor: attributes (stat, base value), resources (stat, the attribute that caps it, its policy, the amount it starts with, the attribute it regenerates by), the targets grants reach it as, whether it receives grants. Mergeable |
 | `StatGrantsPart<TStat, TTarget>` | Base of the game's actor part with the grants an actor gives: a source and grants (stat, modifier type, value, stacking, target). Mergeable |
 
 ### Setting it up
@@ -1901,7 +1948,8 @@ public sealed class UnitGrantsPart : StatGrantsPart<StatType, StatTarget>
 
 - **Stats.** Give units and buildings a *Stats* part: attributes (*Max Health* 100, *Speed* 5), resources (*Health*
   capped by *Max Health*, keeping its ratio; it starts full, or with its *Amount* when it has one, such as a building
-  under construction; an uncapped one such as money starts with its amount),
+  under construction; an uncapped one such as money starts with its amount; with a *Regen* attribute such as *Health
+  Regen* it grows by that attribute's value every second while it is below its cap),
   the targets grants reach it as (*Infantry*) and whether it receives grants. Besides `LockstepStat` the part adds
   the buffers the actor takes part in: `LockstepStatModifier` with any attribute, `LockstepStatChange` with any
   resource, `LockstepStatTarget` with any target, `LockstepStatGrantor` when it receives grants (gameplay names the
@@ -1989,7 +2037,12 @@ public partial struct SpeedStatSystem : ISystem
 - **Payments.** `value` is the amount as of the last update, so it does not see the payments already added on this
   tick. Check a price with `stats.TryGetPendingValue(changes, type, out amount)`: the amount the update will leave after
   the changes in the buffer, under the cap as of the last update. Two purchases on one tick then cannot spend the same
-  money.
+  money. It leaves out the regeneration of the tick, which only adds.
+- **Regeneration.** A resource with `regen` (`WithRegen`, or *Regen* in the part) grows on every update by the value of
+  that attribute times the tick's `deltaTime`, while it is below its cap (an uncapped one without end), before the
+  changes of the tick: a full unit that takes damage starts regenerating on the next tick. A rate of zero or less, or a
+  missing attribute, does nothing; the attribute takes modifiers like any other (faster healing out of combat).
+  Regenerating resources are written on every tick until they are full, so the systems that follow them wake then too.
 - **Caps.** A resource follows the attribute named in `cap` as that attribute is on the same tick. `KeepRatio` keeps
   the share (80 of 100 becomes 120 of 150, and 80 of 100 again), so a bonus to the maximum neither heals nor wounds;
   `Clamp` keeps the amount and cuts it down to a lower cap; shares of large amounts are computed without overflow. A
@@ -1998,6 +2051,10 @@ public partial struct SpeedStatSystem : ISystem
   share left to keep and stays empty when the cap comes back. `max` is the cap it was fitted to, the maximum a bar
   shows (negative before the first update of a resource that starts full). Without its cap attribute a resource is
   uncapped.
+- **Pending and depleted.** A resource that starts full holds zero until the first update fills it, and an entity
+  created after `LockstepStatSystem` on a tick waits for the next tick: `IsPending` tells such a stat apart. Check the
+  end of a resource with `IsDepleted` (a resource that is not pending and holds zero), never with `value <= 0` alone,
+  or a unit spawned late on a tick dies before its health is filled.
 - **Grants.** A grant reaches every entity whose `LockstepStatGrantor` buffer names the granting entity and whose
   `LockstepStatTarget`s include the grant's `target` (any entity, for `ANY`). Adding, removing or expiring a grant
   updates every receiver on the same tick, and an entity that starts inheriting later gets the grants in place. A
@@ -2014,8 +2071,8 @@ public partial struct SpeedStatSystem : ISystem
 - **Enums.** The factories and the read and write helpers take the game's enum and store its value
   (`LockstepStats.Id`), in Burst too.
 - **When values change.** `LockstepStatSystem` decides per chunk, by change versions, whether to recalculate: its stat,
-  modifier, grantor and target buffers, the grants in the chunks of its grantors, pending changes and expiring
-  modifiers. It writes the stats only then, so systems that follow a stat can use a change filter on `LockstepStat`. A
+  modifier, grantor and target buffers, the grants in the chunks of its grantors, pending changes, expiring
+  modifiers and resources that regenerate. It writes the stats only then, so systems that follow a stat can use a change filter on `LockstepStat`. A
   recalculation gives the same values however often it runs, so the state never depends on the versions themselves.
 - **Determinism.** Integer and `FixedPoint` math only; chunks are processed in parallel and each writes only its own
   entities.
@@ -2118,6 +2175,7 @@ simulation world, not even a cleanup component, so views cannot cause desyncs.
 |---|---|
 | `EntityViewManager.TryGet(world, out manager)` | The manager of a presentation world |
 | `manager.TryGetView(entity, out view)`, `manager.Views` | Spawned views by simulation entity |
+| `manager.TryGetPrefab(key, out prefab)` | The view prefab an entity with the key gets, as the manager picks it (baked catalogs first): for what shows an entity that does not exist yet, such as the ghost of a building being placed. Works without a session; a catalog changed since the last update is read first |
 | `manager.Attach(entity, view)`, `manager.Detach(view)` | Show an entity on a view you own, such as a HUD panel; it gets the same data and is never pooled |
 | `manager.ForceUpdate(entity)` | Push every value of the entity again at the next update |
 | `view.Entity`, `view.Client`, `view.IsBound`, `view.IsAttached` | What a view shows |
@@ -2312,7 +2370,7 @@ public partial struct SpellActiveState : ISystem
 | `Modules/Lockstep/Editor` | `Pragma.Dots.Lockstep.Editor`: the debug window |
 | `Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`: the RPC, server and client systems, `LockstepNetcode`; config, status and request components in `Components` |
 | `Modules/Navigation` | `Runtime`: `Pragma.Dots.Navigation`, its parts in `Parts` |
-| `Modules/Vision` | `Runtime`: `Pragma.Dots.Vision`, its parts in `Parts` |
+| `Modules/Vision` | `Runtime`: `Pragma.Dots.Vision`, its parts in `Parts`, the fog texture `LockstepVisionFog` in `Presentation` |
 | `Modules/Stats` | `Runtime`: `Pragma.Dots.Stats`, its parts in `Parts` |
 | `Modules/Views` | `Runtime`: `Pragma.Dots.Views`, the `ViewPart`; `Authoring`: `Pragma.Dots.Views.Authoring`; `Editor`: `Pragma.Dots.Views.Editor`, the view previews |
 | `Modules/StateMachines` | `Runtime`: `Pragma.Dots.StateMachines`, the actor part base in `Parts` |

@@ -1,4 +1,5 @@
 using Pragma.Dots.Lockstep;
+using Pragma.Dots.Mathematics;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
@@ -9,14 +10,15 @@ namespace Pragma.Dots.Stats
     /// <summary>
     /// Keeps <see cref="LockstepStat.value"/> up to date. Removes the modifiers and grants whose end tick has come, then
     /// recalculates the attributes of the entities whose base values, modifiers, grantors or targets changed, or whose
-    /// grantors' grants did; fits capped resources to their caps and applies the tick's <see cref="LockstepStatChange"/>s.
+    /// grantors' grants did; fits capped resources to their caps, regenerates the ones below their cap
+    /// (<see cref="LockstepStat.regen"/>) and applies the tick's <see cref="LockstepStatChange"/>s.
     /// Change stats in systems that update before this one and read them after it, and both happen on the same tick.
     /// </summary>
     /// <remarks>
-    /// What to recalculate is decided per chunk by change versions: stats nothing touched are neither recalculated nor
-    /// written, so systems that follow a stat with a change filter run only when it may have changed. A recalculation
-    /// gives the same values however often it runs, so the state never depends on the versions themselves. Chunks are
-    /// processed in parallel, each writing only its own entities.
+    /// What to recalculate is decided per chunk by change versions: stats nothing touched (nor regenerating) are neither
+    /// recalculated nor written, so systems that follow a stat with a change filter run only when it may have changed.
+    /// A recalculation gives the same values however often it runs, so the state never depends on the versions
+    /// themselves. Chunks are processed in parallel, each writing only its own entities.
     /// </remarks>
     [UpdateInGroup(typeof(LockstepSimulationSystemGroup))]
     [BurstCompile]
@@ -41,7 +43,8 @@ namespace Pragma.Dots.Stats
                 return;
             }
 
-            var tick = SystemAPI.GetSingleton<LockstepTime>().tick;
+            var time = SystemAPI.GetSingleton<LockstepTime>();
+            var tick = time.tick;
             // Grants expire first: the stat update reads them and counts their removal as a change.
             state.Dependency = new ExpireGrantsJob
             {
@@ -52,6 +55,7 @@ namespace Pragma.Dots.Stats
             state.Dependency = new UpdateJob
             {
                 tick = tick,
+                deltaTime = time.deltaTime,
                 lastSystemVersion = state.LastSystemVersion,
                 statHandle = SystemAPI.GetBufferTypeHandle<LockstepStat>(),
                 modifierHandle = SystemAPI.GetBufferTypeHandle<LockstepStatModifier>(),
@@ -115,6 +119,7 @@ namespace Pragma.Dots.Stats
         private struct UpdateJob : IJobChunk
         {
             public int tick;
+            public FixedPoint deltaTime;
             public uint lastSystemVersion;
             public BufferTypeHandle<LockstepStat> statHandle;
             public BufferTypeHandle<LockstepStatModifier> modifierHandle;
@@ -141,7 +146,8 @@ namespace Pragma.Dots.Stats
                 if (!hasExpired && !hasPendingChanges && !hasGrantChanged && !chunk.DidChange(ref statHandle, lastSystemVersion) &&
                     !(hasModifiers && chunk.DidChange(ref modifierHandle, lastSystemVersion)) &&
                     !(hasGrantors && chunk.DidChange(ref grantorHandle, lastSystemVersion)) &&
-                    !(hasTargets && chunk.DidChange(ref targetHandle, lastSystemVersion)))
+                    !(hasTargets && chunk.DidChange(ref targetHandle, lastSystemVersion)) &&
+                    !IsRegenerating(chunk.GetBufferAccessorRO(ref statHandle)))
                 {
                     return;
                 }
@@ -201,6 +207,23 @@ namespace Pragma.Dots.Stats
                     for (var j = 0; j < entityModifiers.Length; j++)
                     {
                         if (entityModifiers[j].IsExpired(tick))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            // A resource of the chunk grows on this tick, so its stats are written although nothing else touched them.
+            private static bool IsRegenerating(BufferAccessor<LockstepStat> stats)
+            {
+                for (var i = 0; i < stats.Length; i++)
+                {
+                    var entityStats = stats[i];
+                    for (var j = 0; j < entityStats.Length; j++)
+                    {
+                        if (entityStats[j].regen != LockstepStat.NONE && LockstepStats.Regenerates(entityStats, entityStats[j]))
                         {
                             return true;
                         }
@@ -320,8 +343,8 @@ namespace Pragma.Dots.Stats
                 }
             }
 
-            // After the attributes, so a resource follows the cap it has on this tick.
-            private static void UpdateResources(DynamicBuffer<LockstepStat> stats, NativeArray<LockstepStatChange> changes)
+            // After the attributes, so a resource follows the cap and the rate it has on this tick.
+            private void UpdateResources(DynamicBuffer<LockstepStat> stats, NativeArray<LockstepStatChange> changes)
             {
                 for (var i = 0; i < stats.Length; i++)
                 {
@@ -330,7 +353,7 @@ namespace Pragma.Dots.Stats
                     {
                         continue;
                     }
-                    stat.value = LockstepStats.ResolveResource(stats, stat, changes, out var isCapped, out var cap);
+                    stat.value = LockstepStats.ResolveResource(stats, stat, changes, deltaTime, out var isCapped, out var cap);
                     if (isCapped)
                     {
                         stat.max = cap;

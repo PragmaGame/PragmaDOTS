@@ -31,7 +31,7 @@ Fields of components are public and camelCase.
 | `LockstepNavCell` | Buffer on the grid entity, row by row along X: `ushort blockers` (obstacles over the cell), `byte clearance` (rings of free cells to the nearest blocked cell or the edge: 0 blocked, 1 next to one), `IsWalkable`. Empty until the first navigation update |
 | `LockstepNavHeight` | Optional buffer on the grid entity: `FixedPoint value`, world Y of the ground at each cell corner, `CornerCount` of them row by row along X. Static: read when the cells are built |
 | `LockstepNavObstacle` | `FixedVector2 center`, `FixedVector2 size`: a rectangle in the space of the entity's `LockstepTransform` (yaw, uniform scale), world space without one. Blocks every cell whose centre is within the agent radius of it; thinner than a cell with that radius, it counts as that thick |
-| `LockstepNavObstacleFootprint` | Cleanup component the obstacle system writes: the stamped world rectangle (`center`, `right`, `halfSize`, `Forward`); `Create(obstacle, transform)`, `Create(obstacle)` (world space). A destroyed obstacle lingers with it until its cells are released |
+| `LockstepNavObstacleFootprint` | Cleanup component the obstacle system writes: the stamped world rectangle (`center`, `right`, `halfSize`, `Forward`); `Create(obstacle, transform)`, `Create(obstacle)` (world space). A destroyed obstacle lingers with it until its cells are released. Geometry: `ClosestPoint(FixedVector2 or FixedVector3)` (Y kept), `DistanceSquared(FixedVector2 or FixedVector3)` (zero inside), and the walk around it from the local (-X, -Z) corner along -Z, +X, +Z, -X: `Perimeter`, `GetPerimeterOffset(xz)` (of the edge point nearest a position), `GetPerimeterPoint(offset, distance)` (X and Z, that far out from the edge; offsets wrap), `GetPerimeterDistance(a, b)` (the shorter way round) |
 | `LockstepNavAgent` | `speed`, `pace` (walks no faster while above 0), `angularSpeed` (radians per second, 0 turns at once), `turnInPlaceAngle` (radians; 0 walks while it turns), `stoppingDistance`, `radius` (0 takes no part in keeping apart and avoidance), `destination`, `groupGoal`, `status`, `isPathPartial`, `waypointIndex`, `gridVersion`; `SetDestination(destination)` (alone), `SetDestination(destination, groupGoal)` (with a group), `Replan()`, `Stop()` (its cell is checked again: stopped inside an obstacle, it walks out), `MustTurnInPlace(rotation, heading)`, `IsMoving`, `WalkSpeed` |
 | `LockstepNavStatus` | `Idle`, `Requested` (planned in the next navigation update), `Moving`, `Arrived` |
 | `LockstepNavWaypoint` | Buffer: `FixedVector3 position`; the path, end included, with the Y of the destination (not walked to) |
@@ -62,8 +62,24 @@ no read-only overload).
 | `GetStepClearance(grid, cells, from, clearance)` | The clearance a step from there has to end on: the body's own, or 1 when it already stands on a cell too narrow for it and is on its way out |
 | `IsClear(grid, cells, footprint)` | Every cell the footprint would block is inside the grid and walkable: where a building may go; false while the cells do not match the grid |
 | `Covers(grid, footprint, cell)`, `GetCoverage(grid, footprint, out min, out max)` | The cells a footprint blocks, outside the grid too: compare footprints not stamped yet |
+| `GetOpenDistance(grid, footprint)` | How far from the footprint's edge it blocks no cell, however it lies on the grid: agent radius + 3/4 cell + what a thin footprint grows by; 0 for an invalid grid |
 | `Stamp(grid, cells, footprint, count)` | Adds (or with a negative count removes) blockers: previews and tests only |
 | `HasHeights(grid, heights)`, `GetHeight(grid, heights, xz)`, `ToGround(grid, heights, position)`, `IsSteep(grid, heights, cell)` | The ground: bilinear inside a cell, the edge beyond the grid; `ToGround` returns the position unchanged without heights |
+
+`LockstepNavGridView` (readonly struct, Burst-compatible, read-only in jobs): `grid`, `cells`, `heights`;
+`new LockstepNavGridView(grid, cells, heights)`, static `CreateQuery(ref state)` (in `OnCreate`; does not require the
+grid), static `Get(entityManager, query)` (open ground without exactly one grid). `HasCells`, `HasHeights`,
+`GetClearance(radius)` (1 without cells), `IsWalkable(position)`, `IsPassable(position, clearance)`, `ToGround(position)`,
+`ToPassable(position, radius)` (the position, or the centre of the nearest cell the body fits on, Y kept),
+`IsPerimeterPlaceOpen(footprint, offset, distance, clearance)`, `TryFindPerimeterPlace(footprint, positionXz, radius,
+distance, taken, out offset)` (`taken`: `NativeArray<LockstepNavPerimeterPlace>` of the other places at this footprint;
+tries every half body, at least 1/16, from the edge point nearest the body both ways round). Without cells every
+position is walkable and passable and nothing moves.
+
+`LockstepNavPerimeterPlace`: `FixedPoint offset`, `FixedPoint radius`.
+
+`LockstepNavReach` (`IDisposable`): `Create(gridView, allocator)`, `IsCreated`, `CanReach(start, target)` (the path is
+`Complete`; true without cells), `Dispose()`. Keeps a pathfinder and waypoints; one per thread.
 
 ## Search
 

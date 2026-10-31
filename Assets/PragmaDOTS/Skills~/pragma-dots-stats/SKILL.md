@@ -1,6 +1,6 @@
 ---
 name: pragma-dots-stats
-description: Keep the numbers of units, buildings and players in a lockstep simulation with the Stats module of Pragma DOTS (package com.pragma.dots, define PRAGMA_DOTS_STATS, assembly Pragma.Dots.Stats) - attributes with flat, additive and multiplicative modifiers (LockstepStat, LockstepStatModifier), timed and non-stacking modifiers, resources with caps such as health and money (LockstepStatChange, TryGetPendingValue), grants that reach whole groups such as research and squad bonuses (LockstepStatGrant, LockstepStatGrantor, LockstepStatTarget), LockstepStatSystem and the order around it, the StatsPart and StatGrantsPart actor parts the game closes over its enums, and showing stats in views. Use it whenever the task touches health, damage, healing, armor, speed, range, sight, cooldown reduction, money or other resources, upgrades, research, buffs, debuffs, auras or level-ups - even if the user only says "add a health bar", "make units stronger" or "the player pays for a building".
+description: Keep the numbers of units, buildings and players in a lockstep simulation with the Stats module of Pragma DOTS (package com.pragma.dots, define PRAGMA_DOTS_STATS, assembly Pragma.Dots.Stats) - attributes with flat, additive and multiplicative modifiers (LockstepStat, LockstepStatModifier), timed and non-stacking modifiers, resources with caps such as health and money (LockstepStatChange, TryGetPendingValue, regeneration, IsDepleted), grants that reach whole groups such as research and squad bonuses (LockstepStatGrant, LockstepStatGrantor, LockstepStatTarget), LockstepStatSystem and the order around it, the StatsPart and StatGrantsPart actor parts the game closes over its enums, and showing stats in views. Use it whenever the task touches health, damage, healing, armor, speed, range, sight, cooldown reduction, money or other resources, upgrades, research, buffs, debuffs, auras or level-ups - even if the user only says "add a health bar", "make units stronger" or "the player pays for a building".
 ---
 
 # Stats in Pragma DOTS
@@ -47,11 +47,12 @@ public sealed class UnitGrantsPart : StatGrantsPart<StatType, StatTarget>
 ## Giving entities stats
 
 - **Actors.** A *Stats* part: attributes (stat, base value), resources (stat, the attribute that caps it, cap policy,
-  amount), the targets grants reach it as, *Receives Grants* (on by default). A capped resource without an amount starts
-  full; with one (a building under construction) it starts with that much; an uncapped one (money) starts with its
-  amount. The part also adds the buffers the actor takes part in: `LockstepStatModifier` with any attribute,
-  `LockstepStatChange` with any resource, `LockstepStatTarget` with any target, `LockstepStatGrantor` when it receives
-  grants. It warns about a stat listed twice and a resource capped by something that is not an attribute of the actor.
+  amount, the attribute it regenerates by), the targets grants reach it as, *Receives Grants* (on by default). A capped
+  resource without an amount starts full; with one (a building under construction) it starts with that much; an
+  uncapped one (money) starts with its amount. The part also adds the buffers the actor takes part in:
+  `LockstepStatModifier` with any attribute, `LockstepStatChange` with any resource, `LockstepStatTarget` with any
+  target, `LockstepStatGrantor` when it receives grants. It warns about a stat listed twice and a resource capped by, or
+  regenerating by, something that is not an attribute of the actor.
 - **Variants.** Both parts merge: the *Stats* of a veteran derived from the rifleman lists only *Max Health* 150; a
   placed building only its own amount. Later changes of the parent still reach the variant.
 - **In code** (an entity that is not an actor, such as a player's economy created on the join tick):
@@ -139,6 +140,16 @@ if (stats.TryGetPendingValue(changes, StatType.Money, out var money) && money >=
 a lower cap. `max` is the cap it was fitted to: the maximum a health bar shows (negative before the first update of a
 resource that starts full).
 
+**Regeneration.** Health that heals over time and morale that recovers are not a system of yours: name the attribute
+the resource grows by per second in its `regen` (*Regen* in the part, or `LockstepStat.Resource(...).WithRegen(StatType.HealthRegen)`
+in code). `LockstepStatSystem` adds `rate * deltaTime` on every tick while the resource is below its cap (an uncapped
+one without end), before the tick's changes; a rate of zero or less does nothing, and the attribute takes modifiers
+(slower healing in combat). `TryGetPendingValue` leaves the tick's regeneration out: it only adds.
+
+**Pending and depleted.** A resource that starts full holds zero until the first `LockstepStatSystem` update fills it,
+and an entity created after that system on a tick waits for the next tick (`IsPending`). Check whether a resource ran
+out with `IsDepleted` (not pending, and zero), never with `value <= 0` or with `max > 0` workarounds.
+
 ## Grants (groups)
 
 A grant is a modifier an entity gives to every entity whose `LockstepStatGrantor` buffer names it and whose
@@ -197,8 +208,8 @@ public partial struct SpeedStatSystem : ISystem
 }
 ```
 
-Death works the same way: a job after `LockstepStatSystem`, filtered on `LockstepStat`, that finds `Health` at zero and
-records the death through the end-of-tick command buffer (`[ChunkIndexInQuery]` sort key), or puts the unit into a
+Death works the same way: a job after `LockstepStatSystem`, filtered on `LockstepStat`, that finds `Health`
+`IsDepleted` and records the death through the end-of-tick command buffer (`[ChunkIndexInQuery]` sort key), or puts the unit into a
 dying state its view can animate. `SystemAPI.Query<DynamicBuffer<LockstepStat>>()` is read-write: prefer the job, or a
 read-only `SystemAPI.GetBufferLookup<LockstepStat>(true)`.
 
@@ -218,6 +229,8 @@ would give with `LockstepStats.Calculate(type, baseValue, modifiers)`, without t
 | Two auras of the same kind add up | They are not `Strongest`, or their sources have different `kind`s |
 | Health jumps when max health changes | The resource uses `Clamp`; `KeepRatio` keeps the share |
 | Two purchases spend the same money | The check reads `TryGetValue`: use `TryGetPendingValue` with the changes buffer |
+| A unit dies or a squad breaks on the tick it appears | The check reads `value <= 0` of a resource still `IsPending`: use `IsDepleted` |
+| Health does not regenerate | The resource has no `regen`, the attribute it names is missing or not above zero, or it is already at its cap |
 | A research bonus misses new units | The unit does not name the grantor (`LockstepStatGrantor`), lacks the target, or *Receives Grants* is off |
 | Stats recalculate every tick | A system accesses `LockstepStat` read-write every tick: read with `in` or a read-only lookup |
 | Values differ after renaming an enum member's value | Stats are stored by value: renumbering changes content, saves and replays |

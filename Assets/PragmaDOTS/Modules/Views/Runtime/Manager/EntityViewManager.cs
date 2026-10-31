@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Pragma.Dots.Lockstep;
+using Unity.Collections;
 using Unity.Entities;
 
 namespace Pragma.Dots.Views
@@ -14,12 +15,18 @@ namespace Pragma.Dots.Views
     /// </remarks>
     public sealed class EntityViewManager
     {
+        private readonly EntityViewManagerSystem _system;
         private readonly Dictionary<Entity, EntityView> _views = new Dictionary<Entity, EntityView>();
         private readonly Dictionary<Entity, List<EntityView>> _attached = new Dictionary<Entity, List<EntityView>>();
         private readonly List<Entity> _missing = new List<Entity>();
         private List<Entity> _pending = new List<Entity>();
         private List<Entity> _pendingNext = new List<Entity>();
         private int _attachedCount;
+
+        internal EntityViewManager(EntityViewManagerSystem system)
+        {
+            _system = system;
+        }
 
         /// <summary>Views spawned from the pool, by simulation entity.</summary>
         public IReadOnlyDictionary<Entity, EntityView> Views => _views;
@@ -56,6 +63,18 @@ namespace Pragma.Dots.Views
         public bool TryGetView(Entity entity, out EntityView view)
         {
             return _views.TryGetValue(entity, out view) && view != null;
+        }
+
+        /// <summary>
+        /// The view prefab an entity with <paramref name="key"/> gets in this world: from the registries baked into it
+        /// first, then from <see cref="EntityViewConfigs"/>, as the manager spawns them. For what shows an entity that does
+        /// not exist yet, such as the ghost of a building being placed. Works without a session; a catalog changed since the
+        /// last update is read again first.
+        /// </summary>
+        /// <returns>False when no catalog binds the key.</returns>
+        public bool TryGetPrefab(in FixedString32Bytes key, out EntityView prefab)
+        {
+            return _system.TryGetPrefab(key, out prefab);
         }
 
         /// <summary>

@@ -569,6 +569,32 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void ViewCatalog_GivesPrefabsByKeyWithoutAnUpdate()
+        {
+            using (var views = new ViewHarness())
+            {
+                var entityManager = views.World.EntityManager;
+                var registry = entityManager.CreateEntity(typeof(EntityViewRegistry), typeof(EntityViewPrefabElement));
+                entityManager.GetBuffer<EntityViewPrefabElement>(registry).Add(new EntityViewPrefabElement
+                {
+                    key = TestViewSpawnSystem.KEY_B,
+                    prefab = views.PrefabA.gameObject,
+                });
+
+                LogAssert.Expect(LogType.Warning, new Regex("bound twice"));
+                Assert.IsTrue(views.Manager.TryGetPrefab(TestViewSpawnSystem.KEY_A, out var prefabA));
+                Assert.AreSame(views.PrefabA, prefabA);
+                Assert.IsTrue(views.Manager.TryGetPrefab(TestViewSpawnSystem.KEY_B, out var prefabB));
+                Assert.AreSame(views.PrefabA, prefabB, "baked registries come first, as when views spawn");
+                Assert.IsFalse(views.Manager.TryGetPrefab("Missing", out _));
+
+                views.Config.SetBinders(new EntityViewBinder(TestViewSpawnSystem.KEY_A, views.PrefabB));
+                Assert.IsTrue(views.Manager.TryGetPrefab(TestViewSpawnSystem.KEY_A, out prefabA), "a changed config is read again at once");
+                Assert.AreSame(views.PrefabB, prefabA);
+            }
+        }
+
+        [Test]
         public void ViewCatalog_SeesEditsMadeWithoutASession()
         {
             using (var session = new SessionHarness(Settings()))

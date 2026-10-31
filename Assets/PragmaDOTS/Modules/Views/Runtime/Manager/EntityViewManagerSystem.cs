@@ -24,7 +24,7 @@ namespace Pragma.Dots.Views
     [UpdateInGroup(typeof(PresentationSystemGroup), OrderFirst = true)]
     public partial class EntityViewManagerSystem : SystemBase
     {
-        private readonly EntityViewManager _manager = new EntityViewManager();
+        private readonly EntityViewManager _manager;
         private readonly Dictionary<FixedString32Bytes, EntityView> _prefabs = new Dictionary<FixedString32Bytes, EntityView>();
         private readonly List<(Entity Entity, EntityView Prefab, FixedString32Bytes Key)> _toSpawn = new List<(Entity, EntityView, FixedString32Bytes)>();
         private readonly List<Entity> _toRelease = new List<Entity>();
@@ -40,6 +40,11 @@ namespace Pragma.Dots.Views
         private bool _isScanRequired;
         private int _scanStamp;
         private bool _isShown = true;
+
+        public EntityViewManagerSystem()
+        {
+            _manager = new EntityViewManager(this);
+        }
 
         /// <summary>
         /// Creates the pool of every presentation world. Set it once per project from the game's bootstrap, before
@@ -121,10 +126,9 @@ namespace Pragma.Dots.Views
         {
             _manager.BeginFrame();
             // Watched without a session too: a registry edited in place is seen only by the update right after the edit.
-            if (HasCatalogChanged())
+            if (HasCatalogChanged() || WasRegistryEditedInPlace())
             {
                 RebuildCatalog();
-                _isScanRequired = true;
             }
             if (!_isShown)
             {
@@ -283,6 +287,20 @@ namespace Pragma.Dots.Views
             _isPoolOwned = false;
         }
 
+        /// <summary>
+        /// The prefab of <paramref name="key"/> in the catalog of this world. A config or a registry added, removed or edited
+        /// since the last rebuild is read first, so a caller outside the update sees what the next update spawns from.
+        /// </summary>
+        internal bool TryGetPrefab(in FixedString32Bytes key, out EntityView prefab)
+        {
+            if (HasCatalogChanged())
+            {
+                RebuildCatalog();
+            }
+            return _prefabs.TryGetValue(key, out prefab) && prefab != null;
+        }
+
+        // A config was registered, removed or edited, or a registry was added or removed, since the last rebuild.
         private bool HasCatalogChanged()
         {
             var hasChanged = false;
@@ -297,12 +315,16 @@ namespace Pragma.Dots.Views
                 _registryOrderVersion = orderVersion;
                 hasChanged = true;
             }
-            if (hasChanged || _registryQuery.IsEmptyIgnoreFilter)
-            {
-                return hasChanged;
-            }
+            return hasChanged;
+        }
 
-            // A registry edited in place, by live baking in the editor.
+        // A registry edited in place since the last update, by live baking in the editor: only its change version tells.
+        private bool WasRegistryEditedInPlace()
+        {
+            if (_registryQuery.IsEmptyIgnoreFilter)
+            {
+                return false;
+            }
             var elementHandle = GetBufferTypeHandle<EntityViewPrefabElement>(true);
             using (var chunks = _registryQuery.ToArchetypeChunkArray(Allocator.Temp))
             {
@@ -317,8 +339,10 @@ namespace Pragma.Dots.Views
             return false;
         }
 
+        // The views of the current state are compared with the new catalog on the next update.
         private void RebuildCatalog()
         {
+            _isScanRequired = true;
             _prefabs.Clear();
             if (!_registryQuery.IsEmptyIgnoreFilter)
             {

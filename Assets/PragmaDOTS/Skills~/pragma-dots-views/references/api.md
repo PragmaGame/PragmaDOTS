@@ -84,6 +84,7 @@ must live in runtime (non-Editor) assemblies.
 | Member | Notes |
 |---|---|
 | `Views`, `TryGetView(entity, out view)` | Spawned views by simulation entity |
+| `TryGetPrefab(key, out prefab)` | The prefab an entity with the key gets (baked catalogs first, as when spawning): for a ghost of something not spawned yet, such as a building being placed. Works without a session; a catalog changed since the last update is read first |
 | `Attach(entity, view)` | A view the caller owns (HUD panel, scene object): same data, never pooled; false when no session, no such entity or the view is bound |
 | `Detach(view)` | Ends an attachment; also automatic when the entity or the session goes |
 | `ForceUpdate(entity)` | Pushes every value of the entity at the next update |

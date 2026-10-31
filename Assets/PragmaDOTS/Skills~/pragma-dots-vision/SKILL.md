@@ -1,6 +1,6 @@
 ---
 name: pragma-dots-vision
-description: Keep what every player sees inside a lockstep simulation with the Vision module of Pragma DOTS (package com.pragma.dots, define PRAGMA_DOTS_VISION, assembly Pragma.Dots.Vision) - the vision grid of a map (LockstepVisionGrid, the Vision/Grid part) with one plane per player slot, vision sources (LockstepVisionSource, the Vision/Source part) whose slot and radius gameplay keeps current, LockstepVisionSystem, the LockstepVision queries (IsVisible for points and bodies, IsCellVisible, GetPlane), revealing the map, shared vision of allies, checking commands and AI against vision, and drawing the fog of war and hiding views in the presentation. Use it whenever the task involves fog of war, line of sight between players and units, scouting, stealth or hidden units, "attack only what you see", a minimap that hides enemies, or reveal-map options - even if the user only says "fog", "visibility" or "the enemy should not see my base".
+description: Keep what every player sees inside a lockstep simulation with the Vision module of Pragma DOTS (package com.pragma.dots, define PRAGMA_DOTS_VISION, assembly Pragma.Dots.Vision) - the vision grid of a map (LockstepVisionGrid, the Vision/Grid part) with one plane per player slot, vision sources (LockstepVisionSource, the Vision/Source part) whose slot and radius gameplay keeps current, LockstepVisionSystem, the LockstepVision queries (IsVisible for points and bodies, IsCellVisible, GetPlane), revealing the map, shared vision of allies, checking commands and AI against vision, and drawing the fog of war (LockstepVisionFog) and hiding views in the presentation. Use it whenever the task involves fog of war, line of sight between players and units, scouting, stealth or hidden units, "attack only what you see", a minimap that hides enemies, or reveal-map options - even if the user only says "fog", "visibility" or "the enemy should not see my base".
 ---
 
 # Vision in Pragma DOTS
@@ -28,6 +28,7 @@ Deeper reference: the package README, section *Vision* (`Assets/PragmaDOTS/READM
 | `LockstepVisionSource` | On whatever sees: `FixedPoint radius` (on XZ, up to `LockstepVision.MAX_RADIUS` = 30 000; negative sees nothing), `int slot` (outside the session's slots, -1 included, sees for nobody). Needs `LockstepTransform` |
 | `LockstepVisionSystem` | `OrderLast` in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it, stamps every source |
 | `LockstepVision` | Burst-compatible queries: `IsVisible(grid, cells, slot, xz[, radius])`, `IsCellVisible(grid, cells, slot, cell)`, `GetPlane(grid, cells, slot)`, `HasCells(grid, cells)`, `Stamp(grid, cells, slot, xz, radius)` |
+| `LockstepVisionFog` | Presentation: the fog of a slot as an R8 texture, a texel per cell, smoothed and fading; `TryUpdate(grid, cells, slot, tick, deltaTime)`, `Texture`, `Area`, `Visibility`, `Version`, `IsSettled`, `FadeSeconds`, `Restart()`, `Dispose()` |
 | *Vision/Grid* (`VisionGridPart`) | `Size` (100 x 100, centred on the placement), `CellSize` (2, at least 0.05): the grid and an empty cell buffer |
 | *Vision/Source* (`VisionSourcePart`) | `Radius` (20): a source with slot -1. Needs a Transform part |
 
@@ -105,15 +106,22 @@ if (time.tick == 0)
 ## Fog of war in the presentation
 
 Draw the fog from the local slot's plane and hide the views of what it does not see; never write any of it back to the
-simulation world. A presentation system that copies the plane into a texture:
+simulation world. `LockstepVisionFog` turns a slot's plane into a texture, with soft edges (each cell the share of the
+visible cells around it) and a fade in time (`FadeSeconds`), and uploads only when something changed; how it is shaded
+(a full-screen pass, a projector, a terrain layer) is the game's, so the module needs no render pipeline:
 
 ```csharp
 [UpdateInGroup(typeof(PresentationSystemGroup))]
 public partial class FogOfWarSystem : SystemBase
 {
+    private readonly LockstepVisionFog _fog = new LockstepVisionFog { FadeSeconds = 0.35f };
     private World _simulationWorld;
     private EntityQuery _gridQuery;
-    private Texture2D _texture;   // fed to a fog material or the minimap
+
+    protected override void OnDestroy()
+    {
+        _fog.Dispose();
+    }
 
     protected override void OnUpdate()
     {
@@ -126,6 +134,7 @@ public partial class FogOfWarSystem : SystemBase
         {
             _simulationWorld = simulation;
             _gridQuery = simulation.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepVisionGrid>());
+            _fog.Restart();
         }
         if (!_gridQuery.TryGetSingletonEntity<LockstepVisionGrid>(out var gridEntity))
         {
@@ -135,27 +144,18 @@ public partial class FogOfWarSystem : SystemBase
         var manager = simulation.EntityManager;
         var grid = manager.GetComponentData<LockstepVisionGrid>(gridEntity);
         var cells = manager.GetBuffer<LockstepVisionCell>(gridEntity, true).AsNativeArray();
-        var plane = LockstepVision.GetPlane(grid, cells, client.LocalSlot);
-        if (!plane.IsCreated)
+        if (_fog.TryUpdate(grid, cells, client.LocalSlot, client.Simulation.Tick, UnityEngine.Time.unscaledDeltaTime))
         {
-            return;
+            Shader.SetGlobalTexture(FogTextureId, _fog.Texture);   // the game's shader maps it onto _fog.Area
         }
-        if (_texture == null || _texture.width != grid.width || _texture.height != grid.height)
-        {
-            _texture = new Texture2D(grid.width, grid.height, TextureFormat.R8, false);
-        }
-        var pixels = _texture.GetPixelData<byte>(0);
-        for (var i = 0; i < plane.Length; i++)
-        {
-            pixels[i] = grid.isRevealed || plane[i].isVisible ? (byte)255 : (byte)0;
-        }
-        _texture.Apply(false);
     }
 }
 ```
 
-- Row `y` of the plane is world Z `origin.y + y * cellSize`: map the texture onto the grid's rectangle
-  (`origin` to `origin + cellSize * (width, height)`), bilinear filtering softens the edge.
+- The texture has a texel per cell, row `y` at world Z `origin.y + y * cellSize`: map it onto `fog.Area` (X and Z of the
+  corner, width along X, height along Z). `fog.Visibility` and `fog.Version` give a minimap the same picture.
+- `Restart()` after showing another slot, or after frames without fog, so the next update shows the plane at once
+  instead of fading from the old one. A revealed grid shows everything.
 - A client without a slot (`LocalSlot` -1, before it joined) gets no plane: decide what it shows (everything, for a
   spectator).
 - Hide the views of entities the local slot does not see (`EntityViewManager.TryGet(World, out var views)`, then for each
