@@ -58,8 +58,8 @@ ghosts) uses it alone.
 - **[Utilities](#utilities)** (`Pragma.Dots.Utils`, `Pragma.Dots.Utils.Entities`). `FixedDictionary4096Bytes` (a hash
   map that fits in a component), `OptionalValue`, inspectors for fixed lists and fixed strings and
   `EnumId` (enum values as ints, in Burst too) without an Entities dependency, `CollisionMatrixToFilter` for projects
-  with Unity Physics; signals (one-off events as entities), buffers used as dictionaries of any size and
-  `EntityManager` helpers on top of Entities.
+  with Unity Physics; signals (one-off events as entities), buffers used as dictionaries of any size,
+  `EntityManager` helpers and hiding service entities from the Hierarchy window on top of Entities.
 
 ### The modules
 
@@ -149,7 +149,7 @@ reference.
 | `Pragma.Dots.Mathematics` | core | `FixedPoint`, vectors, quaternion, pose, `FixedMath`, `FixedRandom`, `FixedGrid` | simulation and presentation code |
 | `Pragma.Dots.Utils` | core | `FixedDictionary4096Bytes`, `OptionalValue` | any code |
 | `Pragma.Dots.Utils.Physics` | core, with `com.unity.physics` | `CollisionMatrixToFilter` | presentation code |
-| `Pragma.Dots.Utils.Entities` | core | `Signals`, `SignalCleanupSystem`, `BufferDictionary`, `EntityManagerExtensions` | simulation and presentation code |
+| `Pragma.Dots.Utils.Entities` | core | `Signals`, `SignalCleanupSystem`, `BufferDictionary`, `EntityManagerExtensions`, `EntityHierarchy` | simulation and presentation code |
 | `Pragma.Dots.Actors` | core | `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` and the actor components | simulation and presentation code |
 | `Pragma.Dots.Actors.Authoring` | core | `ActorCatalogAuthoring` and the bakers of the actor catalog and of placed actors | authoring code, if any |
 | `Pragma.Dots.Lockstep` | Lockstep | The protocol, the simulation world, its components, checksums, replays, offline mode, presentation helpers, the spatial index, the Transform and Entity Id actor parts and the copy of actors into the simulation | simulation and presentation code |
@@ -586,6 +586,14 @@ cooldowns.Remove(ability);
 `TryGetComponent(entity, out component)` and `TryGetBuffer(entity, isReadOnly, out buffer)`: false for an entity that
 does not exist or lacks it. Entities covers the rest: `AddComponent` and `RemoveComponent` do nothing (and return
 false) when the component is already there or already gone, and `AddComponentData` also sets an existing component.
+
+### Hierarchy
+
+`EntityHierarchy.TryGetHiddenTag(out tag)`: the tag that keeps an entity out of the Hierarchy window (the window's
+*Show Hidden Entities* setting shows it again). Entities declares it internal and only in the editor, so it is found by
+name (`HIDDEN_TAG_NAME`); outside the editor there is none and the call returns false. Put it on short-lived service
+entities that would make the window flicker, never on simulation state: an editor-only component changes the
+archetype, and the checksum skips the tag only because it knows its name.
 
 ## Lockstep
 
@@ -1191,6 +1199,10 @@ PlayMode Tools create thin clients (*Num Thin Clients*), and so does `ClientServ
 
 **Background.** Netcode drops connections of a player that stops updating; set `Application.runInBackground = true`
 for hosts and clients.
+
+**Hierarchy.** Every packet goes out as a `SendRpcCommandRequest` entity, which Netcode sends in the same frame but
+destroys only in the next one. In the editor these requests carry the hidden tag (`EntityHierarchy`), so the server
+and client worlds do not flicker in the Hierarchy window.
 
 #### Match flow
 
@@ -2358,7 +2370,7 @@ public partial struct SpellActiveState : ISystem
 | `Core/Utils/Runtime` | `Pragma.Dots.Utils`: `FixedDictionary4096Bytes`, `OptionalValue`, `EnumId` |
 | `Core/Utils/Editor` | `Pragma.Dots.Utils.Editor`: drawers of fixed lists and fixed strings |
 | `Core/Utils/Physics` | `Pragma.Dots.Utils.Physics`: `CollisionMatrixToFilter` |
-| `Core/Utils/Entities` | `Pragma.Dots.Utils.Entities`: signals and their cleanup, `BufferDictionary`, `EntityManagerExtensions`; `SignalTag` in `Components` |
+| `Core/Utils/Entities` | `Pragma.Dots.Utils.Entities`: signals and their cleanup, `BufferDictionary`, `EntityManagerExtensions`, `EntityHierarchy`; `SignalTag` in `Components` |
 | `Core/Editor` | `Pragma.Dots.Editor`: the modules page |
 | `Modules/Lockstep/Runtime/Protocol` | `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays and `LockstepReplayHost`, loopback network |
 | `Modules/Lockstep/Runtime/Simulation` | `LockstepSimulation`, the system group, command buffer systems, frame application, checksums, entity ids |

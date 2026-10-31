@@ -38,9 +38,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `LockstepVisionFog` (Vision): the fog of war of one slot as an R8 texture with a texel per cell, smoothed over the
   neighbouring cells and fading in time, computed in Burst jobs and uploaded only when it changes, with the same
   visibility as numbers for a minimap. It needs no render pipeline: the game shades `Texture` over `Area`.
+- `EntityHierarchy.TryGetHiddenTag` (`Pragma.Dots.Utils.Entities`): the editor-only tag of Entities that keeps an entity
+  out of the Hierarchy window, found by name because Entities declares it internal; false outside the editor.
 
 ### Changed
 
+- The Netcode send requests of lockstep packets carry the hidden tag in the editor: Netcode destroys a request only in
+  the next frame, so the server and client worlds flickered in the Hierarchy window with every packet.
 - `LockstepStat` has a `regen` field and `LockstepStatSystem` reads `LockstepTime.deltaTime`: the stat buffers and the
   state hash change.
 - `EntityViewManager` is created by its system only (its constructor is internal).

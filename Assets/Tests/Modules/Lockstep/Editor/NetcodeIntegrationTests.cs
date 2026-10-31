@@ -7,6 +7,7 @@ using System.Diagnostics;
 using NUnit.Framework;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Lockstep.Netcode;
+using Pragma.Dots.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Core;
@@ -208,6 +209,35 @@ namespace Pragma.Dots.Tests
                 Assert.AreEqual(count, state.commandDataCount);
                 Assert.AreEqual(sum, state.commandDataSum);
             }
+        }
+
+        [Test]
+        public void SendRequests_AreHiddenFromTheHierarchy()
+        {
+            Assert.IsTrue(EntityHierarchy.TryGetHiddenTag(out var hidden), "the editor has the tag");
+            var (server, clientA, clientB) = StartSession(7973);
+
+            // Netcode destroys a sent request only in the next frame: after each update that frame's requests remain.
+            var requests = 0;
+            for (var frame = 0; frame < 60 * 3; frame++)
+            {
+                Tick(1);
+                foreach (var world in new[] { server, clientA, clientB })
+                {
+                    var entityManager = world.EntityManager;
+                    using (var sent = entityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>()))
+                    using (var shown = entityManager.CreateEntityQuery(new EntityQueryDesc
+                           {
+                               All = new[] { ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>() },
+                               None = new[] { hidden },
+                           }))
+                    {
+                        requests += sent.CalculateEntityCount();
+                        Assert.AreEqual(0, shown.CalculateEntityCount(), $"a request in {world.Name} shows in the Hierarchy");
+                    }
+                }
+            }
+            Assert.Greater(requests, 0, "the session sent packets");
         }
 
         /// <summary>

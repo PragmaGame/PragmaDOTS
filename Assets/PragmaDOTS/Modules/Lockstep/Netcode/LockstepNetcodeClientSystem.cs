@@ -122,7 +122,7 @@ namespace Pragma.Dots.Lockstep.Netcode
             _transport = new Transport
             {
                 entityManager = EntityManager,
-                archetype = EntityManager.CreateArchetype(ComponentType.ReadWrite<LockstepPacketRpc>(), ComponentType.ReadWrite<SendRpcCommandRequest>()),
+                archetype = LockstepPacketRpc.CreateRequestArchetype(EntityManager),
                 connection = connection,
             };
             var settings = config.settings;

@@ -167,6 +167,7 @@ Namespace `Pragma.Dots.Utils`, assembly `Pragma.Dots.Utils.Entities` (the core).
 | `IDictionaryElement<TKey>` | `TKey Key { get; set; }` on the game's buffer element (`TKey : unmanaged, IComparable<TKey>`) |
 | `BufferDictionary` | Extensions on `DynamicBuffer<TElement>`: `IndexOf(key)` (index, or `~insertionIndex`), `ContainsKey`, `TryGet(key, out element)`, `ref GetOrAdd(key[, out added])`, `Remove(key)`. Sorted by key; Burst-compatible |
 | `EntityManagerExtensions` | `TryGetComponent(entity, out T)`, `TryGetBuffer(entity, isReadOnly, out buffer)` |
+| `EntityHierarchy` | `TryGetHiddenTag(out ComponentType)`: the editor-only tag of Entities that keeps an entity out of the Hierarchy window (found by name, `HIDDEN_TAG_NAME`; false outside the editor). For short-lived service entities, never simulation state |
 
 ## Presentation-side access
 

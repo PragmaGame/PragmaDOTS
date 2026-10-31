@@ -1,5 +1,6 @@
 using System;
 using AOT;
+using Pragma.Dots.Utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -36,6 +37,22 @@ namespace Pragma.Dots.Lockstep.Netcode
 
         /// <summary>Pointer to the payload of an RPC that lives at a stable address (a native array element).</summary>
         public static byte* GetData(LockstepPacketRpc* rpc) => rpc->_data;
+
+        /// <summary>
+        /// The archetype of a send request. Netcode sends a request in the frame it is made but destroys it through the
+        /// next frame's begin command buffer, so every packet leaves an entity behind for a frame; in the editor the
+        /// requests are hidden from the Hierarchy window, which would otherwise flicker with them.
+        /// </summary>
+        internal static EntityArchetype CreateRequestArchetype(EntityManager entityManager)
+        {
+            var packet = ComponentType.ReadWrite<LockstepPacketRpc>();
+            var request = ComponentType.ReadWrite<SendRpcCommandRequest>();
+            if (EntityHierarchy.TryGetHiddenTag(out var hidden))
+            {
+                return entityManager.CreateArchetype(packet, request, hidden);
+            }
+            return entityManager.CreateArchetype(packet, request);
+        }
 
         public void Serialize(ref DataStreamWriter writer, in RpcSerializerState state, in LockstepPacketRpc data)
         {

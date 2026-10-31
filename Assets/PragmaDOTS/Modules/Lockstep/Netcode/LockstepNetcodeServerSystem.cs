@@ -145,7 +145,7 @@ namespace Pragma.Dots.Lockstep.Netcode
             _transport = new Transport
             {
                 entityManager = EntityManager,
-                archetype = EntityManager.CreateArchetype(ComponentType.ReadWrite<LockstepPacketRpc>(), ComponentType.ReadWrite<SendRpcCommandRequest>()),
+                archetype = LockstepPacketRpc.CreateRequestArchetype(EntityManager),
                 connections = _connectionsById,
             };
             var effective = settings;

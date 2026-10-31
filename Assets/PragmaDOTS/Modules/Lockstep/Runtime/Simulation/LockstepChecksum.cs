@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Pragma.Dots.Utils;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -59,7 +60,7 @@ namespace Pragma.Dots.Lockstep
         // Entities tags the world time and system entities with HideInHierarchy only in the editor (#if UNITY_EDITOR); it
         // is internal, hence the names. The entities of a subscene open for editing keep EntityGuid (live baking patches
         // them by it), and it is made of instance ids, which differ between editor processes.
-        private static readonly HashSet<string> EditorOnlyTypes = new HashSet<string> { "Unity.Entities.HideInHierarchy", "Unity.Entities.EntityGuid" };
+        private static readonly HashSet<string> EditorOnlyTypes = new HashSet<string> { EntityHierarchy.HIDDEN_TAG_NAME, "Unity.Entities.EntityGuid" };
 
         public static ulong Compute(EntityManager entityManager, ulong seed = 0) => Compute(entityManager, seed, null);
 
