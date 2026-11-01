@@ -43,6 +43,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking.** Vision: `LockstepVisionGrid.isRevealed` is replaced by `revealedSlots`, a mask of the slots that see
+  the whole map (`IsRevealed`, `SetRevealed`, `ALL_SLOTS`): a cheat or a spectator reveals the map to one slot while the
+  others keep their fog. Set `revealedSlots = LockstepVisionGrid.ALL_SLOTS` where `isRevealed = true` was; the state
+  hash changes.
 - The Netcode send requests of lockstep packets carry the hidden tag in the editor: Netcode destroys a request only in
   the next frame, so the server and client worlds flickered in the Hierarchy window with every packet.
 - `LockstepStat` has a `regen` field and `LockstepStatSystem` reads `LockstepTime.deltaTime`: the stat buffers and the

@@ -1850,7 +1850,7 @@ part menu.
 
 | Type | What it is |
 |---|---|
-| `LockstepVisionGrid` | Singleton: origin, cell size, width, height (laid out as a `FixedGrid`, like the navigation grid), the number of planes (`slotCount`, the session's `maxPlayers`) and `isRevealed`, which shows everything to every slot. The cells are the `LockstepVisionCell` buffer of the same entity: plane by plane in slot order, `isVisible` per cell |
+| `LockstepVisionGrid` | Singleton: origin, cell size, width, height (laid out as a `FixedGrid`, like the navigation grid), the number of planes (`slotCount`, the session's `maxPlayers`) and `revealedSlots`, the slots that see everything (`IsRevealed`, `SetRevealed`, `ALL_SLOTS`). The cells are the `LockstepVisionCell` buffer of the same entity: plane by plane in slot order, `isVisible` per cell |
 | `LockstepVisionSource` | An entity that lets a slot see: the radius of its sight on the XZ plane and the slot it sees for (-1, or any slot outside the session, sees for nobody), around its `LockstepTransform` |
 | `LockstepVisionSystem` | Last in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it and stamps every source |
 | `LockstepVision` | The queries: `IsVisible` (a point, or a body of some radius, seen by its edge), `IsCellVisible`, `GetPlane` (the cells of one slot, to draw its fog), `HasCells`, `Stamp` |
@@ -1892,7 +1892,7 @@ var canAttack = LockstepVision.IsVisible(grid, cells, slot, target.position.Xz, 
    layer). Each cell's target is the share of the visible cells around it (3 by 3), so the fog has soft edges; between
    ticks the shown visibility moves toward the target in `FadeSeconds` and stops once it caught up, so nothing is
    uploaded until the next change. `Restart()` makes the next update show the plane at once (another slot shown, frames
-   without fog). A revealed grid shows everything. Hiding the views of what the player does not see is the game's: it
+   without fog). A slot the map is revealed to sees everything. Hiding the views of what the player does not see is the game's: it
    asks `LockstepVision.IsVisible` with its own rules of ownership.
 
 ### Behaviour
@@ -1903,8 +1903,9 @@ var canAttack = LockstepVision.IsVisible(grid, cells, slot, target.position.Xz, 
   outside the grid is visible.
 - **Timing.** The planes show the state the tick ended with: the presentation draws them after the tick, and the
   commands of the next tick, which the players issued looking at them, are checked against them.
-- **Revealing.** `isRevealed` makes every query answer true for every slot (a match option, a debug switch, the end of
-  the match); the planes are still filled, so turning it off again shows the fog at once.
+- **Revealing.** `revealedSlots` is a mask of the slots every query answers true for, inside the grid and outside:
+  every slot (`ALL_SLOTS`: a match option, the end of the match) or one (`SetRevealed`: a cheat, a spectator). The
+  planes are still filled, so taking the bit away shows the fog at once.
 - **Allies.** Each source sees for one slot; players that share vision are asked together (visible to any of their
   slots).
 - **Determinism.** Distances are compared on raw fixed-point values. Stamping only marks cells, so the order sources are

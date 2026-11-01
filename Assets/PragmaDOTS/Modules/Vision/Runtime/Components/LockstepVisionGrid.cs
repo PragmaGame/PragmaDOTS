@@ -28,13 +28,31 @@ namespace Pragma.Dots.Vision
         /// <summary>Number of planes: the player slots of the session (<see cref="LockstepSessionInfo.maxPlayers"/>), set by <see cref="LockstepVisionSystem"/>.</summary>
         public int slotCount;
         /// <summary>
-        /// Every slot sees the whole map, inside the grid and outside: the fog is off. Gameplay sets it (a match option, a
-        /// debug switch, the end of the match); the planes are still filled.
+        /// The slots that see the whole map, inside the grid and outside — the fog is off for them: bit <c>s</c> is slot
+        /// <c>s</c>, every slot of <see cref="LockstepProtocol.MAX_PLAYERS"/> fits. Gameplay sets it: a match option or the
+        /// end of the match reveals the map to every slot (<see cref="ALL_SLOTS"/>), a cheat or a spectator to one
+        /// (<see cref="SetRevealed"/>). The planes are still filled.
         /// </summary>
-        public bool isRevealed;
+        public ulong revealedSlots;
+
+        /// <summary><see cref="revealedSlots"/> of a map revealed to every slot.</summary>
+        public const ulong ALL_SLOTS = ulong.MaxValue;
 
         /// <summary>The cells of one plane: the cell math lives there.</summary>
         public FixedGrid Layout => new FixedGrid(origin, cellSize, width, height);
+
+        /// <summary><paramref name="slot"/> sees the whole map; false for a slot outside 0..63.</summary>
+        public bool IsRevealed(int slot) => IsSlotBit(slot) && (revealedSlots & (1ul << slot)) != 0;
+
+        /// <summary>Reveals the whole map to <paramref name="slot"/> or gives it the fog back; a slot outside 0..63 is ignored.</summary>
+        public void SetRevealed(int slot, bool isRevealed)
+        {
+            if (!IsSlotBit(slot))
+            {
+                return;
+            }
+            revealedSlots = isRevealed ? revealedSlots | (1ul << slot) : revealedSlots & ~(1ul << slot);
+        }
 
         /// <summary>Number of cells of one plane.</summary>
         public int CellCount => Layout.CellCount;
@@ -45,5 +63,7 @@ namespace Pragma.Dots.Vision
 
         /// <summary>The cell that holds a world position (X and Z); it may lie outside the grid.</summary>
         public int2 WorldToCell(FixedVector2 position) => Layout.WorldToCell(position);
+
+        private static bool IsSlotBit(int slot) => slot >= 0 && slot < LockstepProtocol.MAX_PLAYERS;
     }
 }

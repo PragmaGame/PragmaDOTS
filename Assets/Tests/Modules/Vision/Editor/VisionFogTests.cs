@@ -101,17 +101,20 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
-        public void Fog_OfARevealedGrid_ShowsEverything()
+        public void Fog_OfARevealedSlot_ShowsEverything()
         {
             var grid = CreateGrid();
-            grid.isRevealed = true;
+            grid.SetRevealed(0, true);
             using (var cells = new NativeArray<LockstepVisionCell>(grid.CellCount * grid.slotCount, Allocator.TempJob))
-            using (var fog = new LockstepVisionFog())
+            using (var revealed = new LockstepVisionFog())
+            using (var fogged = new LockstepVisionFog())
             {
-                Assert.IsTrue(fog.TryUpdate(grid, cells, 0, 0, 0.01f));
-                for (var i = 0; i < fog.Visibility.Length; i++)
+                Assert.IsTrue(revealed.TryUpdate(grid, cells, 0, 0, 0.01f));
+                Assert.IsTrue(fogged.TryUpdate(grid, cells, 1, 0, 0.01f));
+                for (var i = 0; i < revealed.Visibility.Length; i++)
                 {
-                    Assert.AreEqual(1f, fog.Visibility[i], TOLERANCE);
+                    Assert.AreEqual(1f, revealed.Visibility[i], TOLERANCE);
+                    Assert.AreEqual(0f, fogged.Visibility[i], TOLERANCE, "the other slot keeps its fog");
                 }
             }
         }

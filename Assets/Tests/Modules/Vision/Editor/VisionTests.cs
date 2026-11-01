@@ -104,13 +104,48 @@ namespace Pragma.Dots.Tests
         public void RevealedGrid_ShowsEverythingToEverySlot()
         {
             var grid = CreateGrid();
-            grid.isRevealed = true;
+            grid.revealedSlots = LockstepVisionGrid.ALL_SLOTS;
             using (var cells = CreateCells(grid))
             {
                 Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 0, new FixedVector2(4, 4)));
                 Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 1, new FixedVector2(-40, 7)), "outside the grid too");
                 Assert.IsTrue(LockstepVision.IsCellVisible(grid, cells, 1, new int2(3, 3)));
             }
+        }
+
+        [Test]
+        public void RevealedSlot_SeesEverything_OthersKeepTheFog()
+        {
+            var grid = CreateGrid();
+            grid.SetRevealed(1, true);
+            using (var cells = CreateCells(grid))
+            {
+                Assert.IsTrue(grid.IsRevealed(1));
+                Assert.IsFalse(grid.IsRevealed(0));
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 1, new FixedVector2(4, 4)));
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 1, new FixedVector2(-40, 7)), "outside the grid too");
+                Assert.IsTrue(LockstepVision.IsCellVisible(grid, cells, 1, new int2(3, 3)));
+                Assert.IsFalse(LockstepVision.IsVisible(grid, cells, 0, new FixedVector2(4, 4)), "the other slot sees nothing it has no source for");
+                Assert.IsFalse(LockstepVision.IsCellVisible(grid, cells, 0, new int2(3, 3)));
+
+                grid.SetRevealed(1, false);
+                Assert.IsFalse(LockstepVision.IsVisible(grid, cells, 1, new FixedVector2(4, 4)), "the fog is back");
+                Assert.AreEqual(0ul, grid.revealedSlots);
+            }
+        }
+
+        [Test]
+        public void SetRevealed_IgnoresSlotsOutsideTheMask()
+        {
+            var grid = CreateGrid();
+            grid.SetRevealed(-1, true);
+            grid.SetRevealed(LockstepProtocol.MAX_PLAYERS, true);
+            grid.SetRevealed(LockstepProtocol.MAX_PLAYERS - 1, true);
+
+            Assert.AreEqual(1ul << (LockstepProtocol.MAX_PLAYERS - 1), grid.revealedSlots);
+            Assert.IsFalse(grid.IsRevealed(-1));
+            Assert.IsFalse(grid.IsRevealed(LockstepProtocol.MAX_PLAYERS));
+            Assert.IsTrue(grid.IsRevealed(LockstepProtocol.MAX_PLAYERS - 1));
         }
 
         [Test]

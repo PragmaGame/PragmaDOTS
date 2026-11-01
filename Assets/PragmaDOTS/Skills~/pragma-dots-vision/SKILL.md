@@ -23,7 +23,7 @@ Deeper reference: the package README, section *Vision* (`Assets/PragmaDOTS/READM
 
 | Piece | What it is |
 |---|---|
-| `LockstepVisionGrid` | Singleton: `origin`, `cellSize`, `width`, `height` (a `FixedGrid`, `Layout`), `slotCount` (planes: the session's `maxPlayers`, set by the system), `isRevealed` (every query answers true) |
+| `LockstepVisionGrid` | Singleton: `origin`, `cellSize`, `width`, `height` (a `FixedGrid`, `Layout`), `slotCount` (planes: the session's `maxPlayers`, set by the system), `revealedSlots` (mask of the slots every query answers true for; `IsRevealed`, `SetRevealed`, `ALL_SLOTS`) |
 | `LockstepVisionCell` | Buffer on the grid entity: `bool isVisible`, plane by plane in slot order, each row by row along X (slot `s`, cell `i` at `s * CellCount + i`) |
 | `LockstepVisionSource` | On whatever sees: `FixedPoint radius` (on XZ, up to `LockstepVision.MAX_RADIUS` = 30 000; negative sees nothing), `int slot` (outside the session's slots, -1 included, sees for nobody). Needs `LockstepTransform` |
 | `LockstepVisionSystem` | `OrderLast` in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it, stamps every source |
@@ -68,7 +68,7 @@ var canAttack = LockstepVision.IsVisible(grid, cells, player.slot, target.positi
 - A cell is visible when a circle of sight reaches into it, not only over its centre: whatever lies within a source's
   radius lies in a visible cell, so a unit that fights what it sees never fights what its player cannot see. Pass the
   body radius: a building is seen as soon as its edge is.
-- Nothing outside the grid is visible unless the grid is revealed.
+- Nothing outside the grid is visible unless the map is revealed to the slot.
 - **Timing.** The system runs last in the tick, so the planes show the state the tick ended with. Every system of the
   next tick, commands included, reads those planes: validate a command against them ("attack only what you see"). A
   source created through the end-of-tick command buffer sees from the next tick. On the first tick, before the system
@@ -83,16 +83,17 @@ for (var slot = 0; slot < grid.slotCount && !isSeen; slot++)
 }
 ```
 
-- **Revealing.** `isRevealed` makes every query answer true for every slot (a match option, a debug switch, the end of a
-  match); the planes are still filled, so turning it off shows the fog at once. Set it in the simulation, for example on
-  tick 0 from the start data:
+- **Revealing.** `revealedSlots` makes every query answer true for the slots it has, bit `s` for slot `s`: every slot
+  (`LockstepVisionGrid.ALL_SLOTS`: a match option, the end of a match) or one (`SetRevealed(slot, true)`: a cheat, a
+  spectator). The planes are still filled, so taking the bit away shows the fog at once. Set it in the simulation, for
+  example on tick 0 from the start data, or from a command:
 
 ```csharp
 var time = SystemAPI.GetSingleton<LockstepTime>();
 if (time.tick == 0)
 {
     var options = SystemAPI.GetSingleton<LockstepSessionInfo>().GetStartData<MatchOptions>();
-    SystemAPI.GetSingletonRW<LockstepVisionGrid>().ValueRW.isRevealed = options.revealMap != 0;
+    SystemAPI.GetSingletonRW<LockstepVisionGrid>().ValueRW.revealedSlots = options.revealMap != 0 ? LockstepVisionGrid.ALL_SLOTS : 0;
 }
 ```
 
@@ -155,7 +156,7 @@ public partial class FogOfWarSystem : SystemBase
 - The texture has a texel per cell, row `y` at world Z `origin.y + y * cellSize`: map it onto `fog.Area` (X and Z of the
   corner, width along X, height along Z). `fog.Visibility` and `fog.Version` give a minimap the same picture.
 - `Restart()` after showing another slot, or after frames without fog, so the next update shows the plane at once
-  instead of fading from the old one. A revealed grid shows everything.
+  instead of fading from the old one. A slot the map is revealed to sees everything.
 - A client without a slot (`LocalSlot` -1, before it joined) gets no plane: decide what it shows (everything, for a
   spectator).
 - Hide the views of entities the local slot does not see (`EntityViewManager.TryGet(World, out var views)`, then for each
@@ -175,7 +176,7 @@ Large radii on small cells are what costs; raise the cell size before limiting s
 
 | Symptom | Likely cause |
 |---|---|
-| Nothing is hidden | No grid in the world (no *Vision/Grid* part on the map's actor, or the map's subscene did not load before the simulation started), or `isRevealed` is set |
+| Nothing is hidden | No grid in the world (no *Vision/Grid* part on the map's actor, or the map's subscene did not load before the simulation started), or the slot is in `revealedSlots` |
 | Everything is hidden, even own units | Sources keep slot -1: nothing sets `slot` from the owner |
 | A query is false on tick 0 | The system has not run yet: the planes appear at the end of the first tick |
 | A unit fights an enemy the player cannot see | The rule checks distance only: validate against `IsVisible` with the target's radius |

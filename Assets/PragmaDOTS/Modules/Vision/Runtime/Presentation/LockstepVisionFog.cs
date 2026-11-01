@@ -19,8 +19,8 @@ namespace Pragma.Dots.Vision
     /// visible cells around it (3 by 3), so the edge of the fog does not follow the steps of the cells; between ticks the
     /// shown visibility only moves toward the target, by <see cref="FadeSeconds"/>, and once it has caught up nothing is
     /// computed or uploaded again. The cells are read in Burst jobs by rows, finished within the call: the planes belong to
-    /// the simulation world, which steps after the presentation. A grid with <see cref="LockstepVisionGrid.isRevealed"/>
-    /// shows everything.</para>
+    /// the simulation world, which steps after the presentation. A slot the grid reveals the map to
+    /// (<see cref="LockstepVisionGrid.IsRevealed"/>) sees everything.</para>
     /// <para>The fog belongs to the caller, which disposes it (the texture is destroyed with it).</para>
     /// </remarks>
     public sealed class LockstepVisionFog : IDisposable
@@ -89,7 +89,7 @@ namespace Pragma.Dots.Vision
             var isNewTick = isNew || tick != _tick;
             if (isNewTick || !_isSettled)
             {
-                Draw(grid, LockstepVision.GetPlane(grid, cells, slot), isNew, isNewTick, deltaTime);
+                Draw(grid, LockstepVision.GetPlane(grid, cells, slot), grid.IsRevealed(slot), isNew, isNewTick, deltaTime);
                 _tick = tick;
             }
             _isRestarted = false;
@@ -123,7 +123,7 @@ namespace Pragma.Dots.Vision
         }
 
         // A new tick sets a new target; the shown visibility steps toward it, and the texture is uploaded if anything moved.
-        private void Draw(in LockstepVisionGrid grid, NativeArray<LockstepVisionCell> plane, bool isNew, bool isNewTick, float deltaTime)
+        private void Draw(in LockstepVisionGrid grid, NativeArray<LockstepVisionCell> plane, bool isRevealed, bool isNew, bool isNewTick, float deltaTime)
         {
             var handle = default(JobHandle);
             if (isNewTick)
@@ -132,7 +132,7 @@ namespace Pragma.Dots.Vision
                 {
                     width = grid.width,
                     height = grid.height,
-                    isRevealed = grid.isRevealed,
+                    isRevealed = isRevealed,
                     plane = plane,
                     target = _target,
                 }.Schedule(grid.height, 1);

@@ -42,7 +42,7 @@ namespace Pragma.Dots.Vision
         /// </summary>
         public static bool IsVisible(in LockstepVisionGrid grid, NativeArray<LockstepVisionCell> cells, int slot, FixedVector2 position, FixedPoint radius)
         {
-            if (grid.isRevealed)
+            if (grid.IsRevealed(slot))
             {
                 return true;
             }
@@ -69,10 +69,10 @@ namespace Pragma.Dots.Vision
             return false;
         }
 
-        /// <summary><paramref name="slot"/> sees the cell; false outside the grid unless the map is revealed.</summary>
+        /// <summary><paramref name="slot"/> sees the cell; false outside the grid unless the map is revealed to the slot.</summary>
         public static bool IsCellVisible(in LockstepVisionGrid grid, NativeArray<LockstepVisionCell> cells, int slot, int2 cell)
         {
-            if (grid.isRevealed)
+            if (grid.IsRevealed(slot))
             {
                 return true;
             }
