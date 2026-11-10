@@ -21,6 +21,18 @@ namespace Pragma.Dots.Lockstep.Netcode
     {
         public const int CAPACITY = LockstepProtocol.DEFAULT_MAX_PACKET_SIZE;
 
+        // The hidden tag for InvokeExecute, a Burst function pointer, where it cannot be looked up by name; Null outside the
+        // editor or before a transport system handed it over (HideReceivedRequests). A class of its own: in the static
+        // constructor of this struct, next to InvokeExecutePointer, Burst would find a circular initialization.
+        private static class HiddenTag
+        {
+            public static readonly SharedStatic<TypeIndex> Index = SharedStatic<TypeIndex>.GetOrCreate<HiddenTagKey>();
+        }
+
+        private struct HiddenTagKey
+        {
+        }
+
         public ushort length;
         private fixed byte _data[CAPACITY];
 
@@ -54,6 +66,18 @@ namespace Pragma.Dots.Lockstep.Netcode
             return entityManager.CreateArchetype(packet, request);
         }
 
+        /// <summary>
+        /// Hides received requests from the Hierarchy window too, in the editor. Netcode makes a received request through the
+        /// begin command buffer of the next frame and the transport system destroys it later in that frame, but the window
+        /// takes its snapshot inside the world update (after the transform group), which may fall between the two: a
+        /// request for every packet would flicker in it. The transport systems call this when they are created, so the tag
+        /// is there before the first packet arrives.
+        /// </summary>
+        internal static void HideReceivedRequests()
+        {
+            HiddenTag.Index.Data = EntityHierarchy.TryGetHiddenTag(out var hidden) ? hidden.TypeIndex : TypeIndex.Null;
+        }
+
         public void Serialize(ref DataStreamWriter writer, in RpcSerializerState state, in LockstepPacketRpc data)
         {
             var copy = data;
@@ -81,7 +105,13 @@ namespace Pragma.Dots.Lockstep.Netcode
         [MonoPInvokeCallback(typeof(RpcExecutor.ExecuteDelegate))]
         private static void InvokeExecute(ref RpcExecutor.Parameters parameters)
         {
-            RpcExecutor.ExecuteCreateRequestComponent<LockstepPacketRpc, LockstepPacketRpc>(ref parameters);
+            var request = RpcExecutor.ExecuteCreateRequestComponent<LockstepPacketRpc, LockstepPacketRpc>(ref parameters);
+            var hidden = HiddenTag.Index.Data;
+
+            if (hidden != TypeIndex.Null)
+            {
+                parameters.CommandBuffer.AddComponent(parameters.JobIndex, request, ComponentType.FromTypeIndex(hidden));
+            }
         }
 
         private static readonly PortableFunctionPointer<RpcExecutor.ExecuteDelegate> InvokeExecutePointer =

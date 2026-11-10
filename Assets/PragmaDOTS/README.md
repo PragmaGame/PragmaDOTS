@@ -1485,8 +1485,11 @@ PlayMode Tools create thin clients (*Num Thin Clients*), and so does `ClientServ
 for hosts and clients.
 
 **Hierarchy.** Every packet goes out as a `SendRpcCommandRequest` entity, which Netcode sends in the same frame but
-destroys only in the next one. In the editor these requests carry the hidden tag (`EntityHierarchy`), so the server
-and client worlds do not flicker in the Hierarchy window.
+destroys only in the next one, and arrives as a `ReceiveRpcCommandRequest` entity, which Netcode makes through the
+next frame's begin command buffer and the transport system destroys later in that frame; the Hierarchy window takes
+its snapshot inside the world update and may see it. In the editor both kinds carry the hidden tag
+(`EntityHierarchy`), so the server and client worlds do not flicker in the Hierarchy window, whatever the order of the
+systems.
 
 #### Match flow
 

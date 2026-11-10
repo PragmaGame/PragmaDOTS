@@ -164,7 +164,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   model, several machines per entity, the actor part, a session with a late joiner), sessions
   (latency, jitter, late join, disconnects, desync attribution, replays, commands with large data), presentation,
   GameObject views (component and buffer parts, prefabs by key), offline mode and a real Netcode server with two clients (including a command larger than the
-  reliable window and send requests hidden from the Hierarchy window).
+  reliable window and send and received requests hidden from the Hierarchy window).
 - The suites reach internals through `InternalsVisibleTo` in `Modules/Lockstep/Runtime/AssemblyInfo.cs` (and
   `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Actors/Editor/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`,
   `Core/Mathematics/Runtime/AssemblyInfo.cs`, `Core/Mathematics/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its

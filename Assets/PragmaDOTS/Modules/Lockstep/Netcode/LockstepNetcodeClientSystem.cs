@@ -53,6 +53,7 @@ namespace Pragma.Dots.Lockstep.Netcode
             _connectionQuery = GetEntityQuery(ComponentType.ReadOnly<NetworkId>(), ComponentType.ReadOnly<NetworkStreamConnection>());
             _receivedQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
             _localInputQuery = GetEntityQuery(ComponentType.ReadWrite<LockstepLocalInput>(), ComponentType.ReadWrite<LockstepCommand>());
+            LockstepPacketRpc.HideReceivedRequests();
         }
 
         protected override void OnDestroy() => Shutdown();

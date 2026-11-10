@@ -212,17 +212,27 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
-        public void SendRequests_AreHiddenFromTheHierarchy()
+        public void Requests_AreHiddenFromTheHierarchy()
         {
             Assert.IsTrue(EntityHierarchy.TryGetHiddenTag(out var hidden), "the editor has the tag");
             var (server, clientA, clientB) = StartSession(7973);
+            var worlds = new[] { server, clientA, clientB };
+            var probes = new List<ReceivedRequestProbeSystem>();
+
+            // Received requests live only inside a frame: a probe right after the begin command buffer sees them.
+            foreach (var world in worlds)
+            {
+                var probe = world.GetOrCreateSystemManaged<ReceivedRequestProbeSystem>();
+                world.GetExistingSystemManaged<SimulationSystemGroup>().AddSystemToUpdateList(probe);
+                probes.Add(probe);
+            }
 
             // Netcode destroys a sent request only in the next frame: after each update that frame's requests remain.
             var requests = 0;
             for (var frame = 0; frame < 60 * 3; frame++)
             {
                 Tick(1);
-                foreach (var world in new[] { server, clientA, clientB })
+                foreach (var world in worlds)
                 {
                     var entityManager = world.EntityManager;
                     using (var sent = entityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>()))
@@ -238,6 +248,12 @@ namespace Pragma.Dots.Tests
                 }
             }
             Assert.Greater(requests, 0, "the session sent packets");
+
+            foreach (var probe in probes)
+            {
+                Assert.Greater(probe.Received, 0, $"{probe.World.Name} received packets");
+                Assert.AreEqual(0, probe.Shown, $"a received request in {probe.World.Name} shows in the Hierarchy");
+            }
         }
 
         /// <summary>

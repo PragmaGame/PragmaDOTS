@@ -6,6 +6,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Received lockstep packets no longer flicker in the Hierarchy window: the `ReceiveRpcCommandRequest` entities Netcode
+  makes for them carry the editor's hidden tag too, like the send requests. The window takes its snapshot inside the
+  world update, and on a server whose transport system sorted after it every packet showed for a frame.
+
 ### Added
 
 - Teams (Lockstep): `LockstepTeams`, a singleton of the simulation world with the team of every player slot

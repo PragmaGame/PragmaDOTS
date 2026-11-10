@@ -61,6 +61,7 @@ namespace Pragma.Dots.Lockstep.Netcode
             _endRequestQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepEndGameRequest>());
             _connectionsById = new NativeHashMap<int, Entity>(16, Allocator.Persistent);
             _idsByConnection = new NativeHashMap<Entity, int>(16, Allocator.Persistent);
+            LockstepPacketRpc.HideReceivedRequests();
         }
 
         protected override void OnDestroy()
