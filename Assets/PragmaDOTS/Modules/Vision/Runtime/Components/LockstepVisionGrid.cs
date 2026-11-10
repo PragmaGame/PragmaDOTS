@@ -12,7 +12,8 @@ namespace Pragma.Dots.Vision
     /// <remarks>
     /// <see cref="LockstepVisionSystem"/> fills the planes again on every tick from the <see cref="LockstepVisionSource"/>s:
     /// vision is state of the simulation, the same on every client, so gameplay may depend on it (a player orders attacks
-    /// only on what it sees) and the presentation draws the fog of war from it. The cells are laid out as a
+    /// only on what it sees) and the presentation draws the fog of war from it. Allies (<see cref="LockstepTeams"/>) share
+    /// their planes: each holds what the whole team sees. The cells are laid out as a
     /// <see cref="FixedGrid"/> (<see cref="Layout"/>). Give the map's actor a <see cref="VisionGridPart"/> (placed in the
     /// subscene of the map), or create the entity in code before tick 0. Without a grid nothing is hidden: there is no fog.
     /// </remarks>
@@ -34,8 +35,15 @@ namespace Pragma.Dots.Vision
         /// (<see cref="SetRevealed"/>). The planes are still filled.
         /// </summary>
         public ulong revealedSlots;
+        /// <summary>
+        /// The slots that see through their own sources only: what their allies (<see cref="LockstepTeams"/>) see does not
+        /// reach their planes, while what they see still reaches the allies. Bit <c>s</c> is slot <c>s</c>. Zero by default:
+        /// every slot sees what its allies see. Gameplay sets it: a match option without shared vision
+        /// (<see cref="ALL_SLOTS"/>), a research that shares it with one player (<see cref="SetSeesAllies"/>).
+        /// </summary>
+        public ulong ownVisionOnlySlots;
 
-        /// <summary><see cref="revealedSlots"/> of a map revealed to every slot.</summary>
+        /// <summary><see cref="revealedSlots"/> of a map revealed to every slot, <see cref="ownVisionOnlySlots"/> of a match without shared vision.</summary>
         public const ulong ALL_SLOTS = ulong.MaxValue;
 
         /// <summary>The cells of one plane: the cell math lives there.</summary>
@@ -52,6 +60,19 @@ namespace Pragma.Dots.Vision
                 return;
             }
             revealedSlots = isRevealed ? revealedSlots | (1ul << slot) : revealedSlots & ~(1ul << slot);
+        }
+
+        /// <summary><paramref name="slot"/> sees what its allies see (it is not in <see cref="ownVisionOnlySlots"/>); false for a slot outside 0..63.</summary>
+        public bool SeesAllies(int slot) => IsSlotBit(slot) && (ownVisionOnlySlots & (1ul << slot)) == 0;
+
+        /// <summary>Lets <paramref name="slot"/> see what its allies see, or only what it sees itself; a slot outside 0..63 is ignored.</summary>
+        public void SetSeesAllies(int slot, bool seesAllies)
+        {
+            if (!IsSlotBit(slot))
+            {
+                return;
+            }
+            ownVisionOnlySlots = seesAllies ? ownVisionOnlySlots & ~(1ul << slot) : ownVisionOnlySlots | (1ul << slot);
         }
 
         /// <summary>Number of cells of one plane.</summary>

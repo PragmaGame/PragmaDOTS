@@ -221,6 +221,7 @@ namespace Pragma.Dots.Tests
             startData.Add(1);
             startData.Add(2);
             config.StartData = startData;
+            config.Teams = TestUtility.Bytes(1, 0, 2, 1);
             using (var buffer = new NativeList<byte>(Allocator.Temp))
             {
                 var writer = new LockstepByteWriter(buffer);
@@ -231,6 +232,41 @@ namespace Pragma.Dots.Tests
                 Assert.AreEqual(config, read);
                 Assert.AreEqual(2, read.StartData.Length);
                 Assert.AreEqual(2, read.StartData[1]);
+                Assert.AreEqual(config.Teams, read.Teams);
+                Assert.AreNotEqual(config, new LockstepSessionConfig
+                {
+                    TickRate = config.TickRate,
+                    MaxPlayers = config.MaxPlayers,
+                    InputSize = config.InputSize,
+                    Seed = config.Seed,
+                    ChecksumInterval = config.ChecksumInterval,
+                    StartData = config.StartData,
+                }, "the teams are part of the config");
+            }
+        }
+
+        [Test]
+        public void SessionConfig_WithTeamsForMoreThanEverySlot_FailsToRead()
+        {
+            var config = TestUtility.Config();
+            byte[] bytes;
+            using (var buffer = new NativeList<byte>(Allocator.Temp))
+            {
+                var writer = new LockstepByteWriter(buffer);
+                config.Write(ref writer);
+                // The team count is the last byte of a config without teams; 65 teams follow it.
+                bytes = new byte[buffer.Length + LockstepProtocol.MAX_PLAYERS + 1];
+                for (var i = 0; i < buffer.Length; i++)
+                {
+                    bytes[i] = buffer[i];
+                }
+                bytes[buffer.Length - 1] = LockstepProtocol.MAX_PLAYERS + 1;
+            }
+            fixed (byte* data = bytes)
+            {
+                var reader = new LockstepByteReader(data, bytes.Length);
+                LockstepSessionConfig.Read(ref reader);
+                Assert.IsTrue(reader.HasFailed);
             }
         }
 

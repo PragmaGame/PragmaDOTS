@@ -41,7 +41,8 @@ namespace Pragma.Dots.Lockstep
                     ComponentType.ReadWrite<LockstepRandom>(),
                     ComponentType.ReadWrite<LockstepEntityIdCounter>(),
                     ComponentType.ReadWrite<LockstepFrameData>(),
-                    ComponentType.ReadWrite<LockstepPlayerSlot>());
+                    ComponentType.ReadWrite<LockstepPlayerSlot>(),
+                    ComponentType.ReadWrite<LockstepTeams>());
                 entityManager.SetComponentData(_sessionEntity, CreateTime(0));
                 entityManager.SetComponentData(_sessionEntity, new LockstepSessionInfo
                 {
@@ -52,6 +53,7 @@ namespace Pragma.Dots.Lockstep
                     startData = config.StartData,
                 });
                 entityManager.SetComponentData(_sessionEntity, new LockstepRandom { value = new FixedRandom(config.Seed) });
+                entityManager.SetComponentData(_sessionEntity, LockstepTeams.Create(config.MaxPlayers, config.Teams));
                 entityManager.GetBuffer<LockstepPlayerSlot>(_sessionEntity).Resize(config.MaxPlayers, NativeArrayOptions.ClearMemory);
 
                 DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(World, CollectSystemTypes(options));

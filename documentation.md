@@ -331,6 +331,8 @@ These came up while building on Entities; neither reference package deals with t
     every game would write the same way, the fog of a slot as a texture with soft edges and a fade
     (`LockstepVisionFog`), and stops there: how the texture is shaded depends on the render pipeline, and which views
     to hide on the game's rules of ownership, so the module depends on neither a pipeline nor the Views module.
+    Allies share vision by merging the planes of a team after stamping (decision 21), so a plane and the fog drawn
+    from it are what the team sees, and no query needs to know the teams.
 
 14. **Stats as buffers with change versions.** Upgrades, research, abilities and auras all change numbers of units,
     and patching component fields by hand loses track of who changed what and leaves no way to end an effect. Each
@@ -501,6 +503,26 @@ These came up while building on Entities; neither reference package deals with t
     more. `FixedCurve` is a class, like `AnimationCurve`, so that a field is edited with Unity's curve editor; the
     simulation evaluates its keys through a span over a buffer, a native array or a blob. The types are `[DataContract]`s of
     their fields, so JSON writes raw values and never recurses into swizzle properties.
+
+21. **Teams of slots in the lockstep module, combat in the game.** Teams decide two things every multiplayer strategy
+    game has, who may attack whom and who sees what, and the second one lives in the package: the Vision module could
+    not share planes without knowing the teams, and a list of allies kept by every game would be queried by hand on
+    every check. So the lockstep module keeps a team per slot as simulation state (`LockstepTeams`, on the session
+    entity), changeable by gameplay like any other state, while attacks, targets, damage and friendly fire stay the
+    game's: the package has no combat and no owner component, and a rule that refused damage between allies would be
+    wrong for games where splash damage hurts allies or healing must reach them.
+
+    A team belongs to the slot, not to the player entity, because a player's units outlive its leave. Teams are known
+    before tick 0, so they travel in the session configuration like the seed and the start data: the lobby sets them on
+    the server, also for slots nobody has joined yet, and late joiners and replays get them with the configuration
+    instead of the game encoding them in its start data or join data. Team 0 is none, a slot allied only with itself,
+    so the default configuration is everyone for themselves and a session without teams plays as before. A slot
+    outside the session (-1, neutral units) is the enemy of every slot and the ally of itself, so neutral units do not
+    fight each other.
+
+    Shared vision merges planes once per tick instead of querying every ally: each query and the fog texture stay as
+    they were, and the cost is a pass over the planes of a team. A mask of slots that see only through their own
+    sources covers matches without shared vision and research that grants it to one player.
 
 ## Limitations and future work
 

@@ -23,11 +23,11 @@ Deeper reference: the package README, section *Vision* (`Assets/PragmaDOTS/READM
 
 | Piece | What it is |
 |---|---|
-| `LockstepVisionGrid` | Singleton: `origin`, `cellSize`, `width`, `height` (a `FixedGrid`, `Layout`), `slotCount` (planes: the session's `maxPlayers`, set by the system), `revealedSlots` (mask of the slots every query answers true for; `IsRevealed`, `SetRevealed`, `ALL_SLOTS`) |
+| `LockstepVisionGrid` | Singleton: `origin`, `cellSize`, `width`, `height` (a `FixedGrid`, `Layout`), `slotCount` (planes: the session's `maxPlayers`, set by the system), `revealedSlots` (mask of the slots every query answers true for; `IsRevealed`, `SetRevealed`, `ALL_SLOTS`), `ownVisionOnlySlots` (mask of the slots that do not get their allies' sight; `SeesAllies`, `SetSeesAllies`) |
 | `LockstepVisionCell` | Buffer on the grid entity: `bool isVisible`, plane by plane in slot order, each row by row along X (slot `s`, cell `i` at `s * CellCount + i`) |
 | `LockstepVisionSource` | On whatever sees: `FixedPoint radius` (on XZ, up to `LockstepVision.MAX_RADIUS` = 30 000; negative sees nothing), `int slot` (outside the session's slots, -1 included, sees for nobody). Needs `LockstepTransform` |
-| `LockstepVisionSystem` | `OrderLast` in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it, stamps every source |
-| `LockstepVision` | Burst-compatible queries: `IsVisible(grid, cells, slot, xz[, radius])`, `IsCellVisible(grid, cells, slot, cell)`, `GetPlane(grid, cells, slot)`, `HasCells(grid, cells)`, `Stamp(grid, cells, slot, xz, radius)` |
+| `LockstepVisionSystem` | `OrderLast` in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it, stamps every source, shares the planes of allies (`LockstepTeams`) |
+| `LockstepVision` | Burst-compatible queries: `IsVisible(grid, cells, slot, xz[, radius])`, `IsCellVisible(grid, cells, slot, cell)`, `GetPlane(grid, cells, slot)`, `HasCells(grid, cells)`; filling: `Stamp(grid, cells, slot, xz, radius)`, `ShareWithAllies(grid, cells, teams)` |
 | `LockstepVisionFog` | Presentation: the fog of a slot as an R8 texture, a texel per cell, smoothed and fading; `TryUpdate(grid, cells, slot, tick, deltaTime)`, `Texture`, `Area`, `Visibility`, `Version`, `IsSettled`, `FadeSeconds`, `Restart()`, `Dispose()` |
 | *Vision/Grid* (`VisionGridPart`) | `Size` (100 x 100, centred on the placement), `CellSize` (2, at least 0.05): the grid and an empty cell buffer |
 | *Vision/Source* (`VisionSourcePart`) | `Radius` (20): a source with slot -1. Needs a Transform part |
@@ -73,15 +73,12 @@ var canAttack = LockstepVision.IsVisible(grid, cells, player.slot, target.positi
   next tick, commands included, reads those planes: validate a command against them ("attack only what you see"). A
   source created through the end-of-tick command buffer sees from the next tick. On the first tick, before the system
   ran once, the buffer is empty and every query answers false.
-- **Allies.** Each source sees for one slot. Players that share vision are asked together:
-
-```csharp
-var isSeen = false;
-for (var slot = 0; slot < grid.slotCount && !isSeen; slot++)
-{
-    isSeen = IsAlly(player.slot, slot) && LockstepVision.IsVisible(grid, cells, slot, position.Xz, radius);
-}
-```
+- **Allies.** Each source sees for one slot, and the system then merges the planes of every team (`LockstepTeams` of
+  the lockstep module, set in the lobby or changed during the match): a slot's plane, its queries and its fog are what
+  the whole team sees, so ask with the player's own slot and never loop over allies. A slot in `ownVisionOnlySlots`
+  keeps its own plane while its allies still see through its sources: `ownVisionOnlySlots = LockstepVisionGrid.ALL_SLOTS`
+  for a match without shared vision, `SetSeesAllies(slot, true)` when a research shares it with one player. A team
+  change counts from the end of that tick. Slots without a team (the default) share nothing.
 
 - **Revealing.** `revealedSlots` makes every query answer true for the slots it has, bit `s` for slot `s`: every slot
   (`LockstepVisionGrid.ALL_SLOTS`: a match option, the end of a match) or one (`SetRevealed(slot, true)`: a cheat, a
@@ -178,6 +175,7 @@ Large radii on small cells are what costs; raise the cell size before limiting s
 |---|---|
 | Nothing is hidden | No grid in the world (no *Vision/Grid* part on the map's actor, or the map's subscene did not load before the simulation started), or the slot is in `revealedSlots` |
 | Everything is hidden, even own units | Sources keep slot -1: nothing sets `slot` from the owner |
+| Allies do not see each other's units | Their slots are not in one team (`server.SetTeam` before the start, `LockstepTeams.SetTeam` during the match), or the slot is in `ownVisionOnlySlots` |
 | A query is false on tick 0 | The system has not run yet: the planes appear at the end of the first tick |
 | A unit fights an enemy the player cannot see | The rule checks distance only: validate against `IsVisible` with the target's radius |
 | Clients disagree after adding fog | The simulation branched on the local slot, or the presentation wrote to the simulation world |

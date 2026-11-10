@@ -6,8 +6,9 @@ using Unity.Mathematics;
 namespace Pragma.Dots.Vision
 {
     /// <summary>
-    /// Fills the planes of the <see cref="LockstepVisionGrid"/> again on every tick: clears them and stamps every
-    /// <see cref="LockstepVisionSource"/> at its <see cref="LockstepTransform"/>.
+    /// Fills the planes of the <see cref="LockstepVisionGrid"/> again on every tick: clears them, stamps every
+    /// <see cref="LockstepVisionSource"/> at its <see cref="LockstepTransform"/> and shares the planes of allies
+    /// (<see cref="LockstepTeams"/>).
     /// </summary>
     /// <remarks>
     /// Runs last in the tick, after everything moved, so the planes show the state the tick ended with: what the
@@ -66,6 +67,10 @@ namespace Pragma.Dots.Vision
             foreach (var (source, transform) in SystemAPI.Query<RefRO<LockstepVisionSource>, RefRO<LockstepTransform>>())
             {
                 LockstepVision.Stamp(grid, cells, source.ValueRO.slot, transform.ValueRO.position.Xz, source.ValueRO.radius);
+            }
+            if (SystemAPI.TryGetSingleton<LockstepTeams>(out var teams))
+            {
+                LockstepVision.ShareWithAllies(grid, cells, teams);
             }
         }
     }

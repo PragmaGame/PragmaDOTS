@@ -153,6 +153,7 @@ namespace Pragma.Dots.Lockstep
                 Seed = settings.Seed,
                 ChecksumInterval = settings.ChecksumInterval,
                 StartData = settings.StartData,
+                Teams = settings.Teams,
             };
             State = LockstepServerState.Lobby;
         }
@@ -210,6 +211,41 @@ namespace Pragma.Dots.Lockstep
 
         /// <summary>True when a player occupies the slot (joined, or about to be announced).</summary>
         public bool IsSlotInUse(int slot) => slot >= 0 && slot < _slots.Length && _slots[slot].inUse && !_slots[slot].pendingLeave;
+
+        /// <summary>The team <paramref name="slot"/> starts the match in; <see cref="LockstepTeams.NONE"/> for none.</summary>
+        public int GetTeam(int slot) => slot >= 0 && slot < _config.Teams.Length ? _config.Teams[slot] : LockstepTeams.NONE;
+
+        /// <summary>
+        /// Puts <paramref name="slot"/> into <paramref name="team"/> (1 to 255) for the start of the match, or into none with
+        /// <see cref="LockstepTeams.NONE"/>: the lobby assigns teams, also to slots nobody has joined yet. The start message
+        /// carries them to every client, late joiners included; during the match teams change in the simulation
+        /// (<see cref="LockstepTeams"/>). With <see cref="LockstepServerSettings.MinPlayersToStart"/> the match starts on the
+        /// join that completes it, so preset the teams in <see cref="LockstepServerSettings.Teams"/> instead.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The match has started.</exception>
+        public void SetTeam(int slot, int team)
+        {
+            if (State != LockstepServerState.Lobby)
+            {
+                throw new InvalidOperationException("Teams are set in the lobby; once the match started, change them in the simulation (LockstepTeams).");
+            }
+            if (slot < 0 || slot >= _slots.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(slot), slot, $"The slot must be in [0, {_slots.Length}).");
+            }
+            if (team < LockstepTeams.NONE || team > LockstepTeams.MAX_TEAM)
+            {
+                throw new ArgumentOutOfRangeException(nameof(team), team, $"The team must be in [0, {LockstepTeams.MAX_TEAM}].");
+            }
+            // A local list: changing the property's list in place would only change a copy.
+            var teams = _config.Teams;
+            while (teams.Length <= slot)
+            {
+                teams.Add((byte)LockstepTeams.NONE);
+            }
+            teams[slot] = (byte)team;
+            _config.Teams = teams;
+        }
 
         public void OnConnected(int connectionId)
         {

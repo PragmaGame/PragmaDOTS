@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-gameplay
-description: Write deterministic gameplay with the Lockstep module of Pragma DOTS (com.pragma.dots) and the core fixed-point math - simulation systems in LockstepSimulationSystemGroup, input structs and commands, players joining and leaving, spawning actors by key (ActorLookup), LockstepEntityId references, randomness, signals, the spatial index, FixedPoint, FixedMath, FixedRandom, 2D shapes and FixedCurve, the determinism rules, and presenting the simulation with interpolation. Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, UI - even if the user never says "deterministic" or "lockstep"; together with the skill of the module the code uses (pragma-dots-navigation, pragma-dots-vision, pragma-dots-stats, pragma-dots-views, pragma-dots-state-machines).
+description: Write deterministic gameplay with the Lockstep module of Pragma DOTS (com.pragma.dots) and the core fixed-point math - simulation systems in LockstepSimulationSystemGroup, input structs and commands, players joining and leaving, teams of players (allies and enemies), spawning actors by key (ActorLookup), LockstepEntityId references, randomness, signals, the spatial index, FixedPoint, FixedMath, FixedRandom, 2D shapes and FixedCurve, the determinism rules, and presenting the simulation with interpolation. Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, UI - even if the user never says "deterministic" or "lockstep"; together with the skill of the module the code uses (pragma-dots-navigation, pragma-dots-vision, pragma-dots-stats, pragma-dots-views, pragma-dots-state-machines).
 ---
 
 # Gameplay with Pragma DOTS lockstep
@@ -103,6 +103,7 @@ simulation at all; a presentation system inside the group would run in the simul
 // Clock and session.
 var time = SystemAPI.GetSingleton<LockstepTime>();          // tick, tickRate, deltaTime (FixedPoint), elapsedTime (FixedPoint)
 var info = SystemAPI.GetSingleton<LockstepSessionInfo>();   // seed, tickRate, maxPlayers, inputSize, GetStartData<T>()
+var teams = SystemAPI.GetSingleton<LockstepTeams>();        // GetTeam, AreAllies, AreEnemies, GetAllies (mask) per slot
 
 // Randomness: take a ref, or the drawn numbers do not advance the stored generator.
 ref var random = ref SystemAPI.GetSingletonRW<LockstepRandom>().ValueRW.value;
@@ -169,6 +170,34 @@ foreach (var (avatar, entity) in SystemAPI.Query<RefRO<Avatar>>().WithEntityAcce
 ```
 
 A freed slot can be reused by a later joiner, so per-player data keyed by `slot` must be removed on the leave tick.
+
+## Teams
+
+`LockstepTeams` (a singleton on the session entity) holds the team of every slot: slots of one team are allies, a slot
+with team `LockstepTeams.NONE` (0, the default) is allied with nobody, so a session without teams is everyone for
+themselves. The lobby sets the teams before the start (`server.SetTeam(slot, team)`, `LockstepServerSettings.Teams`;
+see `pragma-lockstep-sessions`), and the simulation starts from them on every client, late joiners included.
+
+- **Combat is the game's.** The package has no attacks and no owner component: units carry the owner's slot in a
+  component of the game, and every rule that hurts asks the teams, in the validation of an order and in the automatic
+  search for targets alike. Healing, buffs and repairs ask `AreAllies`. Friendly fire is the game's choice: a splash
+  that hurts allies simply skips the check.
+
+```csharp
+var teams = SystemAPI.GetSingleton<LockstepTeams>();
+if (!ids.TryGetEntity(order.target, out var target) ||
+    teams.AreAllies(player.ValueRO.slot, SystemAPI.GetComponent<Owner>(target).slot))
+{
+    continue;   // the target is gone, or it is own or allied: no attack
+}
+```
+
+- **Neutral units** (slot -1) are the enemy of every slot and the ally of -1 only, so neutrals do not fight each other.
+  A team belongs to the slot, so the units of a player who left keep their side.
+- **Changing sides** during the match (alliances, diplomacy) is simulation state like any other: change it from a
+  command, `ref var teams = ref SystemAPI.GetSingletonRW<LockstepTeams>().ValueRW; teams.SetTeam(slot, team);`. It counts
+  from that tick on every client; slot or team values out of range are ignored.
+- The Vision module shares the planes of allies: what a slot sees is already what its team sees.
 
 ## Input and commands
 
@@ -347,7 +376,7 @@ know about them:
 | Module | Skill | Order and rules inside the tick |
 |---|---|---|
 | Navigation | `pragma-dots-navigation` | Set `LockstepNavAgent` destinations (`SetDestination`, a group with `groupGoal`) before `LockstepNavSystemGroup`, read arrivals after it. Never write the `LockstepTransform` of a walking agent (`Stop()` first). With ground heights, place things with `LockstepNavigation.ToGround` and compare positions on X and Z |
-| Vision | `pragma-dots-vision` | `LockstepVisionSystem` runs last (`OrderLast`): every system reads the planes the previous tick ended with. Sources see for their `slot` (-1 until gameplay sets the owner's); validate commands with `LockstepVision.IsVisible` |
+| Vision | `pragma-dots-vision` | `LockstepVisionSystem` runs last (`OrderLast`): every system reads the planes the previous tick ended with. Sources see for their `slot` (-1 until gameplay sets the owner's) and its allies; validate commands with `LockstepVision.IsVisible` |
 | Stats | `pragma-dots-stats` | Add modifiers, changes and grants before `LockstepStatSystem`, read after it. Never write a stat's value; check prices with `TryGetPendingValue`; follow stats with `in DynamicBuffer<LockstepStat>` and a change filter |
 | State machines | `pragma-dots-state-machines` | One `StateMachineSystemGroup<T>` per machine component, its states are systems in it. A request from a state applies on the next update, one from a system before the group on this one |
 | Views | `pragma-dots-views` | Presentation only. `EntityViewKey` (the View part) is simulation state; nothing in the views writes to the simulation world |

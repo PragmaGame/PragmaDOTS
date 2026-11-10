@@ -26,6 +26,7 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player held by the server (ring and backlog); beyond = protocol violation, dropped; 0 = default |
 | `ValidateSimulationHash` | true | Reject clients whose `LockstepSimulation.DefaultSimulationHash` differs |
 | `StartData` | empty | `FixedList128Bytes<byte>` (126 bytes) for match parameters |
+| `Teams` | empty | `FixedList128Bytes<byte>`: the team of slot `s` at index `s`, 1-255, 0 or missing = none; at most `MaxPlayers` entries. `server.SetTeam` changes it in the lobby |
 
 ## `LockstepClientSettings` (start from `LockstepClientSettings.Default`)
 
@@ -50,7 +51,7 @@ The offline mode uses `InputMarginTicks = 0.5` and `PlayoutDelayTicks = 0.5`, si
 ## `LockstepOfflineConfig`
 
 `Create<TInput>(tickRate = 30)` sets `tickRate`, `maxPlayers = 1`, `inputSize`. Other fields: `seed`,
-`checksumInterval`, `startData`, `joinData`, `waitForActorRegistry`. The offline server starts as soon as the local
+`checksumInterval`, `startData`, `teams`, `joinData`, `waitForActorRegistry`. The offline server starts as soon as the local
 player joins (no countdown, no late join).
 
 ## `LockstepClientConfig` (Netcode client worlds; `Pragma.Dots.Lockstep.Netcode`, only with com.unity.netcode)

@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-sessions
-description: Set up and run sessions of the lockstep module of Pragma DOTS (package com.pragma.dots) - offline play, hosting, joining and dedicated servers on Netcode for Entities, thin clients, custom transports through ILockstepTransport, LockstepServerSettings / LockstepClientSettings tuning (tick rate, input delay, jitter buffer, late join, player count), lobby, start and end of a match, session UI and replays. Use it whenever the task is about connecting players, bootstrapping worlds, starting or ending a match, latency or smoothness, or a session that does not start, join or stay connected - even if the user only says "multiplayer", "network", "lobby" or "host a game".
+description: Set up and run sessions of the lockstep module of Pragma DOTS (package com.pragma.dots) - offline play, hosting, joining and dedicated servers on Netcode for Entities, thin clients, custom transports through ILockstepTransport, LockstepServerSettings / LockstepClientSettings tuning (tick rate, input delay, jitter buffer, late join, player count), lobby and teams, start and end of a match, session UI and replays. Use it whenever the task is about connecting players, bootstrapping worlds, starting or ending a match, latency or smoothness, or a session that does not start, join or stay connected - even if the user only says "multiplayer", "network", "lobby" or "host a game".
 ---
 
 # Sessions with Pragma DOTS lockstep
@@ -115,7 +115,7 @@ Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running
 
 | Moment | Server side | Client side |
 |---|---|---|
-| Joined, waiting | `server.State == Lobby`, `PlayerCount` | `client.State == Lobby`, `LocalSlot` |
+| Joined, waiting | `server.State == Lobby`, `PlayerCount`; `server.SetTeam(slot, team)` puts slots into teams | `client.State == Lobby`, `LocalSlot` |
 | Start | `RequestStart(serverWorld)` or `server.StartGame(now)`: `State` is `Running` at once, `GetTickPosition(now)` is negative during the countdown | The start message arrives during the countdown: `Running`, `StartedEvent`, the simulation world is created |
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
 | Leave | Announced in a frame; the slot frees up | `client.Leave()`, or the connection/world goes away |
@@ -138,6 +138,26 @@ from its start and pong messages) while `client.BufferedTicks` is large; re-simu
   the simulation reads `LockstepSessionInfo.GetStartData<T>()`.
 - **Seed**: `LockstepServerSettings.Seed` (0 picks one at start; `server.Config.Seed` is the final one); the
   simulation reads `LockstepSessionInfo.seed`.
+- **Teams**: per slot, 1-255 or 0 for none (the default: everyone for themselves). A preset in
+  `LockstepServerSettings.Teams` (slot `s` at index `s`), then `server.SetTeam(slot, team)` in the lobby, also for
+  slots nobody has joined yet; offline `LockstepOfflineConfig.teams`. The start message carries them
+  (`LockstepSessionConfig.Teams`) to every client, late joiners and replays included, and the simulation starts its
+  `LockstepTeams` from them. `SetTeam` throws once the match runs: from then on teams change inside the simulation,
+  from a command (`pragma-lockstep-gameplay`). With `MinPlayersToStart` the match starts on the join that completes
+  it, so preset the teams; a lobby where players pick teams uses `MinPlayersToStart = 0` and starts with
+  `RequestStart`. Players pick their team through the game's own channel (UI on the host, an RPC); the lockstep
+  protocol carries only the result.
+
+```csharp
+if (LockstepNetcode.TryGetServer(serverWorld, out var server))
+{
+    server.SetTeam(0, 1);   // slots 0 and 2 against 1 and 3
+    server.SetTeam(1, 2);
+    server.SetTeam(2, 1);
+    server.SetTeam(3, 2);
+    LockstepNetcode.RequestStart(serverWorld);
+}
+```
 - Limits (`LockstepProtocol`): `MAX_PLAYERS` 64, `MAX_INPUT_SIZE` 128, `MAX_JOIN_DATA_SIZE` 62,
   `MAX_START_DATA_SIZE` 126, `MAX_COMMANDS_PER_TICK` 32 per player (the rest move to later ticks).
 
@@ -153,7 +173,7 @@ if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 if (LockstepWorlds.TryGetServer(serverWorld, out var server)) // a server world, or the offline world
 {
     // server.State, PlayerCount, ClosedTicks, StartTime, GetTickPosition(now), LateInputCount, VerifiedChecksumCount,
-    // IsSlotInUse(slot), TryGetPlayerSlot(connectionId, out slot)
+    // IsSlotInUse(slot), TryGetPlayerSlot(connectionId, out slot), GetTeam(slot), SetTeam(slot, team) (lobby only)
 }
 // Every session of the process: LockstepWorlds.GetClients(list), GetServers(list).
 ```

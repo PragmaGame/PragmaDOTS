@@ -23,6 +23,12 @@ namespace Pragma.Dots.Lockstep
         [field: SerializeField] public int ChecksumInterval { get; set; }
         /// <summary>Game-defined start parameters such as a map id or game mode.</summary>
         [field: SerializeField] public FixedList128Bytes<byte> StartData { get; set; }
+        /// <summary>
+        /// The team of every slot when the match starts, slot <c>s</c> at index <c>s</c>, at most <see cref="MaxPlayers"/>
+        /// entries: 1 to 255, or <see cref="LockstepTeams.NONE"/> (0) for a slot allied with nobody, as is a missing entry.
+        /// The simulation starts its <see cref="LockstepTeams"/> from it.
+        /// </summary>
+        [field: SerializeField] public FixedList128Bytes<byte> Teams { get; set; }
 
         /// <summary>One tick in seconds, as <see cref="FixedPoint"/> (truncated to the fixed-point step).</summary>
         public FixedPoint DeltaTime => FixedPoint.FromFraction(1, TickRate);
@@ -38,6 +44,11 @@ namespace Pragma.Dots.Lockstep
             for (var i = 0; i < StartData.Length; i++)
             {
                 writer.WriteByte(StartData[i]);
+            }
+            writer.WriteByte((byte)Teams.Length);
+            for (var i = 0; i < Teams.Length; i++)
+            {
+                writer.WriteByte(Teams[i]);
             }
         }
 
@@ -64,6 +75,19 @@ namespace Pragma.Dots.Lockstep
                 startData.Add(reader.ReadByte());
             }
             config.StartData = startData;
+
+            var teamCount = reader.ReadByte();
+            if (teamCount > LockstepProtocol.MAX_PLAYERS)
+            {
+                reader.Skip(int.MaxValue);
+                return config;
+            }
+            var teams = new FixedList128Bytes<byte>();
+            for (var i = 0; i < teamCount; i++)
+            {
+                teams.Add(reader.ReadByte());
+            }
+            config.Teams = teams;
             return config;
         }
 
@@ -86,12 +110,17 @@ namespace Pragma.Dots.Lockstep
             {
                 throw new ArgumentOutOfRangeException(nameof(ChecksumInterval), ChecksumInterval, "Checksum interval must be in [0, 65535].");
             }
+            if (Teams.Length > MaxPlayers)
+            {
+                throw new ArgumentOutOfRangeException(nameof(Teams), Teams.Length, "Teams has more entries than there are player slots.");
+            }
         }
 
         public bool Equals(LockstepSessionConfig other)
         {
             return TickRate == other.TickRate && MaxPlayers == other.MaxPlayers && InputSize == other.InputSize &&
-                   Seed == other.Seed && ChecksumInterval == other.ChecksumInterval && StartData.Equals(other.StartData);
+                   Seed == other.Seed && ChecksumInterval == other.ChecksumInterval && StartData.Equals(other.StartData) &&
+                   Teams.Equals(other.Teams);
         }
 
         public override bool Equals(object obj) => obj is LockstepSessionConfig other && Equals(other);

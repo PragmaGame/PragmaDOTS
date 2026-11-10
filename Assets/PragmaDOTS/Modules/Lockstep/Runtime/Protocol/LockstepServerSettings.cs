@@ -57,6 +57,11 @@ namespace Pragma.Dots.Lockstep
         [field: SerializeField] public bool ValidateSimulationHash { get; set; }
         /// <summary>Game-defined start parameters, readable in the simulation through <see cref="LockstepSessionInfo"/>.</summary>
         [field: SerializeField] public FixedList128Bytes<byte> StartData { get; set; }
+        /// <summary>
+        /// The team of every slot, slot <c>s</c> at index <c>s</c> (1 to 255; 0 or a missing entry is none): a preset the lobby
+        /// can still change with <see cref="LockstepServer.SetTeam"/>. See <see cref="LockstepSessionConfig.Teams"/>.
+        /// </summary>
+        [field: SerializeField] public FixedList128Bytes<byte> Teams { get; set; }
 
         public static LockstepServerSettings Default => new LockstepServerSettings
         {
@@ -110,6 +115,10 @@ namespace Pragma.Dots.Lockstep
             if (ChecksumInterval < 0 || ChecksumInterval > ushort.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(nameof(ChecksumInterval), ChecksumInterval, "Checksum interval must be in [0, 65535].");
+            }
+            if (Teams.Length > MaxPlayers)
+            {
+                throw new ArgumentOutOfRangeException(nameof(Teams), Teams.Length, "Teams has more entries than there are player slots.");
             }
             if (MaxInputWaitTicks < 0)
             {

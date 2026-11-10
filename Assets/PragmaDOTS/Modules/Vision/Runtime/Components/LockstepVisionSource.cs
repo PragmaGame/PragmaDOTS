@@ -11,7 +11,8 @@ namespace Pragma.Dots.Vision
     /// </summary>
     /// <remarks>
     /// Gameplay keeps both values current: the slot of the owner (a captured building changes hands) and the radius
-    /// (research or a debuff changes sight). Allies that share vision are queried together; each source names one slot.
+    /// (research or a debuff changes sight). A source names one slot; its allies see through it too
+    /// (<see cref="LockstepTeams"/>, <see cref="LockstepVisionGrid.ownVisionOnlySlots"/>).
     /// </remarks>
     public struct LockstepVisionSource : IComponentData
     {

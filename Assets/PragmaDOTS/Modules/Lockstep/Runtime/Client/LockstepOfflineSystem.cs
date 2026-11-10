@@ -57,6 +57,7 @@ namespace Pragma.Dots.Lockstep
             serverSettings.Seed = config.seed;
             serverSettings.ChecksumInterval = config.checksumInterval;
             serverSettings.StartData = config.startData;
+            serverSettings.Teams = config.teams;
             serverSettings.MinPlayersToStart = 1;
             serverSettings.StartDelaySeconds = 0f;
             serverSettings.AllowLateJoin = false;

@@ -17,6 +17,8 @@ namespace Pragma.Dots.Lockstep
         public uint seed;
         public int checksumInterval;
         public FixedList128Bytes<byte> startData;
+        /// <summary>The team of every slot, as <see cref="LockstepSessionConfig.Teams"/>: for matches against AI players.</summary>
+        public FixedList128Bytes<byte> teams;
         public FixedList64Bytes<byte> joinData;
         /// <summary>Wait until an actor registry exists in this world before creating the simulation.</summary>
         public bool waitForActorRegistry;

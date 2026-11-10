@@ -1,3 +1,4 @@
+using Pragma.Dots.Lockstep;
 using Pragma.Dots.Mathematics;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -11,7 +12,8 @@ namespace Pragma.Dots.Vision
     /// <remarks>
     /// A cell is visible when a circle of sight reaches into it, not only when it covers the cell's centre: whatever lies
     /// within a source's radius lies in a visible cell, so a unit never fights an enemy its player cannot see. Distances
-    /// are compared on raw fixed-point values, the same on every client.
+    /// are compared on raw fixed-point values, the same on every client. The plane of a slot holds what its team sees
+    /// (<see cref="ShareWithAllies"/>), so the queries need no list of allies.
     /// </remarks>
     public static class LockstepVision
     {
@@ -104,6 +106,57 @@ namespace Pragma.Dots.Vision
                     {
                         cells[offset + layout.GetIndex(cell)] = visible;
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gives every slot what its allies see: the plane of each slot becomes the union of the planes of its team, except
+        /// for the slots in <see cref="LockstepVisionGrid.ownVisionOnlySlots"/>, which keep their own. Call it once after
+        /// stamping every source, as <see cref="LockstepVisionSystem"/> does; the union does not depend on any order.
+        /// </summary>
+        public static void ShareWithAllies(in LockstepVisionGrid grid, NativeArray<LockstepVisionCell> cells, in LockstepTeams teams)
+        {
+            if (!HasCells(grid, cells))
+            {
+                return;
+            }
+
+            var cellCount = grid.CellCount;
+            var planes = grid.slotCount >= 64 ? ulong.MaxValue : (1ul << grid.slotCount) - 1;
+            var visited = 0ul;
+            var visible = new LockstepVisionCell { isVisible = true };
+            for (var slot = 0; slot < grid.slotCount; slot++)
+            {
+                if ((visited & (1ul << slot)) != 0)
+                {
+                    continue;
+                }
+                var team = teams.GetAllies(slot) & planes;
+                visited |= team;
+                var receivers = team & ~grid.ownVisionOnlySlots;
+                if (math.countbits(team) < 2 || receivers == 0)
+                {
+                    continue;
+                }
+
+                // The first receiver collects the union in its own plane, then the others get a copy of it.
+                var first = math.tzcnt(receivers);
+                var target = first * cellCount;
+                for (var members = team & ~(1ul << first); members != 0; members &= members - 1)
+                {
+                    var source = math.tzcnt(members) * cellCount;
+                    for (var i = 0; i < cellCount; i++)
+                    {
+                        if (cells[source + i].isVisible)
+                        {
+                            cells[target + i] = visible;
+                        }
+                    }
+                }
+                for (var others = receivers & ~(1ul << first); others != 0; others &= others - 1)
+                {
+                    NativeArray<LockstepVisionCell>.Copy(cells, target, cells, math.tzcnt(others) * cellCount, cellCount);
                 }
             }
         }

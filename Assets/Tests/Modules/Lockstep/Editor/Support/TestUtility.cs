@@ -23,6 +23,16 @@ namespace Pragma.Dots.Tests
             };
         }
 
+        public static FixedList128Bytes<byte> Bytes(params byte[] values)
+        {
+            var list = new FixedList128Bytes<byte>();
+            foreach (var value in values)
+            {
+                list.Add(value);
+            }
+            return list;
+        }
+
         public static LockstepSimulationOptions Options(params Type[] systems)
         {
             return new LockstepSimulationOptions { AutoDiscoverSystems = false, AdditionalSystems = systems };

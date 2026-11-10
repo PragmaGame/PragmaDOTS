@@ -169,6 +169,99 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void ShareWithAllies_GivesEverySlotWhatItsTeamSees()
+        {
+            var grid = CreateGrid(4);
+            var teams = LockstepTeams.Create(4, TestUtility.Bytes(1, 1, 0, 1));
+            using (var cells = CreateCells(grid))
+            {
+                LockstepVision.Stamp(grid, cells, 0, new FixedVector2(-5, 0), 2);
+                LockstepVision.Stamp(grid, cells, 1, new FixedVector2(5, 0), 2);
+                LockstepVision.Stamp(grid, cells, 2, new FixedVector2(0, 5), 2);
+                LockstepVision.ShareWithAllies(grid, cells, teams);
+
+                foreach (var slot in new[] { 0, 1, 3 })
+                {
+                    Assert.IsTrue(LockstepVision.IsVisible(grid, cells, slot, new FixedVector2(-5, 0)), $"slot {slot} sees through slot 0");
+                    Assert.IsTrue(LockstepVision.IsVisible(grid, cells, slot, new FixedVector2(5, 0)), $"slot {slot} sees through slot 1");
+                    Assert.IsFalse(LockstepVision.IsVisible(grid, cells, slot, new FixedVector2(0, 5)), $"slot {slot} does not see through an enemy");
+                }
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 2, new FixedVector2(0, 5)));
+                Assert.IsFalse(LockstepVision.IsVisible(grid, cells, 2, new FixedVector2(-5, 0)), "a slot without a team sees what it sees");
+                Assert.AreEqual(LockstepVision.GetPlane(grid, cells, 0).ToArray(), LockstepVision.GetPlane(grid, cells, 3).ToArray(),
+                                "the fog of every ally is the same");
+            }
+        }
+
+        [Test]
+        public void SlotsThatSeeOnlyTheirOwn_KeepTheirPlane_TheirAlliesStillSeeThroughThem()
+        {
+            var grid = CreateGrid(3);
+            grid.SetSeesAllies(1, false);
+            var teams = LockstepTeams.Create(3, TestUtility.Bytes(1, 1, 1));
+            using (var cells = CreateCells(grid))
+            {
+                LockstepVision.Stamp(grid, cells, 0, new FixedVector2(-5, 0), 2);
+                LockstepVision.Stamp(grid, cells, 1, new FixedVector2(5, 0), 2);
+                LockstepVision.ShareWithAllies(grid, cells, teams);
+
+                Assert.IsFalse(grid.SeesAllies(1));
+                Assert.IsTrue(grid.SeesAllies(0));
+                Assert.IsFalse(LockstepVision.IsVisible(grid, cells, 1, new FixedVector2(-5, 0)), "slot 1 sees only through its own sources");
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 1, new FixedVector2(5, 0)));
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 0, new FixedVector2(5, 0)), "its allies still see through it");
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 2, new FixedVector2(5, 0)));
+                Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 2, new FixedVector2(-5, 0)), "a slot without sources sees what its team sees");
+            }
+
+            grid.ownVisionOnlySlots = LockstepVisionGrid.ALL_SLOTS;
+            using (var cells = CreateCells(grid))
+            {
+                LockstepVision.Stamp(grid, cells, 0, new FixedVector2(-5, 0), 2);
+                LockstepVision.ShareWithAllies(grid, cells, teams);
+                Assert.IsFalse(LockstepVision.IsVisible(grid, cells, 2, new FixedVector2(-5, 0)), "a match without shared vision");
+            }
+
+            grid.SetSeesAllies(-1, true);
+            grid.SetSeesAllies(LockstepProtocol.MAX_PLAYERS, true);
+            Assert.AreEqual(LockstepVisionGrid.ALL_SLOTS, grid.ownVisionOnlySlots, "slots outside the mask are ignored");
+            Assert.IsFalse(grid.SeesAllies(-1));
+        }
+
+        [Test]
+        public void System_SharesWhatAlliesSee_AndFollowsTeamChanges()
+        {
+            var config = TestUtility.Config(maxPlayers: 3);
+            config.Teams = TestUtility.Bytes(1, 1, 2);
+            using (var simulation = new LockstepSimulation(config, TestUtility.Options(typeof(LockstepVisionSystem))))
+            {
+                var entityManager = simulation.World.EntityManager;
+                var gridEntity = CreateGridEntity(entityManager);
+                CreateSource(entityManager, new FixedVector3(-5, 0, 0), 2, 0);
+                CreateSource(entityManager, new FixedVector3(5, 0, 0), 2, 1);
+                CreateSource(entityManager, new FixedVector3(0, 0, 5), 2, 2);
+
+                TestUtility.Step(simulation);
+                Assert.IsTrue(IsVisible(entityManager, gridEntity, 0, new FixedVector2(5, 0)), "slot 0 sees through its ally");
+                Assert.IsTrue(IsVisible(entityManager, gridEntity, 1, new FixedVector2(-5, 0)));
+                Assert.IsFalse(IsVisible(entityManager, gridEntity, 0, new FixedVector2(0, 5)), "not through its enemy");
+                Assert.IsFalse(IsVisible(entityManager, gridEntity, 2, new FixedVector2(5, 0)));
+
+                // Slot 1 changes sides.
+                using (var query = entityManager.CreateEntityQuery(typeof(LockstepTeams)))
+                {
+                    var teams = query.GetSingleton<LockstepTeams>();
+                    teams.SetTeam(1, 2);
+                    query.SetSingleton(teams);
+                }
+                TestUtility.Step(simulation);
+                Assert.IsFalse(IsVisible(entityManager, gridEntity, 0, new FixedVector2(5, 0)), "a former ally");
+                Assert.IsTrue(IsVisible(entityManager, gridEntity, 2, new FixedVector2(5, 0)), "a new ally");
+                Assert.IsTrue(IsVisible(entityManager, gridEntity, 1, new FixedVector2(0, 5)));
+            }
+        }
+
+        [Test]
         public void System_FillsOnePlanePerSlotOnEveryTick()
         {
             using (var simulation = new LockstepSimulation(TestUtility.Config(maxPlayers: 3), TestUtility.Options(typeof(LockstepVisionSystem))))
@@ -241,6 +334,48 @@ namespace Pragma.Dots.Tests
                     }
                 }
                 Assert.AreEqual(planes[0], planes[1], "both clients see the same fog");
+            }
+        }
+
+        [Test]
+        public void Session_AlliesSeeTheSameFog()
+        {
+            var settings = LockstepServerSettings.Default;
+            settings.TickRate = 30;
+            settings.MaxPlayers = 2;
+            settings.InputSize = UnsafeUtility.SizeOf<TestInput>();
+            settings.Seed = 79;
+            settings.MinPlayersToStart = 2;
+            settings.StartDelaySeconds = 0.3f;
+            settings.ChecksumInterval = 10;
+            settings.Teams = TestUtility.Bytes(1, 1);
+
+            using (var session = new SessionHarness(settings, latency: 0.05, jitter: 0.04))
+            {
+                var first = session.AddClient(SessionOptions());
+                var second = session.AddClient(SessionOptions());
+                session.Run(6);
+
+                Assert.IsEmpty(session.Desyncs);
+                TestUtility.AssertSameChecksums(first, second, 15);
+                foreach (var client in new[] { first, second })
+                {
+                    var entityManager = client.Simulation.World.EntityManager;
+                    using (var grids = entityManager.CreateEntityQuery(typeof(LockstepVisionGrid), typeof(LockstepVisionCell)))
+                    using (var query = entityManager.CreateEntityQuery(typeof(LockstepVisionSource), typeof(LockstepTransform)))
+                    {
+                        var gridEntity = grids.GetSingletonEntity();
+                        var grid = entityManager.GetComponentData<LockstepVisionGrid>(gridEntity);
+                        var cells = entityManager.GetBuffer<LockstepVisionCell>(gridEntity).AsNativeArray();
+                        Assert.AreEqual(LockstepVision.GetPlane(grid, cells, 0).ToArray(), LockstepVision.GetPlane(grid, cells, 1).ToArray(),
+                                        "both allies see the same fog");
+                        var transforms = query.ToComponentDataArray<LockstepTransform>(Allocator.Temp);
+                        for (var i = 0; i < transforms.Length; i++)
+                        {
+                            Assert.IsTrue(LockstepVision.IsVisible(grid, cells, 0, transforms[i].position.Xz), "slot 0 sees every source of its team");
+                        }
+                    }
+                }
             }
         }
 

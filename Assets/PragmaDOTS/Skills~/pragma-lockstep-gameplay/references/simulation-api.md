@@ -53,6 +53,7 @@ yourself): `WorldName`, `AutoDiscoverSystems` (default true), `AdditionalSystems
 | `LockstepSessionInfo` | `uint seed`, `int tickRate`, `int maxPlayers`, `int inputSize`, `FixedList128Bytes<byte> startData`, `T GetStartData<T>()` |
 | `LockstepRandom` | `FixedRandom value` - take it by `ref` |
 | `LockstepPlayerSlot` (buffer) | `Entity player` per slot, `Entity.Null` when free |
+| `LockstepTeams` | The team of every slot (from `LockstepSessionConfig.Teams`): `int GetTeam(slot)` (`NONE` = 0 for none and for slots outside the session), `void SetTeam(slot, team)` (1-255 or `NONE`; out of range ignored), `bool AreAllies(a, b)`, `bool AreEnemies(a, b)`, `ulong GetAllies(slot)` (mask, itself included), `int SlotCount`; `static Create(slotCount, teams)` |
 | `LockstepEntityIdCounter` | `uint last` |
 | `LockstepEntityIdMap` | `NativeHashMap<uint, Entity> map`, `TryGetEntity(uint, out Entity)`, `TryGetEntity(LockstepEntityId, out Entity)`; ignored by the checksum |
 | `LockstepFrameData` (buffer) | `byte value`: the raw frame of the current tick (rarely needed) |

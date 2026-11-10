@@ -8,6 +8,15 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Teams (Lockstep): `LockstepTeams`, a singleton of the simulation world with the team of every player slot
+  (`GetTeam`, `SetTeam`, `AreAllies`, `AreEnemies`, `GetAllies`). The lobby sets them on the server
+  (`LockstepServerSettings.Teams` as a preset, `LockstepServer.SetTeam` and `GetTeam` until the start; offline
+  `LockstepOfflineConfig.teams`), the start message carries them in `LockstepSessionConfig.Teams`, and gameplay may
+  change them during the match. A slot without a team is allied with nobody, so sessions without teams play as before.
+  Attacks stay the game's, which asks `AreEnemies`.
+- Shared vision of allies (Vision): `LockstepVisionSystem` merges the planes of each team after stamping
+  (`LockstepVision.ShareWithAllies`), so the queries and the fog of a slot show what its team sees;
+  `LockstepVisionGrid.ownVisionOnlySlots` (`SeesAllies`, `SetSeesAllies`) keeps a slot to its own sight.
 - Matrices (`Pragma.Dots.Mathematics`): `FixedVector4`, `FixedMatrix3x3` and `FixedMatrix4x4`, stored by columns like
   Unity's matrices: TRS and pose transforms, products, points and directions, determinants, general and affine
   inverses (accurate to a step at any scale and translation), decomposition into translation, rotation and scale, and
@@ -67,6 +76,9 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking.** `LockstepProtocol.VERSION` is 3: the session configuration carries the teams, so clients and servers of
+  earlier versions refuse each other and earlier replays do not load. The session entity has `LockstepTeams`, which
+  changes the state hash.
 - **Breaking.** Vision: `LockstepVisionGrid.isRevealed` is replaced by `revealedSlots`, a mask of the slots that see
   the whole map (`IsRevealed`, `SetRevealed`, `ALL_SLOTS`): a cheat or a spectator reveals the map to one slot while the
   others keep their fog. Set `revealedSlots = LockstepVisionGrid.ALL_SLOTS` where `isRevealed = true` was; the state

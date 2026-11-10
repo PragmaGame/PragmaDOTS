@@ -85,6 +85,8 @@ Each is off after installation; [turn on](#turning-modules-on) the ones you use.
   - The per-tick input is a struct of your own, with the previous one for exact button edges. Commands (build, buy,
     use) are never dropped and carry data of any length, such as the unit ids of an order. Players are entities that
     join and leave on the same tick everywhere.
+  - Teams of player slots, set in the lobby and changeable during the match, with ally and enemy queries; the Vision
+    module shares what allies see.
   - A server that never stalls (a late input repeats the previous one), adaptive input timing and a jitter-aware
     playout buffer.
   - Desync detection by majority vote with a per-component breakdown, replays watched through ordinary clients at any
@@ -1104,6 +1106,7 @@ group, give it `[WorldSystemFilter(LockstepWorldFilter.SIMULATION)]`, or pass it
 | `LockstepSessionInfo` | `seed`, `tickRate`, `maxPlayers`, `inputSize`, `startData`; `GetStartData<T>()` |
 | `LockstepRandom` | `value`, an `FixedRandom` seeded from the session seed |
 | `LockstepPlayerSlot` (buffer) | Player entity of every slot, `Entity.Null` when free |
+| `LockstepTeams` | The team of every slot: `GetTeam`, `SetTeam`, `AreAllies`, `AreEnemies`, `GetAllies`; see [teams](#teams) |
 | `ActorRegistry` | The actor types (`ActorType` buffer: key, prefab, tags) and the tag table (`ActorTagName` buffer), copied from the presentation world; read them with `ActorLookup` |
 | `LockstepEntityIdMap` | Id to entity lookup, rebuilt at the end of every tick that created, destroyed or moved an entity with an id |
 | `LockstepEntityIdCounter` | Last id handed out |
@@ -1242,6 +1245,42 @@ foreach (var (player, commands, commandData) in
 - **Start data** (up to 126 bytes) is set on the server (`LockstepServerSettings.StartData`, or
   `LockstepOfflineConfig.startData`) and reaches every client before tick 0. Read it with
   `LockstepSessionInfo.GetStartData<T>()` (map id, game mode, rules).
+
+#### Teams
+
+Every slot has a team, kept by the `LockstepTeams` singleton. Slots of one team are allies. A slot without a team
+(`LockstepTeams.NONE`, 0, the default) is allied with nobody, so without any setup every player is on its own.
+
+- **Before the match** the lobby puts slots into teams (1 to 255) on the server: `LockstepServerSettings.Teams` (slot
+  `s` at index `s`) as a preset, then `server.SetTeam(slot, team)` until the match starts, also for slots nobody has
+  joined yet (`LockstepOfflineConfig.teams` offline). They travel in the session configuration
+  (`LockstepSessionConfig.Teams`), so every client, late joiners and replays start from the same teams. `SetTeam`
+  throws once the match runs. With `MinPlayersToStart` the match starts on the join that completes it: preset the
+  teams in the settings then.
+- **During the match** teams are simulation state. Change them from a command (an alliance, a player changing sides),
+  and the change counts from that tick on every client. The server keeps the teams the match started with.
+
+```csharp
+ref var teams = ref SystemAPI.GetSingletonRW<LockstepTeams>().ValueRW;
+teams.SetTeam(player.ValueRO.slot, order.team);
+```
+
+- **Queries**, Burst-compatible: `GetTeam(slot)`, `AreAllies(a, b)`, `AreEnemies(a, b)`, `GetAllies(slot)` (a mask
+  of the slot's team, itself included), `SlotCount`. A team belongs to the slot, not to the player entity, so the units
+  of a player who left keep their side. A slot outside the session (-1 for neutral units) has no team: it is the enemy
+  of every slot and the ally of -1 only, so neutral units do not fight each other.
+- **What uses them.** The [Vision](#vision) module shares the planes of allies. Combat is the game's: its units carry
+  the slot of their owner in a component of its own, and its rules ask `AreEnemies` wherever an attack is decided, in
+  the validation of an attack order and in the search for targets alike:
+
+```csharp
+var teams = SystemAPI.GetSingleton<LockstepTeams>();
+var targetOwner = SystemAPI.GetComponent<Owner>(target).slot;   // Owner is the game's component
+if (teams.AreAllies(player.ValueRO.slot, targetOwner))
+{
+    continue;   // no attacks on own or allied units
+}
+```
 
 #### Creating and destroying entities
 
@@ -1456,8 +1495,8 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
           countdown of StartDelaySeconds, then tick 0
 ```
 
-- **Lobby.** Clients that joined wait in `LockstepClientState.Lobby`. Each client creates its simulation world when the
-  start message arrives, during the countdown.
+- **Lobby.** Clients that joined wait in `LockstepClientState.Lobby`, and the server's `SetTeam` puts slots into
+  [teams](#teams). Each client creates its simulation world when the start message arrives, during the countdown.
 - **Running.** The server closes ticks on its clock. `client.StartedEvent` fires when the client enters `Running`.
 - **Late join.** With `AllowLateJoin` (default), a client joining a running match receives every frame from tick 0
   and re-simulates them within its catch-up budget (`MaxTicksPerUpdate`, `MaxSimulationMillisecondsPerUpdate`). Its
@@ -1501,7 +1540,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `ClosedTicks`, `PlayerCount`, `History` | Progress, players present, every closed frame |
 | `VerifiedChecksumCount`, `LateInputCount` | Diagnostics |
 | `DesyncDetectedEvent`, `ProtocolViolationEvent` | Events; a violation (malformed data, or a message or commands over the limits) carries the connection id and the reason, and the data is dropped |
-| `StartGame`, `EndGame`, `ExportReplay`, `TryGetPlayerSlot`, `IsSlotInUse` | Actions and queries |
+| `StartGame`, `EndGame`, `ExportReplay`, `SetTeam`, `GetTeam`, `TryGetPlayerSlot`, `IsSlotInUse` | Actions and queries; `SetTeam` only in the lobby |
 
 | `LockstepReplayHost` | |
 |---|---|
@@ -1611,6 +1650,7 @@ Start from `LockstepServerSettings.Default`. The settings are serializable, so t
 | `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player the server holds (sent ahead or waiting); beyond it they are dropped as a protocol violation |
 | `ValidateSimulationHash` | true | Refuse clients whose `DefaultSimulationHash` differs |
 | `StartData` | empty | Up to 126 bytes, readable in the simulation through `LockstepSessionInfo` |
+| `Teams` | empty | The [team](#teams) of every slot at its index, at most `MaxPlayers` entries: 1–255, or 0 (and a missing entry) for none |
 
 #### `LockstepClientSettings`
 
@@ -1632,7 +1672,7 @@ Start from `LockstepClientSettings.Default`.
 #### `LockstepOfflineConfig`
 
 `Create<TInput>(tickRate)` fills `tickRate`, `maxPlayers = 1` and `inputSize`. The other fields are `seed`,
-`checksumInterval`, `startData`, `joinData` and `waitForActorRegistry`.
+`checksumInterval`, `startData`, `teams`, `joinData` and `waitForActorRegistry`.
 
 #### `LockstepSimulationOptions`
 
@@ -1851,7 +1891,7 @@ All messages are little-endian byte strings, versioned by `LockstepProtocol.VERS
 |---|---|---|
 | `JoinRequest` | client → server | Protocol version, simulation hash, flags (simulates), join data |
 | `JoinAccepted` / `JoinRejected` | server → client | Slot / reason |
-| `Start` | server → client | Session configuration, the client's slot and join tick, the server clock position and its closed ticks |
+| `Start` | server → client | Session configuration (teams included), the client's slot and join tick, the server clock position and its closed ticks |
 | `Input` | client → server | Inputs of consecutive ticks; a repeat flag instead of unchanged bytes; commands |
 | `Frames` | server → client | Consecutive confirmed frames |
 | `InputFeedback` | server → client | How early the client's inputs arrive (1/256 tick), late drops |
@@ -2095,10 +2135,10 @@ part menu.
 
 | Type | What it is |
 |---|---|
-| `LockstepVisionGrid` | Singleton: origin, cell size, width, height (laid out as a `FixedGrid`, like the navigation grid), the number of planes (`slotCount`, the session's `maxPlayers`) and `revealedSlots`, the slots that see everything (`IsRevealed`, `SetRevealed`, `ALL_SLOTS`). The cells are the `LockstepVisionCell` buffer of the same entity: plane by plane in slot order, `isVisible` per cell |
+| `LockstepVisionGrid` | Singleton: origin, cell size, width, height (laid out as a `FixedGrid`, like the navigation grid), the number of planes (`slotCount`, the session's `maxPlayers`), `revealedSlots`, the slots that see everything (`IsRevealed`, `SetRevealed`, `ALL_SLOTS`), and `ownVisionOnlySlots`, the slots that do not see what their allies see (`SeesAllies`, `SetSeesAllies`). The cells are the `LockstepVisionCell` buffer of the same entity: plane by plane in slot order, `isVisible` per cell |
 | `LockstepVisionSource` | An entity that lets a slot see: the radius of its sight on the XZ plane and the slot it sees for (-1, or any slot outside the session, sees for nobody), around its `LockstepTransform` |
-| `LockstepVisionSystem` | Last in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it and stamps every source |
-| `LockstepVision` | The queries: `IsVisible` (a point, or a body of some radius, seen by its edge), `IsCellVisible`, `GetPlane` (the cells of one slot, to draw its fog), `HasCells`, `Stamp` |
+| `LockstepVisionSystem` | Last in `LockstepSimulationSystemGroup`, before the end-of-tick command buffer: sizes the buffer, clears it, stamps every source and shares the planes of allies |
+| `LockstepVision` | The queries: `IsVisible` (a point, or a body of some radius, seen by its edge), `IsCellVisible`, `GetPlane` (the cells of one slot, to draw its fog), `HasCells`; `Stamp` and `ShareWithAllies`, which fill the planes |
 | `LockstepVisionFog` | Presentation: the fog of one slot as a texture (`Texture`, R8, a texel per cell, over `Area`) with soft edges and a fade (`FadeSeconds`), and the same visibility as numbers (`Visibility`, `Version`) for a minimap. No render pipeline: the game shades it |
 
 ### Setting it up
@@ -2151,15 +2191,19 @@ var canAttack = LockstepVision.IsVisible(grid, cells, slot, target.position.Xz, 
 - **Revealing.** `revealedSlots` is a mask of the slots every query answers true for, inside the grid and outside:
   every slot (`ALL_SLOTS`: a match option, the end of the match) or one (`SetRevealed`: a cheat, a spectator). The
   planes are still filled, so taking the bit away shows the fog at once.
-- **Allies.** Each source sees for one slot; players that share vision are asked together (visible to any of their
-  slots).
+- **Allies.** Each source sees for one slot, and after stamping the planes of [allies](#teams) are merged: every slot
+  of a team sees what the whole team sees, through the same queries and the same fog. A slot in `ownVisionOnlySlots`
+  keeps its own plane, while its allies still see through its sources: a match option without shared vision
+  (`ALL_SLOTS`), or a research that shares it with one player (`SetSeesAllies`). Teams changed during the match count
+  from the end of that tick.
 - **Determinism.** Distances are compared on raw fixed-point values. Stamping only marks cells, so the order sources are
   visited in does not matter. The planes are hashed with the rest of the state.
 
 ### Cost
 
 Each tick clears `slotCount` planes and stamps every source over the square around its circle: about
-(2 × radius / cell size)² cells per source. A 256 × 256 map with 2-unit cells and two slots holds 32 768 cells.
+(2 × radius / cell size)² cells per source. Sharing reads the plane of every member of a team and writes those of the
+receivers once more. A 256 × 256 map with 2-unit cells and two slots holds 32 768 cells.
 
 ## Stats
 
@@ -2709,6 +2753,7 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 - **Richer navigation.** One grid per world; no cell costs of terrain kinds, no queues in front of passages, and paths
   that go around walking agents only locally.
 - **Line of sight.** Vision is a radius on the XZ plane: neither the ground nor obstacles block it.
+- **Combat.** Attacks, targets, damage and friendly fire are the game's; [teams](#teams) tell it who is an enemy.
 
 ## License
 

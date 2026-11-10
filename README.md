@@ -21,9 +21,9 @@ carries and runs only what it uses.
 | Mathematics | core | Fixed-point math (`FixedPoint`, vectors, quaternion, pose, matrices, `FixedMath`, `FixedRandom`, shapes on the XZ plane with exact tests, `FixedCurve`, `FixedHash`), integer only, bit-identical in Mono, IL2CPP and Burst; overflow checks for development builds |
 | Actors | core | Units, buildings and map objects described in assets of parts (a key, tags, a parent), spawned by key from a catalog, placed on maps with overrides, baked or built at run time, previewed in the editor |
 | Utils | core | `FixedDictionary4096Bytes`, `OptionalValue`, signals (one-off events as entities), buffers used as dictionaries, `EntityManager` helpers, hiding entities from the Hierarchy window, fixed list and string inspectors, `CollisionMatrixToFilter` |
-| Lockstep | module, `PRAGMA_DOTS_LOCKSTEP` | Deterministic lockstep: every client steps an isolated simulation world with the same confirmed input frames. A server that orders input and never simulates, never-dropped commands, desync detection, replays, late join, offline mode, Netcode for Entities integration |
+| Lockstep | module, `PRAGMA_DOTS_LOCKSTEP` | Deterministic lockstep: every client steps an isolated simulation world with the same confirmed input frames. A server that orders input and never simulates, never-dropped commands, teams of players, desync detection, replays, late join, offline mode, Netcode for Entities integration |
 | Navigation | module, `PRAGMA_DOTS_NAVIGATION` | A walkability grid with terrain heights, obstacles, A* with string pulling in integer math, agents with avoidance |
-| Vision | module, `PRAGMA_DOTS_VISION` | What every player slot sees, on a grid stamped every tick, for the fog of war and for the rules |
+| Vision | module, `PRAGMA_DOTS_VISION` | What every player slot sees, on a grid stamped every tick and shared by allies, for the fog of war and for the rules |
 | Stats | module, `PRAGMA_DOTS_STATS` | Attributes with timed and non-stacking modifiers, resources such as health, bonuses granted to groups |
 | Views | module, `PRAGMA_DOTS_VIEWS` | Pooled GameObject views of simulation entities, fed per component when it changes, with interpolated transforms |
 | State machines | module, `PRAGMA_DOTS_STATE_MACHINES` | Per-entity state machines whose states tick in parallel Burst jobs, with or without lockstep |
@@ -47,7 +47,7 @@ Only `Assets/PragmaDOTS` ships; everything else is the development project.
 |---|---|
 | `Assets/PragmaDOTS` | The package: `Core` (math, actors, utilities), `Modules` (lockstep, navigation, vision, stats, views, state machines), Claude Code skills (`Skills~`) |
 | `Assets/Tests/Core/Editor` | EditMode tests of the core: math, utilities and actors |
-| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, actors in the simulation, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`, `StateMachines`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
+| `Assets/Tests/Modules` | EditMode tests of each module, compiled with the module: `Lockstep` (serialization, checksums, simulation, teams, actors in the simulation, spatial index, sessions, replays, presentation, Netcode integration), `Navigation`, `Vision`, `Stats`, `Views`, `StateMachines`; `Views/Runtime` holds the MonoBehaviours the view tests put on GameObjects (Unity cannot add components from Editor assemblies) |
 | [`documentation.md`](documentation.md) | Design notes: architecture, decisions, what was taken from ME.BECS, Photon Quantum and ECV, and why |
 | [`mebecs_research.md`](mebecs_research.md) | How ME.BECS implements determinism and networking |
 | [`photon_research.md`](photon_research.md) | How Photon Quantum implements determinism and prediction/rollback |
