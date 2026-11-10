@@ -16,7 +16,7 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 
 | Path | Contents |
 |------|----------|
-| `Assets/PragmaDOTS/Core/Mathematics` | `Pragma.Dots.Mathematics` (`Runtime`): `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedMath`, `FixedRandom`, `FixedGrid`, the inspector limits `FixedMinAttribute` and `FixedRangeAttribute`. No Entities dependency. `Pragma.Dots.Mathematics.Editor` (`Editor`): fixed-point drawers, also of the limits |
+| `Assets/PragmaDOTS/Core/Mathematics` | `Pragma.Dots.Mathematics` (`Runtime`): `FixedPoint` (overflow checks in `FixedPoint.Checked.cs`), `FixedVector2`, `FixedVector3`, `FixedVector4`, `FixedQuaternion`, `FixedPose`, `FixedMatrix3x3`, `FixedMatrix4x4`, `FixedMath` (partials: vector, transcendental, matrix, geometry), `FixedRandom`, `FixedGrid`, the XZ shapes `FixedBounds2`, `FixedCircle`, `FixedSegment2`, `FixedRay2`, `FixedTriangle2`, `FixedCurve` with `FixedCurveKey`, `FixedHash`, the inspector attributes `FixedMinAttribute`, `FixedRangeAttribute`, `FixedDegreesAttribute`, `FixedDirectionAttribute`. No Entities dependency. `Pragma.Dots.Mathematics.Editor` (`Editor`): fixed-point drawers, also of the attributes, and the curve drawer (it edits the private `_keys`, `_preWrap`, `_postWrap` of `FixedCurve`: rename them together) |
 | `Assets/PragmaDOTS/Core/Utils` | `Pragma.Dots.Utils` (`Runtime`): `FixedDictionary4096Bytes`, `OptionalValue`, `EnumId` (enum values as ints, Burst-compatible). `Pragma.Dots.Utils.Editor` (`Editor`): fixed list and fixed string drawers. `Pragma.Dots.Utils.Physics` (`Physics`, only with `com.unity.physics`): `CollisionMatrixToFilter`. `Pragma.Dots.Utils.Entities` (`Entities`): signals (`Signals`, `SignalTag`, `SignalCleanupSystem`), `BufferDictionary`, `EntityManagerExtensions`, `EntityHierarchy` (the editor's hidden tag, found by name) |
 | `Assets/PragmaDOTS/Core/Actors` | `Pragma.Dots.Actors` (`Runtime`): `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorKeyAttribute`, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` (registry and placed actors at run time), components in `Components`. `Pragma.Dots.Actors.Authoring` (`Authoring`): `ActorCatalogAuthoring`, the actor bakers (catalog into registry, `ActorAuthoring` into placed actor) and the baking builder. `Pragma.Dots.Actors.Editor` (`Editor`): the actor inspectors and the key field drawer |
 | `Assets/PragmaDOTS/Core/Editor` | `Pragma.Dots.Editor`: *Project Settings > Pragma > DOTS* (module defines) |
@@ -54,8 +54,12 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   entity, a player build does neither). Any change to it changes every hash and invalidates the checksums stored in
   replays.
 - **Math is part of the protocol.** `FixedPoint` and `FixedMath` are integer-only and bit-identical in Mono, IL2CPP and Burst.
-  Changing a result (rounding, series, constants) changes `FixedPointTests.GOLDEN_HASH`, breaks old replays and
-  desyncs mixed builds; do it only on purpose and record it in the CHANGELOG.
+  Changing a result (rounding, series, constants) changes `FixedPointTests.GOLDEN_HASH` (`TypesGoldenTests.GOLDEN_HASH`
+  for matrices, shapes, curves, hashes and checked products), breaks old replays and desyncs mixed builds; do it only
+  on purpose and record it in the CHANGELOG. The JSON of the types is pinned too (`JsonTests`): every serialized field
+  carries `[DataMember]`. Package code must not overflow on purpose: after touching the operators, run the suites once
+  with `PRAGMA_DOTS_CHECKED_MATH` defined (an `Assets/csc.rsp` with `-define:PRAGMA_DOTS_CHECKED_MATH` in a copy).
+  Yes-or-no geometry compares 128-bit products (`CompareProducts`, `CompareLengthSquared`); keep new predicates on them.
 - **Wire format.** Any change to a message bumps `LockstepProtocol.VERSION`; the replay format has its own
   `FORMAT_VERSION`. `LockstepSimulation.DefaultSimulationHash` covers the protocol version and the simulation system
   list, which is what `ValidateSimulationHash` compares.
@@ -149,7 +153,9 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
 
 - The EditMode suites: `Assets/Tests/Core/Editor` (math, utilities and actors) and `Assets/Tests/Modules/<Module>/Editor`
   (each module; the vision suite also needs navigation, its session moves the sources with agents). They
-  cover math accuracy and Burst equality, golden results, serialization, inspector limits, actors (actor keys in the inspector, inheritance, mergeable parts, the catalog and its
+  cover math accuracy and Burst equality, golden results, serialization and JSON, overflow checks, matrices and
+  their inverses, the XZ shapes (predicates against `BigInteger`, measurements against `double`), curves against
+  `AnimationCurve` and their drawer, state hashes, inspector limits and angles, actors (actor keys in the inspector, inheritance, mergeable parts, the catalog and its
   registry, the registry query of a system, placed actors and overrides, the module parts, a session spawning by key and tag),
   checksums, simulation rules, the spatial index (queries against a brute-force search), navigation (pathfinder, Burst equality, obstacles, agents, keeping agents apart, ground heights and steep cells, a session over a hill, footprint geometry, places around footprints, the grid view, reaching points), vision (stamping, bodies seen by their edge, revealing, one
   plane per slot, a session, the fog texture), stats (formula,
@@ -160,7 +166,8 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   GameObject views (component and buffer parts, prefabs by key), offline mode and a real Netcode server with two clients (including a command larger than the
   reliable window and send requests hidden from the Hierarchy window).
 - The suites reach internals through `InternalsVisibleTo` in `Modules/Lockstep/Runtime/AssemblyInfo.cs` (and
-  `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Actors/Editor/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its
+  `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Actors/Editor/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`,
+  `Core/Mathematics/Runtime/AssemblyInfo.cs`, `Core/Mathematics/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its
   own `AssemblyInfo.cs`. A new test assembly needs its entries there.
 - Every test assembly that declares systems has `[assembly: DisableAutoCreation]` in its `AssemblyInfo.cs`: test
   systems enter simulations only through `LockstepSimulationOptions.AdditionalSystems`. In the lockstep `Support`,

@@ -1,3 +1,4 @@
+using System.Runtime.Serialization;
 using Unity.Mathematics;
 
 namespace Pragma.Dots.Mathematics
@@ -11,15 +12,16 @@ namespace Pragma.Dots.Mathematics
     /// cell size wide; cells are numbered row by row along X. Positions map to cells with integer math on raw fixed-point
     /// values, so every client puts a position into the same cell.
     /// </remarks>
+    [DataContract]
     public readonly struct FixedGrid
     {
         /// <summary>World X and Z of the outer corner of cell (0, 0).</summary>
-        public readonly FixedVector2 origin;
-        public readonly FixedPoint cellSize;
+        [DataMember] public readonly FixedVector2 origin;
+        [DataMember] public readonly FixedPoint cellSize;
         /// <summary>Number of cells along world X.</summary>
-        public readonly int width;
+        [DataMember] public readonly int width;
         /// <summary>Number of cells along world Z.</summary>
-        public readonly int height;
+        [DataMember] public readonly int height;
 
         public FixedGrid(FixedVector2 origin, FixedPoint cellSize, int width, int height)
         {

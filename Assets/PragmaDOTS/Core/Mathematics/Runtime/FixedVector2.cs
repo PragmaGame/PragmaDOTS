@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using Unity.Mathematics;
 
 namespace Pragma.Dots.Mathematics
@@ -9,10 +10,11 @@ namespace Pragma.Dots.Mathematics
     /// <summary>Deterministic 2D vector of <see cref="FixedPoint"/>.</summary>
     [Serializable]
     [DebuggerDisplay("{ToString()}")]
+    [DataContract]
     public struct FixedVector2 : IEquatable<FixedVector2>, IFormattable
     {
-        public FixedPoint x;
-        public FixedPoint y;
+        [DataMember] public FixedPoint x;
+        [DataMember] public FixedPoint y;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public FixedVector2(FixedPoint x, FixedPoint y)

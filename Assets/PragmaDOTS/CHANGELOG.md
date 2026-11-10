@@ -8,6 +8,30 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Matrices (`Pragma.Dots.Mathematics`): `FixedVector4`, `FixedMatrix3x3` and `FixedMatrix4x4`, stored by columns like
+  Unity's matrices: TRS and pose transforms, products, points and directions, determinants, general and affine
+  inverses (accurate to a step at any scale and translation), decomposition into translation, rotation and scale, and
+  `FixedQuaternion.FromMatrix`.
+- 2D geometry for the XZ plane: `FixedBounds2`, `FixedCircle`, `FixedSegment2`, `FixedRay2`, `FixedTriangle2`,
+  `FixedMath.Orientation` and `FixedMath.PolygonContains`. Containment, overlap, orientation and segment intersection
+  are exact for any coordinates; closest and intersection points are accurate to a step; ray and sweep tests return the
+  distance or fraction of the first hit.
+- `FixedCurve`, a deterministic `AnimationCurve`: cubic, linear and constant segments, clamp, loop and ping-pong wraps,
+  conversion from `AnimationCurve` key for key or by baking samples, Burst evaluation over a span of keys (a
+  `BlobArray` or a `NativeArray`), and a drawer that edits it with Unity's curve editor and keeps linear and constant
+  segments as they are.
+- Overflow checks: `FixedPoint.TryAdd`, `TrySubtract` and `TryMultiply` report an overflow and saturate instead of
+  wrapping, and the scripting define `PRAGMA_DOTS_CHECKED_MATH` makes the operators throw `OverflowException` where they
+  would wrap. Without it the checks are compiled out; with it the results are the same.
+- `FixedHash`, a 64-bit FNV-1a hash of raw values for comparing state outside a lockstep simulation (saves, a game
+  without lockstep, tests); serializable, so a recording can carry the hashes it saw.
+- `FixedRandom.CreateFromKey(seed, key, index)` and `FixedRandom.Key(name)`: a stream per system, so one system drawing
+  more numbers does not shift the others.
+- `[FixedDegrees]` (a radian `FixedPoint` edited in degrees, with an optional slider) and `[FixedDirection]` (a
+  `FixedVector2` direction edited as one angle, optionally as a heading on XZ); a drawer for `FixedVector4`.
+- The math types are `[DataContract]`s of their public fields: Newtonsoft.Json writes only the raw values
+  (`{"rawValue":-98304}`) with any settings and reads them back exactly, the readonly `FixedGrid` included.
+  Existing results do not change.
 - `FixedMinAttribute` and `FixedRangeAttribute` (`Pragma.Dots.Mathematics`): the limits of a `FixedPoint` field in the
   inspector, which keeps an edit within them; `[FixedRange]` draws a slider with a number field. Unity's `[Min]` and
   `[Range]` cannot do it: their drawers run before the type's drawer and break a fixed-point field. The limits are

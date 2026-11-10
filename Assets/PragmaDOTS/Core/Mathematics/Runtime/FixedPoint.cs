@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 
 namespace Pragma.Dots.Mathematics
 {
@@ -15,10 +16,13 @@ namespace Pragma.Dots.Mathematics
     /// 64-bit intermediate, so keep the magnitude of a product below about 2e9.</para>
     /// <para>Conversions from <c>float</c> and <c>double</c> are explicit on purpose: the conversion itself is
     /// deterministic, but the float it reads usually is not. Convert authoring data once, at bake time.</para>
+    /// <para>Overflow wraps silently, like <c>long</c>. Define <c>PRAGMA_DOTS_CHECKED_MATH</c> in development builds to
+    /// make the operators throw <see cref="OverflowException"/> instead; see <see cref="TryMultiply(FixedPoint,FixedPoint,out FixedPoint)"/>.</para>
     /// </remarks>
     [Serializable]
     [DebuggerDisplay("{ToString()}")]
-    public struct FixedPoint : IEquatable<FixedPoint>, IComparable<FixedPoint>, IComparable, IFormattable
+    [DataContract]
+    public partial struct FixedPoint : IEquatable<FixedPoint>, IComparable<FixedPoint>, IComparable, IFormattable
     {
         public const int FRACTIONAL_BITS = 16;
         public const long ONE_RAW = 1L << FRACTIONAL_BITS;
@@ -29,7 +33,7 @@ namespace Pragma.Dots.Mathematics
         public const long MIN_RAW = -long.MaxValue;
 
         /// <summary>The raw two's complement value; <see cref="ONE_RAW"/> is 1.0.</summary>
-        public long rawValue;
+        [DataMember] public long rawValue;
 
         public static FixedPoint Zero => default;
         public static FixedPoint One => FromRaw(ONE_RAW);
@@ -61,7 +65,11 @@ namespace Pragma.Dots.Mathematics
         public static implicit operator FixedPoint(int value) => FromRaw((long)value << FRACTIONAL_BITS);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static explicit operator FixedPoint(long value) => FromRaw(value << FRACTIONAL_BITS);
+        public static explicit operator FixedPoint(long value)
+        {
+            CheckFromLong(value);
+            return FromRaw(value << FRACTIONAL_BITS);
+        }
 
         public static explicit operator FixedPoint(float value) => FromDouble(value);
 
@@ -85,25 +93,49 @@ namespace Pragma.Dots.Mathematics
         public static FixedPoint operator +(FixedPoint value) => value;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator -(FixedPoint value) => FromRaw(-value.rawValue);
+        public static FixedPoint operator -(FixedPoint value)
+        {
+            CheckNegate(value.rawValue);
+            return FromRaw(-value.rawValue);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator +(FixedPoint a, FixedPoint b) => FromRaw(a.rawValue + b.rawValue);
+        public static FixedPoint operator +(FixedPoint a, FixedPoint b)
+        {
+            CheckAdd(a.rawValue, b.rawValue);
+            return FromRaw(a.rawValue + b.rawValue);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator -(FixedPoint a, FixedPoint b) => FromRaw(a.rawValue - b.rawValue);
+        public static FixedPoint operator -(FixedPoint a, FixedPoint b)
+        {
+            CheckSubtract(a.rawValue, b.rawValue);
+            return FromRaw(a.rawValue - b.rawValue);
+        }
 
         /// <summary>Product rounded to the nearest step (half up).</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator *(FixedPoint a, FixedPoint b) => FromRaw((a.rawValue * b.rawValue + HALF_RAW) >> FRACTIONAL_BITS);
+        public static FixedPoint operator *(FixedPoint a, FixedPoint b)
+        {
+            CheckMultiply(a.rawValue, b.rawValue);
+            return FromRaw((a.rawValue * b.rawValue + HALF_RAW) >> FRACTIONAL_BITS);
+        }
 
         /// <summary>Exact product with an integer.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator *(FixedPoint a, int b) => FromRaw(a.rawValue * b);
+        public static FixedPoint operator *(FixedPoint a, int b)
+        {
+            CheckMultiplyByInteger(a.rawValue, b);
+            return FromRaw(a.rawValue * b);
+        }
 
         /// <summary>Exact product with an integer.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator *(int a, FixedPoint b) => FromRaw(a * b.rawValue);
+        public static FixedPoint operator *(int a, FixedPoint b)
+        {
+            CheckMultiplyByInteger(b.rawValue, a);
+            return FromRaw(a * b.rawValue);
+        }
 
         /// <summary>Quotient truncated toward zero. Division by zero saturates instead of throwing.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -136,10 +168,18 @@ namespace Pragma.Dots.Mathematics
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator ++(FixedPoint value) => FromRaw(value.rawValue + ONE_RAW);
+        public static FixedPoint operator ++(FixedPoint value)
+        {
+            CheckAdd(value.rawValue, ONE_RAW);
+            return FromRaw(value.rawValue + ONE_RAW);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static FixedPoint operator --(FixedPoint value) => FromRaw(value.rawValue - ONE_RAW);
+        public static FixedPoint operator --(FixedPoint value)
+        {
+            CheckSubtract(value.rawValue, ONE_RAW);
+            return FromRaw(value.rawValue - ONE_RAW);
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(FixedPoint a, FixedPoint b) => a.rawValue == b.rawValue;

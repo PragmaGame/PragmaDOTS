@@ -46,10 +46,13 @@ Always compiled. It works in any Entities world, so a game without lockstep (sin
 ghosts) uses it alone.
 
 - **[Fixed-point math](#fixed-point-math)** (`Pragma.Dots.Mathematics`). `FixedPoint` (Q47.16), `FixedVector2`,
-  `FixedVector3`, `FixedQuaternion`, `FixedPose` and `FixedMath`, shaped after `Mathf`: `Sqrt`, trigonometry, `Exp`,
-  `Log` and `Pow` in integer math, bit-identical in Mono, IL2CPP and Burst. `FixedRandom`, a deterministic PCG32
-  generator, and `FixedGrid`. The inspector edits fixed-point fields as numbers, within the limits of `[FixedMin]` and `[FixedRange]`. No
-  Entities dependency.
+  `FixedVector3`, `FixedVector4`, `FixedQuaternion`, `FixedPose`, 3×3 and 4×4 matrices and `FixedMath`, shaped after
+  `Mathf`: `Sqrt`, trigonometry, `Exp`, `Log` and `Pow` in integer math, bit-identical in Mono, IL2CPP and Burst.
+  `FixedRandom`, a deterministic PCG32 generator with a stream per system; `FixedGrid`; shapes on the XZ plane
+  (bounds, circles, segments, rays, triangles, polygons) whose yes-or-no tests are exact; `FixedCurve`, an
+  `AnimationCurve` in fixed point; `FixedHash` of state; overflow checks for development builds. The inspector edits
+  fixed-point fields as numbers, within the limits of `[FixedMin]` and `[FixedRange]`, angles in degrees and curves in
+  Unity's curve editor. No Entities dependency.
 - **[Actors](#actors)** (`Pragma.Dots.Actors`). Units, buildings and map objects described in assets, without code:
   an `ActorDefinition` with a key, tags and parts (any component of the game, a path-finding agent, a view),
   inheriting from a parent. A catalog makes them the types a world spawns by key, maps place them with overrides, and
@@ -146,7 +149,7 @@ reference.
 
 | Assembly | Part | Contents | Reference it from |
 |---|---|---|---|
-| `Pragma.Dots.Mathematics` | core | `FixedPoint`, vectors, quaternion, pose, `FixedMath`, `FixedRandom`, `FixedGrid` | simulation and presentation code |
+| `Pragma.Dots.Mathematics` | core | `FixedPoint`, vectors, quaternion, pose, matrices, `FixedMath`, `FixedRandom`, `FixedGrid`, 2D shapes, `FixedCurve`, `FixedHash` | simulation and presentation code |
 | `Pragma.Dots.Utils` | core | `FixedDictionary4096Bytes`, `OptionalValue` | any code |
 | `Pragma.Dots.Utils.Physics` | core, with `com.unity.physics` | `CollisionMatrixToFilter` | presentation code |
 | `Pragma.Dots.Utils.Entities` | core | `Signals`, `SignalCleanupSystem`, `BufferDictionary`, `EntityManagerExtensions`, `EntityHierarchy` | simulation and presentation code |
@@ -188,11 +191,16 @@ does all of its math with it; anything else may use it where it wants exact, por
 | Type | Role | Float counterpart |
 |---|---|---|
 | `FixedPoint` | Scalar | `float` |
-| `FixedVector2`, `FixedVector3` | Vectors | `float2` / `Vector2`, `float3` / `Vector3` |
+| `FixedVector2`, `FixedVector3`, `FixedVector4` | Vectors | `float2` / `Vector2`, `float3` / `Vector3`, `float4` / `Vector4` |
 | `FixedQuaternion` | Rotation | `quaternion` / `Quaternion` |
 | `FixedPose` | Position and rotation | `Pose` |
+| `FixedMatrix3x3`, `FixedMatrix4x4` | Linear maps, transforms | `float3x3`, `float4x4` / `Matrix4x4` |
 | `FixedMath` | Functions and constants | `Mathf`, `math` |
 | `FixedRandom` | Random numbers | `Unity.Mathematics.Random` |
+| `FixedGrid` | Cells on the XZ plane | |
+| `FixedBounds2`, `FixedCircle`, `FixedSegment2`, `FixedRay2`, `FixedTriangle2` | Shapes on the XZ plane | `Rect`, `Physics2D` queries |
+| `FixedCurve` | Curves of keys | `AnimationCurve` |
+| `FixedHash` | Hash of state | |
 
 ### `FixedPoint`
 
@@ -214,7 +222,7 @@ does all of its math with it; anything else may use it where it wants exact, por
 
 | Operator | Semantics |
 |---|---|
-| `+`, `-` | Exact (wrap on overflow, like `long`) |
+| `+`, `-` | Exact (wrap on overflow, like `long`; see [overflow checks](#overflow-checks)) |
 | `a * b` | Rounded to the nearest step (half up) |
 | `a * 3`, `3 * a` | Exact product with an integer |
 | `a / b`, `a / 3` | Truncated toward zero; division by zero saturates instead of throwing |
@@ -232,6 +240,30 @@ public static class Rules
 }
 ```
 
+`ToString` formats through `double` and is for display only; never feed the text back into the simulation.
+
+### Overflow checks
+
+`+`, `-` and `*` wrap silently on overflow, like `long`. The dangerous one is `a * b`: its 64-bit intermediate
+overflows once the product passes about 2.1·10⁹, long before the range ends.
+
+- `FixedPoint.TryAdd`, `TrySubtract`, `TryMultiply(a, b)` and `TryMultiply(a, int)` return `false` on overflow and give
+  the saturated value (`MaxValue` or `MinValue`) instead of a wrapped one; on success the result is exactly what the
+  operator gives.
+- Define **`PRAGMA_DOTS_CHECKED_MATH`** (*Player Settings > Scripting Define Symbols*, or a build profile of
+  development builds) and the operators throw `OverflowException` instead of wrapping, conversions from `long` too.
+  Everything built on them is checked with them: vector arithmetic, `Dot`, `LengthSquared`, `Lerp`, the package's own
+  systems. Burst code throws as well, the way Burst throws any exception. Without the define the checks are removed
+  by the compiler and cost nothing; with it the results do not change, so builds with and without it play together.
+  Division and `MulDiv` saturate by design and never throw.
+
+```csharp
+if (!FixedPoint.TryMultiply(damage, multiplier, out var total))
+{
+    // total is MaxValue: clamp, log, or scale with FixedMath.MulDiv
+}
+```
+
 ### `FixedMath`
 
 | Group | Functions |
@@ -245,7 +277,10 @@ public static class Rules
 | Constants | `Pi`, `TwoPi`, `HalfPi`, `E`, `Ln2`, `Ln10`, `Sqrt2`, `Rad2Deg`, `Deg2Rad`, `Epsilon` |
 | `FixedVector2` | `Dot`, `Cross` (z of the 3D cross), `Length`, `LengthSquared`, `Distance`, `DistanceSquared`, `Normalize`, `NormalizeSafe`, `ClampLength`, `MoveTowards`, `Rotate`, `Perpendicular`, `Reflect`, `Direction(angle)`, `Angle(v)`, `Abs`, `Min`, `Max`, `Clamp`, `Lerp`, `Floor`, `Round` |
 | `FixedVector3` | `Dot`, `Cross`, `Length`, `LengthSquared`, `Distance`, `DistanceSquared`, `Normalize`, `NormalizeSafe`, `ClampLength`, `MoveTowards`, `Reflect`, `Project`, `ProjectOnPlane`, `Angle(a, b)`, `Abs`, `Min`, `Max`, `Clamp`, `Lerp`, `Floor`, `Round` |
+| `FixedVector4` | `Dot`, `Length`, `LengthSquared`, `Distance`, `Normalize`, `NormalizeSafe`, `Abs`, `Min`, `Max`, `Clamp`, `Lerp` |
 | `FixedQuaternion` | `Mul`, `Rotate`, `Conjugate`, `Inverse`, `Dot`, `Length`, `Normalize`, `NormalizeSafe`, `Nlerp`, `Slerp`, `Angle`, `RotateTowards`, `Forward`, `Up`, `Right` |
+| Matrices | `Mul`, `Transpose`, `Determinant`, `Inverse`, `TryInverse`, `InverseAffine`, `TryInverseAffine`, `TransformPoint`, `TransformDirection`, `TryDecompose` ([matrices](#matrices)) |
+| Geometry | `Orientation(a, b, c)`, `PolygonContains(vertices, point)` ([2D geometry](#2d-geometry)) |
 | Raw helpers | `MulShiftRound`, `DivideRaw`, `SqrtRounded` |
 
 Accuracy, checked against `double` by the tests: `Sqrt` within 1 step below about 2·10⁹ (above, it drops the 8 lowest
@@ -255,19 +290,56 @@ Everything is computed with integer series and range reduction, without lookup t
 everywhere. Out-of-domain inputs saturate instead of producing NaN: `Sqrt` of a negative is 0, `Log` of 0 is
 `FixedPoint.MinValue`.
 
-`LengthSquared` overflows for components above about 46 000; `Length` and `Distance` scale internally and do not.
+`LengthSquared` overflows for components above about 46 000 (23 000 for `FixedVector4`); `Length` and `Distance` scale
+internally and do not.
 
 ### Vectors and quaternions
 
 - `FixedVector2`, `FixedVector3`: fields `x`, `y`, `z`; component-wise `+ - * /`, scaling by `FixedPoint` and `int`,
   swizzles `Xy`, `Xz`, `Yz`, `Yx`, constants `Zero`, `One`, `Up`, `Down`, `Left`, `Right`, `Forward`, `Back`.
+- `FixedVector4`: fields `x`, `y`, `z`, `w`, the same operators, swizzles `Xyz`, `Xy`, an indexer; a column of
+  `FixedMatrix4x4` or a homogeneous point.
 - `FixedQuaternion`: fields `x`, `y`, `z`, `w` (laid out like `Unity.Mathematics.quaternion`), `Identity`, `Xyz`,
-  `AxisAngle`, `RotateX/Y/Z`, `Euler` (radians, Unity's order: z, then x, then y), `LookRotation`, `FromBasis`;
-  `q * v` rotates a vector, `a * b` applies `b` first.
+  `AxisAngle`, `RotateX/Y/Z`, `Euler` (radians, Unity's order: z, then x, then y), `LookRotation`, `FromBasis`,
+  `FromMatrix` (the rotation of a rotation-and-scale matrix); `q * v` rotates a vector, `a * b` applies `b` first.
 - `FixedPose`: fields `position`, `rotation`, `Identity`, `Forward`, `Up`, `Right`; the placement of actors.
-- Conversions to and from `float2`, `float3`, `quaternion`, `Vector2`, `Vector3` and `Quaternion` are explicit.
-  `int2` and `int3` convert implicitly into the vectors (not back: use `FloorToInt` per component or
-  `FixedGrid.WorldToCell`).
+- Conversions to and from `float2`, `float3`, `float4`, `quaternion`, `Vector2`, `Vector3`, `Vector4` and `Quaternion`
+  are explicit. `int2`, `int3` and `int4` convert implicitly into the vectors (not back: use `FloorToInt` per component
+  or `FixedGrid.WorldToCell`).
+
+### Matrices
+
+`FixedMatrix3x3` (columns `c0 c1 c2`) and `FixedMatrix4x4` (columns `c0 c1 c2 c3`) are stored by columns, like
+`Unity.Mathematics.float3x3` / `float4x4` and `UnityEngine.Matrix4x4`, and convert to and from them explicitly.
+Vectors are columns: `m * v` transforms `v`, and `a * b` applies `b` first, so `parent * child` puts the child into
+the parent's space. The constructor with nine or sixteen elements takes them row by row, as written on paper.
+
+```csharp
+var local = FixedMatrix4x4.TRS(offset, FixedQuaternion.RotateY(angle), FixedVector3.One);
+var world = FixedMatrix4x4.FromPose(unit.pose) * local;
+var muzzle = FixedMath.TransformPoint(world, FixedVector3.Zero);
+var aim = FixedMath.TransformDirection(world, FixedVector3.Forward);
+
+FixedMath.TryInverseAffine(world, out var toLocal);
+var targetInLocal = FixedMath.TransformPoint(toLocal, target);
+```
+
+| | `FixedMatrix3x3` | `FixedMatrix4x4` |
+|---|---|---|
+| Build | `Identity`, `Zero`, `FromRotation(q)`, `Scale(v)`, nine elements, three columns | `Identity`, `Zero`, `TRS(t, r, s)`, `FromPose`, `Translate`, `Rotate`, `Scale`, `(linear, translation)`, sixteen elements |
+| Parts | columns, `this[i]` | columns, `this[i]`, `Translation`, `Linear` (the 3×3 rotation and scale) |
+| Apply | `m * v`, `FixedMath.Mul(m, v)` | `TransformPoint`, `TransformDirection`, `m * FixedVector4` |
+| Combine | `a * b`, `+`, `-`, `* FixedPoint` | `a * b`, `+`, `-`, `* FixedPoint` |
+| Invert | `Transpose` (a rotation's inverse), `TryInverse`, `Inverse` | `TryInverseAffine`, `InverseAffine`, `TryInverse`, `Inverse` (any matrix), `Transpose` |
+| Other | `Determinant`, `FixedQuaternion.FromMatrix(m)` | `Determinant`, `TryDecompose(m, out t, out r, out s)` |
+
+An inverse of a singular matrix (a zero scale) is a zero matrix, and the `Try` forms return `false`. Every element of
+a 3×3 or an affine inverse is accurate to a step at any scale and translation: the cofactors are taken on columns
+shifted up to a length of 128–256, which keeps the bits of a small scale (the determinant of a 0.02 scale is below a
+step), and each element is one 128-bit division. Columns longer than 256 multiply, so three of about 1300 overflow.
+`TryInverse` of a 4×4 that is not affine, such as a projection, is accurate to about 10⁻⁵ of each element and takes
+elements up to about 100. An inverse divides 64 bits one at a time: compute it when the transform changes, not per
+point. `TryDecompose` returns a mirror as a negative x scale at any scale and cannot represent shear.
 
 ### `FixedRandom`
 
@@ -276,6 +348,7 @@ PCG32 (XSH-RR) with 128 bits of state, seeded through SplitMix64.
 | Method | Result |
 |---|---|
 | `new FixedRandom(seed)`, `FixedRandom.CreateFromIndex(seed, index)` | A generator; different indices give independent streams |
+| `FixedRandom.CreateFromKey(seed, key, index)`, `FixedRandom.Key(name)` | A stream per system and index; `Key` hashes a name the same way everywhere |
 | `NextUInt()`, `NextUInt(max)`, `NextUInt(min, max)` | Unbiased integers |
 | `NextInt(max)`, `NextInt(min, max)`, `NextBool()` | |
 | `NextChance(probability)` | `true` with the given `FixedPoint` probability |
@@ -283,10 +356,151 @@ PCG32 (XSH-RR) with 128 bits of state, seeded through SplitMix64.
 | `NextVector2(min, max)`, `NextVector3(min, max)` | Uniform vectors |
 | `NextAngle()`, `NextDirection2()`, `NextDirection3()`, `NextInsideUnitCircle()`, `NextRotation()` | Geometry helpers |
 
+The generator is a struct: keep it in the state it drives and draw through a reference, or write it back after use;
+a copy does not advance the stored sequence.
+
+Give a system a stream of its own, so that one drawing more numbers (a new loot roll) does not shift every other
+system's numbers and break old replays. `Key` hashes the name's UTF-16 code units with `FixedHash`, unlike
+`string.GetHashCode`, which differs between runs:
+
+```csharp
+private static readonly ulong LootKey = FixedRandom.Key("loot");
+
+var loot = FixedRandom.CreateFromKey(sessionSeed, LootKey, lockstepEntityId.value);
+```
+
+### `FixedGrid`
+
+A rectangle of square cells on the XZ plane: `origin` (world X and Z of the outer corner of cell (0, 0)), `cellSize`,
+`width` (cells along X) and `height` (cells along Z). The grids of navigation and vision keep these four values.
+
+| Member | Result |
+|---|---|
+| `WorldToCell(position)` | The cell that holds a world X and Z; it may lie outside the grid |
+| `GetCellMin(cell)`, `GetCellCenter(cell)` | World X and Z of the cell's corner or centre |
+| `Contains(cell)`, `ClampToGrid(cell)` | Whether a cell is inside, the nearest cell inside |
+| `GetIndex(cell)`, `GetCell(index)`, `CellCount` | Cells numbered row by row along X |
+| `IsValid` | Positive size and cell size; an invalid grid maps every position to cell zero |
+
+Positions map to cells with integer math on raw values, so every client puts a position into the same cell.
+
+### 2D geometry
+
+Shapes of `FixedVector2` for gameplay on the ground: pass world X and Z (`position.Xz`). Edges belong to the shapes, so
+a point on an edge is inside and shapes that touch overlap.
+
+| Type | Fields | Members |
+|---|---|---|
+| `FixedBounds2` | `min`, `max` | `FromCenterSize`, `FromPoints`, `Center`, `Size`, `Extents`, `Contains(point / bounds)`, `Overlaps(bounds / circle)`, `ClosestPoint`, `Encapsulate`, `Expand`, `IsValid` |
+| `FixedCircle` | `center`, `radius` | `Contains`, `Overlaps(circle / bounds)`, `ClosestPoint`, `Bounds`, `TrySweep(movement, target, out fraction)` |
+| `FixedSegment2` | `start`, `end` | `ClosestPoint`, `ClosestParameter`, `Distance(point / segment)`, `Intersects` / `TryIntersect(segment, out point)`, `Intersects` / `TryIntersect(circle, out fraction)`, `PointAt`, `Length`, `Bounds` |
+| `FixedRay2` | `origin`, `direction` (normalized by the constructor) | `TryIntersect(circle / bounds / segment, out distance)`, `GetPoint(distance)` |
+| `FixedTriangle2` | `a`, `b`, `c` | `Contains`, `SignedArea`, `Area`, `Centroid`, `Bounds` |
+| `FixedMath` | | `Orientation(a, b, c)` (1 left, -1 right, 0 on the line), `PolygonContains(vertices, point)` |
+
+```csharp
+// A projectile's path within a tick against a unit's footprint.
+var path = new FixedSegment2(shot.position.Xz, shot.position.Xz + shot.velocity.Xz * deltaTime);
+if (path.TryIntersect(new FixedCircle(unit.position.Xz, unit.radius), out var fraction))
+{
+    var hitPoint = path.PointAt(fraction);
+}
+
+// A capsule (segment + radius) against a circle: compare the distance with the radii.
+var touches = sweep.Distance(target.center) <= sweepRadius + target.radius;
+
+// Line of sight.
+var sight = new FixedRay2(eye.Xz, target.Xz - eye.Xz);
+var blocked = sight.TryIntersect(wall, out var distance) && distance < FixedMath.Distance(eye.Xz, target.Xz);
+```
+
+Exact for any coordinates: whether a point is in a circle, a triangle or a polygon, whether circles overlap, which
+side of a line a point is on, and whether segments intersect. These compare 128-bit products, so they are never wrong
+by a step and never overflow, whatever the size of the map. Points and distances are computed on scaled raw values, so
+they do not overflow either: a closest point or an intersection point is accurate to a step; a distance along a ray
+to about 2·10⁻⁵ of it (a unit direction has no more bits), more coarsely for a ray that nearly grazes a circle. Circles
+in sweeps and ray tests take radii up to about 46 000. `LockstepSpatialIndex` finds what is near; these decide what
+is hit.
+
+### `FixedCurve`
+
+A curve of `FixedCurveKey`s (`time`, `value`, `inTangent`, `outTangent` as slopes, and the `interpolation` to the next
+key: `Cubic`, `Linear` or `Constant`), evaluated the way `AnimationCurve` is, with `Clamp`, `Loop` or `PingPong`
+(`FixedCurveWrap`) before the first key and after the last. A serialized `FixedCurve` field, in an actor part too, is
+edited with Unity's curve editor; the asset keeps the fixed-point keys, so every client evaluates the same numbers.
+
+```csharp
+[SerializeField] private FixedCurve _damageByDistance = FixedCurve.Linear(0, 100, 20, 30);
+
+var damage = _damageByDistance.Evaluate(FixedMath.Distance(attacker.Xz, target.Xz));
+```
+
+| Member | |
+|---|---|
+| `new FixedCurve(keys)`, `new FixedCurve(preWrap, postWrap, keys)` | times must strictly increase |
+| `FixedCurve.Constant(v)`, `Linear(t0, v0, t1, v1)`, `EaseInOut(t0, v0, t1, v1)` | like `AnimationCurve`'s |
+| `Evaluate(time)` | an empty curve is 0, one key is its value |
+| `FixedCurve.Evaluate(ReadOnlySpan<FixedCurveKey> keys, preWrap, postWrap, time)` | for Burst and components: keys in a buffer, a `NativeArray` (`AsReadOnlySpan()`) or a `BlobArray` (`AsSpan()`) |
+| `FixedCurve.FromAnimationCurve(curve)`, `TryFromAnimationCurve` | key for key, rounded to the step; a step stays a step; weighted keys are refused |
+| `FixedCurve.Bake(curve, samples)` | linear samples of any curve, weighted ones included; at most one per step of time |
+| `ToAnimationCurve()` | for drawing and the inspector |
+| `Keys`, `KeyCount`, `PreWrap`, `PostWrap` | |
+
+`FixedCurve` is a class, so components do not hold it: an actor part that has one writes its keys into a buffer when
+it builds, and systems evaluate them through the span overload.
+
+```csharp
+public struct DamageFalloffKey : IBufferElementData
+{
+    public FixedCurveKey key;
+}
+
+// The part's Build:
+var keys = builder.AddBuffer<DamageFalloffKey>();
+foreach (var key in _damageByDistance.Keys)
+{
+    keys.Add(new DamageFalloffKey { key = key });
+}
+
+// A system, Burst included:
+var span = falloff.Reinterpret<FixedCurveKey>().AsNativeArray().AsReadOnlySpan();
+var damage = FixedCurve.Evaluate(span, FixedCurveWrap.Clamp, FixedCurveWrap.Clamp, distance);
+```
+
+A converted curve matches `AnimationCurve.Evaluate` to about 0.2 %. Convert authoring curves once (the field does it
+on edit); never evaluate an `AnimationCurve` in the simulation. In the curve editor, `Linear` and `Constant` segments
+have Unity's Linear and Constant tangent modes, so they keep their shape when a key moves, and a segment with Linear
+modes on both sides is stored as `Linear`; any other segment is stored as `Cubic` through its tangents. The inspector
+stores a curve with weighted keys as 64 linear samples.
+
+### State hashes
+
+`FixedHash` is a 64-bit FNV-1a hash of raw values. Code that hashes the same state in the same order gets the same
+value everywhere, so comparing it finds a divergence at the step it happens. A lockstep simulation needs none: its
+checksum covers every component of the world. `FixedHash` is for state outside it, such as a game without lockstep,
+a save file or a test that compares two runs.
+
+```csharp
+var hash = FixedHash.Empty;
+foreach (var unit in units)       // a deterministic order: by id, never by dictionary iteration
+{
+    hash.Add(unit.id);
+    hash.Add(unit.position);
+    hash.Add(unit.hp);
+    hash.Add(unit.random);
+}
+ulong value = hash.value;
+```
+
+`Add` takes `long`, `ulong`, `int`, `uint`, `bool`, `FixedPoint`, the vectors, `FixedQuaternion`, `FixedPose`, the
+matrices and `FixedRandom` (its state). It is a mutable struct: add to a local, and start from `FixedHash.Empty`. It
+serializes as `{"value":…}`, so a recording can carry the hashes it saw and check them while it plays.
+
 ### Inspector
 
-`FixedPoint` fields are edited as decimal numbers, `FixedVector2`/`FixedVector3` as vectors and `FixedQuaternion` as Euler angles in degrees.
-The editor converts once and stores raw values.
+`FixedPoint` fields are edited as decimal numbers, `FixedVector2`/`FixedVector3`/`FixedVector4` as vectors,
+`FixedQuaternion` as Euler angles in degrees and `FixedCurve` with Unity's curve editor. The editor converts once and
+stores raw values.
 
 Unity's `[Min]` and `[Range]` do not work on fixed-point fields: their drawers come before the drawer of the field's
 type and handle only float and int (and, for `[Min]`, vector) fields. `[FixedMin(min)]` and `[FixedRange(min, max)]`
@@ -298,6 +512,33 @@ element, and `Clamp` applies them in code.
 [SerializeField, FixedMin(0)] private FixedPoint _speed = 2;
 [SerializeField, FixedRange(0, 1)] private FixedPoint _chance = FixedPoint.Half;
 ```
+
+Angles stay in radians in the field and in code; the inspector can show them in degrees:
+
+- `[FixedDegrees]` on a `FixedPoint` edits radians as degrees; `[FixedDegrees(min, max)]` draws a slider in degrees.
+- `[FixedDirection]` on a `FixedVector2` edits a direction as one angle in degrees, counter-clockwise from +X, and
+  stores the unit vector. `[FixedDirection(heading: true)]` treats the vector as world X and Z and the angle as the
+  heading from +Z toward +X, the angle `FixedQuaternion.RotateY` takes.
+
+```csharp
+[SerializeField, FixedDegrees(0, 180)] private FixedPoint _coneAngle = FixedMath.HalfPi;
+[SerializeField, FixedDirection(heading: true)] private FixedVector2 _spawnFacing = new FixedVector2(0, 1);
+```
+
+### Serialization
+
+Every type is `[Serializable]` (except the readonly `FixedGrid`) and a `[DataContract]` of its public fields, so Unity,
+`JsonUtility`, Newtonsoft.Json and `DataContractSerializer` store exactly the raw values and read them back bit for
+bit, with any serializer settings and without a converter:
+
+| Value | JSON |
+|---|---|
+| `FixedPoint.FromFraction(-3, 2)` | `{"rawValue":-98304}` |
+| `new FixedVector2(1, -FixedPoint.Half)` | `{"x":{"rawValue":65536},"y":{"rawValue":-32768}}` |
+| `new FixedGrid(FixedVector2.Zero, 1, 2, 3)` | `{"origin":{…},"cellSize":{"rawValue":65536},"width":2,"height":3}` |
+
+Saves and configs keep the types as they are; the format is pinned by the tests. For analytics send `(float)x`: a
+`FixedPoint` parameter arrives as an object.
 
 ## Actors
 
@@ -1054,7 +1295,10 @@ var direction = random.NextDirection2();
 Use `ref`: the generator is a struct, and a copy would not advance the stored state. Draw numbers in a deterministic
 order (main thread, query order). For per-entity streams, store a `FixedRandom` in a component, created with
 `FixedRandom.CreateFromIndex(sessionSeed, lockstepEntityId.value)` once the id is assigned (`IsAssigned`, from the
-tick after creation): on the creation tick every id is still 0, so all streams would start out identical.
+tick after creation): on the creation tick every id is still 0, so all streams would start out identical. A system
+that should not shift the numbers of the others when it draws more or fewer of them (loot, an AI's choices) takes a
+stream of its own: `FixedRandom.CreateFromKey(sessionSeed, FixedRandom.Key("loot"), lockstepEntityId.value)`, with the
+key kept in a static field.
 
 #### Time
 
@@ -1133,7 +1377,8 @@ The package makes the plumbing deterministic; the gameplay code has to keep it t
 | `UnityEngine.Random`, `System.Random` | `LockstepRandom`, an `FixedRandom` in a component |
 | `Entity` in commands, sorting, seeds | `LockstepEntityId` |
 | `LocalTransform` in the simulation | `LockstepTransform` |
-| Unity Physics queries for gameplay | Your own `FixedPoint` collision code; `LockstepSpatialIndex` finds what is near |
+| Unity Physics queries for gameplay | `LockstepSpatialIndex` finds what is near; `FixedCircle`, `FixedSegment2`, `FixedRay2` and the other [shapes](#2d-geometry) decide what is hit |
+| `AnimationCurve.Evaluate` | `FixedCurve` keys copied into a buffer, evaluated with `FixedCurve.Evaluate` |
 | `Dictionary` or `NativeHashMap` iteration | Iterate a query or a sorted buffer |
 | `if (slot == localSlot)` in a system | Nothing: decide locally in the presentation |
 
@@ -2363,8 +2608,8 @@ public partial struct SpellActiveState : ISystem
 
 | Path | Contents |
 |---|---|
-| `Core/Mathematics/Runtime` | `Pragma.Dots.Mathematics`: `FixedPoint`, `FixedVector2`, `FixedVector3`, `FixedQuaternion`, `FixedPose`, `FixedMath`, `FixedRandom`, `FixedGrid` |
-| `Core/Mathematics/Editor` | `Pragma.Dots.Mathematics.Editor`: fixed-point drawers |
+| `Core/Mathematics/Runtime` | `Pragma.Dots.Mathematics`: `FixedPoint` (with its overflow checks), `FixedVector2`, `FixedVector3`, `FixedVector4`, `FixedQuaternion`, `FixedPose`, `FixedMatrix3x3`, `FixedMatrix4x4`, `FixedMath` (scalar, vector, transcendental, matrix and geometry parts), `FixedRandom`, `FixedGrid`, `FixedBounds2`, `FixedCircle`, `FixedSegment2`, `FixedRay2`, `FixedTriangle2`, `FixedCurve` and its keys, `FixedHash`, the inspector attributes |
+| `Core/Mathematics/Editor` | `Pragma.Dots.Mathematics.Editor`: fixed-point, vector, angle, direction and curve drawers |
 | `Core/Actors/Runtime` | `Pragma.Dots.Actors`: `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility`; the actor components in `Components` |
 | `Core/Actors/Authoring` | `Pragma.Dots.Actors.Authoring`: `ActorCatalogAuthoring`, the actor bakers and the baking builder |
 | `Core/Actors/Editor` | `Pragma.Dots.Actors.Editor`: the actor inspectors |
@@ -2447,6 +2692,7 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 | A capped resource stays empty or ignores its cap | The entity has no attribute of the `cap` type, so the resource is uncapped; list the cap attribute in the same *Stats* part (it warns) |
 | `LockstepStatSystem` recalculates every tick | A system writes the stats every tick, also by only taking `DynamicBuffer<LockstepStat>` in a `SystemAPI.Query`, which is read-write: read them with `in` in an `IJobEntity` or with a read-only `BufferLookup` |
 | Connections drop when the window loses focus | `Application.runInBackground` is off |
+| A product of two `FixedPoint` values comes out as a huge or negative number | The 64-bit intermediate of `a * b` overflowed (magnitudes above about 2·10⁹): use `FixedMath.MulDiv` or `TryMultiply`, and find the place with `PRAGMA_DOTS_CHECKED_MATH`, which makes the operators throw |
 | A "Burst error" in the console | Burst falls back to managed code silently in some cases; fix the reported construct (for example a managed array in a Burst method) |
 | A state machine stays in `NONE` | No subclass of `StateMachineSystemGroup<T>` updates its component, or the subclass is not in a group of this world (in a lockstep simulation: `LockstepSimulationSystemGroup`) |
 | "The state machine component ... must have one field" | The machine component holds data beside its `StateMachine`: move the data to a component of its own |
@@ -2458,7 +2704,8 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 - **Prediction and rollback.** This is strict lockstep. The isolated world and the state hash are a base for a
   predicted world later.
 - **Late join from a snapshot.** Joining re-simulates the match from tick 0, which grows with the match length.
-- **Deterministic physics.** Use `FixedPoint` math for collisions. Unity Physics is not deterministic across platforms.
+- **Deterministic physics.** Use `FixedPoint` math and the [2D shapes](#2d-geometry) for collisions. Unity Physics is
+  not deterministic across platforms.
 - **Richer navigation.** One grid per world; no cell costs of terrain kinds, no queues in front of passages, and paths
   that go around walking agents only locally.
 - **Line of sight.** Vision is a radius on the XZ plane: neither the ground nor obstacles block it.

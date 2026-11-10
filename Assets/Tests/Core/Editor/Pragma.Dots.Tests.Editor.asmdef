@@ -5,6 +5,7 @@
         "Pragma.Dots.Actors",
         "Pragma.Dots.Actors.Editor",
         "Pragma.Dots.Mathematics",
+        "Pragma.Dots.Mathematics.Editor",
         "Pragma.Dots.Utils",
         "Pragma.Dots.Utils.Editor",
         "Pragma.Dots.Utils.Entities",
@@ -25,7 +26,8 @@
     "allowUnsafeCode": true,
     "overrideReferences": true,
     "precompiledReferences": [
-        "nunit.framework.dll"
+        "nunit.framework.dll",
+        "Newtonsoft.Json.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

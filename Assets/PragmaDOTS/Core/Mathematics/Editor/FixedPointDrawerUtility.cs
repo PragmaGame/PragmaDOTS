@@ -27,6 +27,17 @@ namespace Pragma.Dots.Mathematics.Editor
         {
             var raw = property.FindPropertyRelative(nameof(FixedPoint.rawValue));
             EditorGUI.BeginProperty(position, label, property);
+            var value = SliderField(position, label, raw.longValue / (double)FixedPoint.ONE_RAW, (double)min, (double)max, out var changed);
+            if (changed)
+            {
+                raw.longValue = FixedMath.Clamp((FixedPoint)value, min, max).rawValue;
+            }
+            EditorGUI.EndProperty();
+        }
+
+        /// <summary>A double as a slider with a number field, laid out like Unity's slider; the edited value, unclamped.</summary>
+        public static double SliderField(Rect position, GUIContent label, double value, double min, double max, out bool changed)
+        {
             var fields = EditorGUI.PrefixLabel(position, GUIUtility.GetControlID(FocusType.Passive), label);
             var indent = EditorGUI.indentLevel;
             EditorGUI.indentLevel = 0;
@@ -34,8 +45,7 @@ namespace Pragma.Dots.Mathematics.Editor
             var numberWidth = EditorGUIUtility.fieldWidth;
             var bar = new Rect(fields.x, fields.y, Mathf.Max(0f, fields.width - numberWidth - 5f), fields.height);
             var number = new Rect(fields.xMax - numberWidth, fields.y, numberWidth, fields.height);
-            var value = raw.longValue / (double)FixedPoint.ONE_RAW;
-            var changed = false;
+            changed = false;
 
             // Separate checks: the slider returns a float even when it is not dragged, and that float must not replace
             // the exact value the number field shows.
@@ -55,25 +65,37 @@ namespace Pragma.Dots.Mathematics.Editor
                 changed = true;
             }
 
-            if (changed)
-            {
-                raw.longValue = FixedMath.Clamp((FixedPoint)value, min, max).rawValue;
-            }
-
             EditorGUI.indentLevel = indent;
-            EditorGUI.EndProperty();
+            return value;
         }
 
         /// <summary>Whether <paramref name="property"/> is a <see cref="FixedPoint"/>; if not, draws why the attribute does not apply.</summary>
         public static bool CheckFixedPoint(Rect position, SerializedProperty property, GUIContent label, string attribute)
         {
-            if (property.type == nameof(FixedPoint))
+            return CheckType(position, property, label, attribute, nameof(FixedPoint));
+        }
+
+        /// <summary>Whether <paramref name="property"/> is of the type named; if not, draws why the attribute does not apply.</summary>
+        public static bool CheckType(Rect position, SerializedProperty property, GUIContent label, string attribute, string type)
+        {
+            if (property.type == type)
             {
                 return true;
             }
 
-            EditorGUI.LabelField(position, label.text, $"Use {attribute} with FixedPoint.");
+            EditorGUI.LabelField(position, label.text, $"Use {attribute} with {type}.");
             return false;
+        }
+
+        /// <summary>The <see cref="FixedPoint"/> stored in a property.</summary>
+        public static FixedPoint GetValue(SerializedProperty property)
+        {
+            return FixedPoint.FromRaw(property.FindPropertyRelative(nameof(FixedPoint.rawValue)).longValue);
+        }
+
+        public static void SetValue(SerializedProperty property, FixedPoint value)
+        {
+            property.FindPropertyRelative(nameof(FixedPoint.rawValue)).longValue = value.rawValue;
         }
 
         public static void DrawComponents(Rect position, SerializedProperty property, GUIContent label, params string[] names)

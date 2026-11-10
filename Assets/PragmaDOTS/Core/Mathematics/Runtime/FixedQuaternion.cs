@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using Unity.Mathematics;
 
 namespace Pragma.Dots.Mathematics
@@ -9,12 +10,13 @@ namespace Pragma.Dots.Mathematics
     /// <summary>Deterministic rotation quaternion of <see cref="FixedPoint"/>, laid out like <c>Unity.Mathematics.quaternion</c>.</summary>
     [Serializable]
     [DebuggerDisplay("{ToString()}")]
+    [DataContract]
     public struct FixedQuaternion : IEquatable<FixedQuaternion>, IFormattable
     {
-        public FixedPoint x;
-        public FixedPoint y;
-        public FixedPoint z;
-        public FixedPoint w;
+        [DataMember] public FixedPoint x;
+        [DataMember] public FixedPoint y;
+        [DataMember] public FixedPoint z;
+        [DataMember] public FixedPoint w;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public FixedQuaternion(FixedPoint x, FixedPoint y, FixedPoint z, FixedPoint w)
@@ -115,6 +117,12 @@ namespace Pragma.Dots.Mathematics
                 q = new FixedQuaternion((m02 + m20) / s, (m12 + m21) / s, s / 4, (m10 - m01) / s);
             }
             return FixedMath.NormalizeSafe(q);
+        }
+
+        /// <summary>The rotation of a rotation-and-scale matrix: its columns are normalized first, so scale is dropped.</summary>
+        public static FixedQuaternion FromMatrix(FixedMatrix3x3 m)
+        {
+            return FromBasis(FixedMath.Normalize(m.c0), FixedMath.Normalize(m.c1), FixedMath.Normalize(m.c2));
         }
 
         public static explicit operator quaternion(FixedQuaternion value) => new quaternion((float)value.x, (float)value.y, (float)value.z, (float)value.w);

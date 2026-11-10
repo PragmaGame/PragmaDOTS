@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 
 namespace Pragma.Dots.Mathematics
 {
@@ -12,14 +13,15 @@ namespace Pragma.Dots.Mathematics
     /// generator left at <c>default</c> runs the default sequence from a zero state; seed it to get a stream of its own.
     /// </remarks>
     [Serializable]
+    [DataContract]
     public struct FixedRandom : IEquatable<FixedRandom>
     {
         private const ulong MULTIPLIER = 6364136223846793005UL;
         private const ulong DEFAULT_SEQUENCE = 0xDA3E39CB94B95BDBUL;
 
-        public ulong state;
+        [DataMember] public ulong state;
         // Odd; zero in a generator left at default, which then steps by the default sequence.
-        public ulong increment;
+        [DataMember] public ulong increment;
 
         /// <summary>Creates a generator. Different <paramref name="sequence"/> values give independent streams.</summary>
         public FixedRandom(ulong seed, ulong sequence = DEFAULT_SEQUENCE)
@@ -39,6 +41,37 @@ namespace Pragma.Dots.Mathematics
         public static FixedRandom CreateFromIndex(ulong seed, uint index)
         {
             return new FixedRandom(SplitMix64(seed ^ ((ulong)index * 0x9E3779B97F4A7C15UL)), index);
+        }
+
+        /// <summary>
+        /// A generator for one system and one index, independent of every other key:
+        /// <c>FixedRandom.CreateFromKey(sessionSeed, FixedRandom.Key("loot"), lockstepEntityId.value)</c>. A system that
+        /// draws from a stream of its own does not shift the numbers of the others when it draws more or fewer of them.
+        /// </summary>
+        /// <param name="key">The system's key, usually <see cref="Key(string)"/> of its name kept in a static field.</param>
+        public static FixedRandom CreateFromKey(ulong seed, ulong key, uint index = 0)
+        {
+            var stream = SplitMix64(key ^ ((ulong)index * 0x9E3779B97F4A7C15UL));
+            return new FixedRandom(SplitMix64(seed ^ stream), stream);
+        }
+
+        /// <summary>
+        /// A 64-bit key of a name (a <see cref="FixedHash"/> of its UTF-16 code units), the same on every platform and
+        /// run, unlike <c>string.GetHashCode</c>.
+        /// </summary>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+        public static ulong Key(string name)
+        {
+            if (name == null)
+            {
+                throw new ArgumentNullException(nameof(name));
+            }
+            var hash = FixedHash.Empty;
+            foreach (var c in name)
+            {
+                hash.Add((uint)c);
+            }
+            return hash.value;
         }
 
         /// <summary>Uniform 32-bit value.</summary>

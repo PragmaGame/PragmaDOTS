@@ -199,8 +199,18 @@ namespace Pragma.Dots.Mathematics
             {
                 return FixedPoint.FromRaw(negative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW);
             }
+            var quotient = DivideWide(hi, lo, divisor);
+            if (quotient > FixedPoint.MAX_RAW)
+            {
+                return FixedPoint.FromRaw(negative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW);
+            }
+            return FixedPoint.FromRaw(negative ? -(long)quotient : (long)quotient);
+        }
 
-            // Long division of the 128-bit product, one bit at a time; hi < divisor keeps the quotient within 64 bits.
+        // The 128-bit (hi, lo) divided by divisor, truncated: long division one bit at a time. hi < divisor keeps the
+        // quotient within 64 bits.
+        internal static ulong DivideWide(ulong hi, ulong lo, ulong divisor)
+        {
             var remainder = hi;
             var quotient = 0UL;
             for (var i = 63; i >= 0; i--)
@@ -214,15 +224,11 @@ namespace Pragma.Dots.Mathematics
                     quotient |= 1UL;
                 }
             }
-            if (quotient > FixedPoint.MAX_RAW)
-            {
-                return FixedPoint.FromRaw(negative ? FixedPoint.MIN_RAW : FixedPoint.MAX_RAW);
-            }
-            return FixedPoint.FromRaw(negative ? -(long)quotient : (long)quotient);
+            return quotient;
         }
 
         // The 128-bit product of two 64-bit values, as its high and low halves.
-        private static void Multiply(ulong a, ulong b, out ulong hi, out ulong lo)
+        internal static void Multiply(ulong a, ulong b, out ulong hi, out ulong lo)
         {
             var aLo = a & 0xFFFFFFFFUL;
             var aHi = a >> 32;

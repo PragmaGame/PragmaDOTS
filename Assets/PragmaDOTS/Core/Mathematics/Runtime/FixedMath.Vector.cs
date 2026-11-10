@@ -40,7 +40,7 @@ namespace Pragma.Dots.Mathematics
         public static FixedPoint LengthSquared(FixedVector2 v) => Dot(v, v);
 
         /// <summary>Length computed on raw values with automatic scaling, so it does not overflow.</summary>
-        public static FixedPoint Length(FixedVector2 v) => FixedPoint.FromRaw(LengthRaw(v.x.rawValue, v.y.rawValue, 0));
+        public static FixedPoint Length(FixedVector2 v) => FixedPoint.FromRaw(LengthRaw(v.x.rawValue, v.y.rawValue, 0, 0));
 
         public static FixedPoint Distance(FixedVector2 a, FixedVector2 b) => Length(b - a);
 
@@ -133,7 +133,7 @@ namespace Pragma.Dots.Mathematics
         public static FixedPoint LengthSquared(FixedVector3 v) => Dot(v, v);
 
         /// <summary>Length computed on raw values with automatic scaling, so it does not overflow.</summary>
-        public static FixedPoint Length(FixedVector3 v) => FixedPoint.FromRaw(LengthRaw(v.x.rawValue, v.y.rawValue, v.z.rawValue));
+        public static FixedPoint Length(FixedVector3 v) => FixedPoint.FromRaw(LengthRaw(v.x.rawValue, v.y.rawValue, v.z.rawValue, 0));
 
         public static FixedPoint Distance(FixedVector3 a, FixedVector3 b) => Length(b - a);
 
@@ -316,13 +316,14 @@ namespace Pragma.Dots.Mathematics
         /// </summary>
         public static FixedPoint Yaw(FixedQuaternion q) => Yaw(Forward(q));
 
-        // sqrt(x² + y² + z²) on raw values. Scaling keeps the squares below 2^62, so it never overflows.
-        private static long LengthRaw(long x, long y, long z)
+        // sqrt(x² + y² + z² + w²) on raw values. Scaling keeps the squares below 2^62, so it never overflows.
+        private static long LengthRaw(long x, long y, long z, long w)
         {
             var ax = UnsignedAbs(x);
             var ay = UnsignedAbs(y);
             var az = UnsignedAbs(z);
-            var largest = math.max(ax, math.max(ay, az));
+            var aw = UnsignedAbs(w);
+            var largest = math.max(math.max(ax, ay), math.max(az, aw));
             if (largest == 0)
             {
                 return 0;
@@ -335,8 +336,9 @@ namespace Pragma.Dots.Mathematics
                 ax >>= shift;
                 ay >>= shift;
                 az >>= shift;
+                aw >>= shift;
             }
-            var length = (long)SqrtRounded(ax * ax + ay * ay + az * az);
+            var length = (long)SqrtRounded(ax * ax + ay * ay + az * az + aw * aw);
             return shift == 0 ? length : length << shift;
         }
     }

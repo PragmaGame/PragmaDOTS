@@ -1,6 +1,6 @@
 ---
 name: pragma-lockstep-gameplay
-description: Write deterministic gameplay with the Lockstep module of Pragma DOTS (com.pragma.dots) and the core fixed-point math - simulation systems in LockstepSimulationSystemGroup, input structs and commands, players joining and leaving, spawning actors by key (ActorLookup), LockstepEntityId references, randomness, signals, the spatial index, FixedPoint, FixedMath and FixedRandom, the determinism rules, and presenting the simulation with interpolation. Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, UI - even if the user never says "deterministic" or "lockstep"; together with the skill of the module the code uses (pragma-dots-navigation, pragma-dots-vision, pragma-dots-stats, pragma-dots-views, pragma-dots-state-machines).
+description: Write deterministic gameplay with the Lockstep module of Pragma DOTS (com.pragma.dots) and the core fixed-point math - simulation systems in LockstepSimulationSystemGroup, input structs and commands, players joining and leaving, spawning actors by key (ActorLookup), LockstepEntityId references, randomness, signals, the spatial index, FixedPoint, FixedMath, FixedRandom, 2D shapes and FixedCurve, the determinism rules, and presenting the simulation with interpolation. Use it whenever you add or change anything that runs inside a lockstep simulation world or reads it for rendering - units, movement, combat, abilities, economy, AI, timers, randomness, input, UI - even if the user never says "deterministic" or "lockstep"; together with the skill of the module the code uses (pragma-dots-navigation, pragma-dots-vision, pragma-dots-stats, pragma-dots-views, pragma-dots-state-machines).
 ---
 
 # Gameplay with Pragma DOTS lockstep
@@ -14,7 +14,8 @@ Deeper reference:
 
 - `references/simulation-api.md` - every simulation-side type, singleton and helper of the lockstep module and the
   core utilities.
-- `references/fixed-point.md` - `FixedPoint` semantics, `FixedMath`, vectors, quaternions, `FixedRandom`, `FixedGrid`.
+- `references/fixed-point.md` - `FixedPoint` semantics and overflow checks, `FixedMath`, vectors, quaternions,
+  matrices, `FixedRandom` (streams per system), `FixedGrid`, shapes on the XZ plane, `FixedCurve`, `FixedHash`.
 - The package README: `Assets/PragmaDOTS/README.md` in the package repository, or
   `Library/PackageCache/com.pragma.dots@*/README.md` in a project that installed it.
 - The `pragma-dots-actors` skill for content: definitions, parts, the catalog, placed actors.
@@ -300,7 +301,8 @@ foreach (var (player, commands, commandData) in
 | `Entity` in commands, sort keys, seeds, hash keys | `LockstepEntityId.value` |
 | A `FixedList` of ids in a command payload, orders split into chunks | Command data: `LockstepCommand.Create(payload, data, dataBuffer)`, `GetData<T>` |
 | `LocalTransform` for gameplay | `LockstepTransform` |
-| Unity Physics queries for gameplay | Own `FixedPoint` collision code, `LockstepSpatialIndex` for what is near |
+| Unity Physics queries for gameplay | `FixedCircle`, `FixedSegment2`, `FixedRay2` and the other shapes for hits, `LockstepSpatialIndex` for what is near |
+| `AnimationCurve.Evaluate` | `FixedCurve` keys copied into a buffer by the part, `FixedCurve.Evaluate(keys, ...)` |
 | NavMesh, `NavMeshAgent` | `LockstepNavAgent` on the `LockstepNavGrid` (`Pragma.Dots.Navigation`) |
 | `static` counters, system fields with state | Singleton components on ordinary entities |
 | Iterating a hash map | Iterate a query or a buffer sorted by a deterministic key |
@@ -311,8 +313,9 @@ foreach (var (player, commands, commandData) in
   slot (`Entity.Null` when free). For your own per-slot data, fill a `NativeArray` of `info.maxPlayers` from a query
   and index it by slot.
 - **Cooldowns:** `int cooldownTicks`, decremented every tick; seconds become ticks with `seconds * time.tickRate`.
-- **Distance checks:** compare `FixedMath.DistanceSquared(a, b) < radius * radius` for small coordinates; `LengthSquared` overflows
-  above about 46 000 per component, use `FixedMath.Length`/`Distance` for large worlds.
+- **Distance checks:** `new FixedCircle(center, radius).Contains(point)` is exact at any coordinate;
+  `FixedMath.DistanceSquared(a, b) < radius * radius` works for small coordinates only (`LengthSquared` overflows
+  above about 46 000 per component), and `FixedMath.Length`/`Distance` scale internally.
 - **Nearest of many (targets, neighbours):** build a `LockstepSpatialIndex` from the positions of the tick once and
   query it (`Query(center, radius)`: the points in the cells around, in the same order everywhere); check the distance,
   widen the radius by the largest body, and break ties by the point's index.
@@ -320,6 +323,8 @@ foreach (var (player, commands, commandData) in
   a small struct and create them after the loop, or use the end-of-tick command buffer.
 - **Per-entity random streams:** `FixedRandom.CreateFromIndex(info.seed, lockstepEntityId.value)` stored in a component,
   created once `LockstepEntityId.IsAssigned` (the tick after creation; on the creation tick every id is still 0).
+  A system whose draws must not shift the others (loot, AI) uses `FixedRandom.CreateFromKey(info.seed,
+  FixedRandom.Key("loot"), lockstepEntityId.value)`, the key in a `static readonly` field.
 - **Events between systems (a unit died, a building finished):** signals of the core
   (`Pragma.Dots.Utils.Entities`): `commandBuffer.Publish(new UnitDied { ... })` through the end-of-tick buffer (also
   from jobs, with a sort key), read on the next tick with `SystemAPI.Query<RefRO<UnitDied>>().WithAll<SignalTag>()`;

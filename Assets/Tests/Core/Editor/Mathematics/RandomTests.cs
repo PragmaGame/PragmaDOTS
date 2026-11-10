@@ -25,6 +25,35 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void KeyedStreams_AreIndependentAndStable()
+        {
+            var loot = FixedRandom.Key("loot");
+            var combat = FixedRandom.Key("combat");
+
+            Assert.AreEqual(loot, FixedRandom.Key("loot"));
+            Assert.AreNotEqual(loot, combat);
+            Assert.AreEqual(FixedRandom.CreateFromKey(7, loot, 3).NextUInt(), FixedRandom.CreateFromKey(7, loot, 3).NextUInt());
+            Assert.AreNotEqual(FixedRandom.CreateFromKey(7, loot, 3).NextUInt(), FixedRandom.CreateFromKey(7, combat, 3).NextUInt());
+            Assert.AreNotEqual(FixedRandom.CreateFromKey(7, loot, 3).NextUInt(), FixedRandom.CreateFromKey(7, loot, 4).NextUInt());
+            Assert.AreNotEqual(FixedRandom.CreateFromKey(7, loot).NextUInt(), FixedRandom.CreateFromKey(8, loot).NextUInt());
+            Assert.Throws<System.ArgumentNullException>(() => FixedRandom.Key(null));
+        }
+
+        // A name's key is stored in replays and saves through the streams it seeds: it must never change.
+        [Test]
+        public void Key_IsAFixedHashOfTheCodeUnits()
+        {
+            var hash = FixedHash.Empty;
+            hash.Add((uint)'l');
+            hash.Add((uint)'o');
+            hash.Add((uint)'o');
+            hash.Add((uint)'t');
+
+            Assert.AreEqual(hash.value, FixedRandom.Key("loot"));
+            Assert.AreEqual(FixedHash.Empty.value, FixedRandom.Key(string.Empty));
+        }
+
+        [Test]
         public void DefaultGenerator_IsNotStuckAtZero()
         {
             var random = default(FixedRandom);

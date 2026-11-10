@@ -41,8 +41,8 @@ ECV, the view layer of the author's own earlier RTS, adapted to lockstep.
   confirmed frame; systems join it through `LockstepSimulationSystemGroup`.
 - **Transports**: `ILockstepTransport`; a Netcode adapter with one RPC; an in-process loopback for offline play and
   tests.
-- **Math**: `FixedPoint` (Q47.16), vectors, quaternions, `FixedMath` with integer-only transcendental functions, `FixedRandom`
-  (PCG32).
+- **Math**: `FixedPoint` (Q47.16), vectors, quaternions, matrices, `FixedMath` with integer-only transcendental
+  functions, `FixedRandom` (PCG32), shapes on the XZ plane, curves, `FixedHash`.
 
 ## Comparison
 
@@ -477,6 +477,30 @@ These came up while building on Entities; neither reference package deals with t
     states ran. State tags (an enableable component per state) would let a state's job skip the chunks of other
     states, but they need the type of every state in the transition and enable bits written from it; a check of an
     integer per entity costs little, and a machine with many states can tick all of them in one job with a `switch`.
+
+20. **Geometry, matrices and curves in the math.** Gameplay on `FixedPoint` needs collision tests, transforms and
+    curves, and written per game they bring the overflows of plain products. The core has them now, under the rules
+    of the rest of the math: integer only, the same bits in Mono, IL2CPP and Burst, pinned by a golden hash
+    (`TypesGoldenTests`, beside the one of `FixedPointTests`) and compared with a Burst run.
+
+    The yes-or-no tests of the shapes on the XZ plane (containment, overlap, orientation, segment intersection) compare
+    128-bit products, so they are exact at any coordinate instead of erring by a step or overflowing far from the
+    origin, as the line of sight of string pulling already did. Measured results (closest points, distances, ray hits)
+    shift raw differences below 2³¹ first and take offsets as `delta · n / d` through `MulDiv`. Matrices are stored by
+    columns like Unity's; an inverse takes its cofactors on columns shifted up to a length of 128–256 and divides each
+    element once in 128 bits, so a small scale, whose determinant is below a step, keeps its precision.
+
+    The operators still wrap like `long`, because checking each of them would slow every tick. The checks are
+    `[Conditional("PRAGMA_DOTS_CHECKED_MATH")]` calls that the compiler removes without the define, and `TryAdd`,
+    `TrySubtract` and `TryMultiply` share their overflow tests for code that wants to saturate. It is a define and not
+    a module: it changes no result, so builds with and without it have the same simulation hash and play together.
+
+    `FixedHash` (FNV-1a over raw values the caller adds in order) does not replace `LockstepChecksum`, which walks a
+    whole world by its layout; it serves state outside one (saves, games without lockstep, tests) and keys random
+    streams, so that `FixedRandom.CreateFromKey` gives a system a stream that does not move when another system draws
+    more. `FixedCurve` is a class, like `AnimationCurve`, so that a field is edited with Unity's curve editor; the
+    simulation evaluates its keys through a span over a buffer, a native array or a blob. The types are `[DataContract]`s of
+    their fields, so JSON writes raw values and never recurses into swizzle properties.
 
 ## Limitations and future work
 

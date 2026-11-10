@@ -1,16 +1,18 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Serialization;
 
 namespace Pragma.Dots.Mathematics
 {
     /// <summary>A position and a rotation of <see cref="FixedPoint"/>, like <c>UnityEngine.Pose</c>.</summary>
     [Serializable]
     [DebuggerDisplay("{ToString()}")]
+    [DataContract]
     public struct FixedPose : IEquatable<FixedPose>, IFormattable
     {
-        public FixedVector3 position;
-        public FixedQuaternion rotation;
+        [DataMember] public FixedVector3 position;
+        [DataMember] public FixedQuaternion rotation;
 
         public FixedPose(FixedVector3 position, FixedQuaternion rotation)
         {

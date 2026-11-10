@@ -18,7 +18,7 @@ carries and runs only what it uses.
 
 | Part | Kind | What it gives |
 |---|---|---|
-| Mathematics | core | Fixed-point math (`FixedPoint`, vectors, quaternion, pose, `FixedMath`, `FixedRandom`), integer only, bit-identical in Mono, IL2CPP and Burst |
+| Mathematics | core | Fixed-point math (`FixedPoint`, vectors, quaternion, pose, matrices, `FixedMath`, `FixedRandom`, shapes on the XZ plane with exact tests, `FixedCurve`, `FixedHash`), integer only, bit-identical in Mono, IL2CPP and Burst; overflow checks for development builds |
 | Actors | core | Units, buildings and map objects described in assets of parts (a key, tags, a parent), spawned by key from a catalog, placed on maps with overrides, baked or built at run time, previewed in the editor |
 | Utils | core | `FixedDictionary4096Bytes`, `OptionalValue`, signals (one-off events as entities), buffers used as dictionaries, `EntityManager` helpers, hiding entities from the Hierarchy window, fixed list and string inspectors, `CollisionMatrixToFilter` |
 | Lockstep | module, `PRAGMA_DOTS_LOCKSTEP` | Deterministic lockstep: every client steps an isolated simulation world with the same confirmed input frames. A server that orders input and never simulates, never-dropped commands, desync detection, replays, late join, offline mode, Netcode for Entities integration |
