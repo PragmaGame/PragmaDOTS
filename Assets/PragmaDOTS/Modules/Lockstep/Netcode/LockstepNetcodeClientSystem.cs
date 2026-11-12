@@ -138,7 +138,7 @@ namespace Pragma.Dots.Lockstep.Netcode
             var options = LockstepClientWorldUtility.CreateSimulationOptions(World, config.waitForActorRegistry);
             _client = new LockstepClient(settings, _transport, options);
             LockstepWorlds.RegisterClient(World, _client);
-            _client.Join(config.joinData);
+            _client.Join(config.joinData, config.slot.IsSet ? config.slot.Value : LockstepProtocol.ANY_SLOT);
         }
 
         private void Shutdown()

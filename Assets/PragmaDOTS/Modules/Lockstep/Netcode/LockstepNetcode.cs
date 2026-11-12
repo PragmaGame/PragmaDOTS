@@ -1,3 +1,4 @@
+using Pragma.Dots.Utils;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.NetCode;
@@ -14,14 +15,19 @@ namespace Pragma.Dots.Lockstep.Netcode
             SetSingleton(serverWorld.EntityManager, new LockstepServerConfig { settings = settings });
         }
 
-        /// <summary>Makes a client world join the lockstep session of the server it is (or will be) connected to.</summary>
-        public static void JoinSession(World clientWorld, in LockstepClientSettings settings, in FixedList64Bytes<byte> joinData = default, bool waitForActorRegistry = false)
+        /// <summary>
+        /// Makes a client world join the lockstep session of the server it is (or will be) connected to, in
+        /// <paramref name="slot"/> (<see cref="LockstepProtocol.ANY_SLOT"/>: the first free one; see <see cref="LockstepClient.Join"/>).
+        /// </summary>
+        public static void JoinSession(World clientWorld, in LockstepClientSettings settings, in FixedList64Bytes<byte> joinData = default, bool waitForActorRegistry = false,
+                                       int slot = LockstepProtocol.ANY_SLOT)
         {
             SetSingleton(clientWorld.EntityManager, new LockstepClientConfig
             {
                 settings = settings,
                 joinData = joinData,
                 waitForActorRegistry = waitForActorRegistry,
+                slot = slot == LockstepProtocol.ANY_SLOT ? default : new OptionalValue<int>(slot),
             });
         }
 

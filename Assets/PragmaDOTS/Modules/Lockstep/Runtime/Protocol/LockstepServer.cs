@@ -384,20 +384,22 @@ namespace Pragma.Dots.Lockstep
 
         private void HandleJoin(Connection connection, ref LockstepByteReader reader, double now)
         {
+            // The version comes first and alone: another protocol may lay out the rest of the request differently.
             var version = reader.ReadUShort();
+            if (!reader.HasFailed && version != LockstepProtocol.VERSION)
+            {
+                Reject(connection, LockstepJoinRejectReason.ProtocolMismatch);
+                return;
+            }
             var simulationHash = reader.ReadULong();
             var flags = (LockstepJoinFlags)reader.ReadByte();
+            var requestedSlot = reader.ReadByte();
             var joinLength = reader.ReadByte();
             var joinBytes = reader.ReadBytesPtr(joinLength);
 
             if (reader.HasFailed || joinLength > LockstepProtocol.MAX_JOIN_DATA_SIZE)
             {
                 Reject(connection, LockstepJoinRejectReason.InvalidRequest);
-                return;
-            }
-            if (version != LockstepProtocol.VERSION)
-            {
-                Reject(connection, LockstepJoinRejectReason.ProtocolMismatch);
                 return;
             }
             if (_settings.ValidateSimulationHash && simulationHash != LockstepSimulation.DefaultSimulationHash)
@@ -420,18 +422,9 @@ namespace Pragma.Dots.Lockstep
                 return;
             }
 
-            Slot slot = null;
-            foreach (var candidate in _slots)
+            if (!TryTakeSlot(requestedSlot, out var slot, out var reason))
             {
-                if (!candidate.inUse)
-                {
-                    slot = candidate;
-                    break;
-                }
-            }
-            if (slot == null)
-            {
-                Reject(connection, LockstepJoinRejectReason.SessionFull);
+                Reject(connection, reason);
                 return;
             }
 
@@ -461,6 +454,40 @@ namespace Pragma.Dots.Lockstep
             {
                 StartGame(now);
             }
+        }
+
+        /// <summary>The slot a join asked for, or the first free one when it asked for any.</summary>
+        private bool TryTakeSlot(byte requested, out Slot slot, out LockstepJoinRejectReason reason)
+        {
+            slot = null;
+            reason = LockstepJoinRejectReason.None;
+
+            if (requested != LockstepProtocol.ANY_SLOT_BYTE)
+            {
+                if (requested >= _slots.Length)
+                {
+                    reason = LockstepJoinRejectReason.InvalidRequest;
+                    return false;
+                }
+                if (_slots[requested].inUse)
+                {
+                    reason = LockstepJoinRejectReason.SlotTaken;
+                    return false;
+                }
+                slot = _slots[requested];
+                return true;
+            }
+
+            foreach (var candidate in _slots)
+            {
+                if (!candidate.inUse)
+                {
+                    slot = candidate;
+                    return true;
+                }
+            }
+            reason = LockstepJoinRejectReason.SessionFull;
+            return false;
         }
 
         private void HandleInput(Connection connection, ref LockstepByteReader reader, double now)

@@ -10,5 +10,7 @@ namespace Pragma.Dots.Lockstep
         SessionFull = 4,
         GameInProgress = 5,
         GameEnded = 6,
+        /// <summary>The join asked for a slot another player holds.</summary>
+        SlotTaken = 7,
     }
 }

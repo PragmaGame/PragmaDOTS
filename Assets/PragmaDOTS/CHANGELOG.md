@@ -4,10 +4,15 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.2] - 2026-11-12
 
 ### Added
 
+- A join can ask for a slot: `LockstepClient.Join(joinData, slot)`, `LockstepNetcode.JoinSession(..., slot)`
+  (`LockstepClientConfig.slot`) and `LockstepOfflineConfig.slot`. A lobby that seats its players passes the seat, so
+  every player knows their slot before anyone joins, whatever the order of joins; `LockstepProtocol.ANY_SLOT` keeps
+  the first free slot. A held slot is refused with the new `LockstepJoinRejectReason.SlotTaken`, a slot the session
+  does not have with `InvalidRequest`.
 - `FixedMinAttribute` and `FixedRangeAttribute` (`Pragma.Dots.Mathematics`): the limits of a `FixedPoint` field in the
   inspector, which keeps an edit within them; `[FixedRange]` draws a slider with a number field. Unity's `[Min]` and
   `[Range]` cannot do it: their drawers run before the type's drawer and break a fixed-point field. The limits are
@@ -15,6 +20,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ActorKeyAttribute` (`Pragma.Dots.Actors`): a `FixedString32Bytes` field that names an actor type shows in the
   inspector as a reference to the definition with that key; a pick stores the key, a key no definition has gets a
   warning icon. A serialized component or config names another type without a part that converts a reference.
+
+### Changed
+
+- `LockstepProtocol.VERSION` is 3: the join request carries the slot. The server reads the version of a join request
+  before the rest, so a client of another protocol is refused with `ProtocolMismatch` whatever its layout.
 
 ## [0.3.1] - 2026-10-21
 

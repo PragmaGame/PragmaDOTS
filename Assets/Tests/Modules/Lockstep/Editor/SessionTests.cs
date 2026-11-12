@@ -644,6 +644,48 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void Join_IntoRequestedSlots_WhateverTheOrder()
+        {
+            using (var session = new SessionHarness(Settings(), latency: 0.05, jitter: 0.04))
+            {
+                // The guest of a lobby is ready first, yet each player gets the seat the lobby gave them.
+                var guest = session.AddClient(slot: 2);
+                var host = session.AddClient(slot: 0);
+                session.Run(5, VaryingInput);
+
+                Assert.AreEqual(2, guest.LocalSlot);
+                Assert.AreEqual(0, host.LocalSlot);
+                Assert.AreEqual(LockstepClientState.Running, guest.State);
+                Assert.AreEqual(LockstepClientState.Running, host.State);
+                Assert.AreNotEqual(Unity.Entities.Entity.Null, TestUtility.PlayerEntity(host.Simulation, 2));
+                Assert.IsEmpty(session.Desyncs);
+                TestUtility.AssertSameChecksums(guest, host, 10);
+            }
+        }
+
+        [Test]
+        public void Join_IntoATakenOrMissingSlot_IsRejected()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 3)))
+            {
+                var first = session.AddClient(slot: 1);
+                LogAssert.Expect(LogType.Warning, new Regex("SlotTaken"));
+                var second = session.AddClient(slot: 1);
+                LogAssert.Expect(LogType.Warning, new Regex("InvalidRequest"));
+                var outside = session.AddClient(slot: 4);
+                var any = session.AddClient();
+                session.Run(0.5);
+
+                Assert.AreEqual(1, first.LocalSlot);
+                Assert.AreEqual(LockstepClientState.Rejected, second.State);
+                Assert.AreEqual(LockstepJoinRejectReason.SlotTaken, second.RejectReason);
+                Assert.AreEqual(LockstepClientState.Rejected, outside.State);
+                Assert.AreEqual(LockstepJoinRejectReason.InvalidRequest, outside.RejectReason, "the session has four slots");
+                Assert.AreEqual(0, any.LocalSlot, "a join for any slot takes the first free one");
+            }
+        }
+
+        [Test]
         public void LateJoin_WhenItIsOff_IsRejected()
         {
             var settings = Settings(minPlayers: 1);
@@ -684,6 +726,7 @@ namespace Pragma.Dots.Tests
                     writer.WriteUShort(version);
                     writer.WriteULong(simulationHash);
                     writer.WriteByte((byte)LockstepJoinFlags.Simulates);
+                    writer.WriteByte(LockstepProtocol.ANY_SLOT_BYTE);
                     writer.WriteByte(0);
                     unsafe
                     {

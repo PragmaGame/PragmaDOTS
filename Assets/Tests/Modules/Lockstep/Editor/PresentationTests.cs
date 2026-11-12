@@ -146,6 +146,34 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void OfflineSystem_PutsThePlayerIntoTheConfiguredSlot()
+        {
+            using (var world = new World("Offline", WorldFlags.Game))
+            {
+                DefaultWorldInitialization.AddSystemsToRootLevelSystemGroups(world, typeof(LockstepInputSystemGroup), typeof(LockstepOfflineSystem));
+                var entityManager = world.EntityManager;
+                var config = LockstepOfflineConfig.Create<TestInput>(30);
+                config.maxPlayers = 2;
+                config.slot = 1;
+                entityManager.CreateSingleton(config);
+
+                var time = 0.0;
+                for (var frame = 0; frame < 60; frame++)
+                {
+                    time += 1 / 60.0;
+                    world.SetTime(new TimeData(time, 1 / 60f));
+                    world.Update();
+                }
+
+                Assert.IsTrue(LockstepWorlds.TryGetClient(world, out var client));
+                Assert.AreEqual(LockstepClientState.Running, client.State);
+                Assert.AreEqual(1, client.LocalSlot);
+                Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(client.Simulation.World.EntityManager), "slot 0 stays free");
+                Assert.AreNotEqual(Entity.Null, TestUtility.PlayerEntity(client.Simulation, 1));
+            }
+        }
+
+        [Test]
         public void LocalInputEntity_SendsCommandsWithTheirData()
         {
             using (var world = new World("Offline", WorldFlags.Game))
