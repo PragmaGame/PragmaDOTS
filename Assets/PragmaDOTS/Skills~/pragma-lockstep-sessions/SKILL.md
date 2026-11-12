@@ -120,7 +120,7 @@ Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
 | Leave | Announced in a frame; the slot frees up | `client.Leave()`, or the connection/world goes away |
 | End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent` with `client.EndReason`; the remaining frames are still simulated. A dropped connection ends with `ConnectionLost` (`client.OnDisconnected()`; the Netcode client system calls it and keeps the session registered until the config goes). Ending in the lobby tells the waiting players the same way; later joins get `GameEnded` |
-| Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded` |
+| Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded`, `SlotTaken` |
 
 With Netcode (`Pragma.Dots.Lockstep.Netcode`), the component equivalents in the server world are an entity with
 `LockstepStartGameRequest`, an entity with `LockstepEndGameRequest { reason }`, and the `LockstepServerStatus`
@@ -134,6 +134,11 @@ from its start and pong messages) while `client.BufferedTicks` is large; re-simu
 
 - **Join data** (62 bytes): per player, sent when joining (`JoinSession(world, settings, joinData)`,
   `client.Join(joinData)`); the simulation reads `LockstepPlayer.GetJoinData<T>()`.
+- **Slot**: a join takes the first free slot unless it asks for one. A lobby that seats its players (host in slot 0,
+  guests in lobby order) passes the seat — `JoinSession(world, settings, joinData, waitForActorRegistry, slot)`,
+  `client.Join(joinData, slot)`, `LockstepOfflineConfig.slot` — so every player knows their slot (their side of the
+  map) before joining, whatever the order of joins. A held slot is refused with `SlotTaken`, a missing one with
+  `InvalidRequest`.
 - **Start data** (126 bytes): per match, `LockstepServerSettings.StartData = LockstepBytes.ToFixedList128(rules)`;
   the simulation reads `LockstepSessionInfo.GetStartData<T>()`.
 - **Seed**: `LockstepServerSettings.Seed` (0 picks one at start; `server.Config.Seed` is the final one); the

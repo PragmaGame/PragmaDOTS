@@ -5,10 +5,16 @@ namespace Pragma.Dots.Lockstep
     public static class LockstepProtocol
     {
         /// <summary>Bumped on every incompatible change of the messages below.</summary>
-        public const ushort VERSION = 3;
+        public const ushort VERSION = 4;
 
         /// <summary>Player slots fit into a 64-bit mask.</summary>
         public const int MAX_PLAYERS = 64;
+
+        /// <summary>The slot a join asks for when any free slot will do: the server gives the first free one.</summary>
+        public const int ANY_SLOT = -1;
+
+        /// <summary><see cref="ANY_SLOT"/> on the wire: the slot of a join request is one byte.</summary>
+        internal const byte ANY_SLOT_BYTE = byte.MaxValue;
 
         /// <summary>Upper bound of the per-tick input struct.</summary>
         public const int MAX_INPUT_SIZE = 128;

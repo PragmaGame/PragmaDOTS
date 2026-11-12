@@ -75,7 +75,7 @@ namespace Pragma.Dots.Lockstep
             _network.AttachClient(LOCAL_CONNECTION_ID, _client);
             LockstepWorlds.RegisterClient(World, _client);
             LockstepWorlds.RegisterServer(World, _server);
-            _client.Join(config.joinData);
+            _client.Join(config.joinData, config.slot);
         }
 
         private void StopSession()

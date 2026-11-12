@@ -1245,6 +1245,11 @@ foreach (var (player, commands, commandData) in
 - **Start data** (up to 126 bytes) is set on the server (`LockstepServerSettings.StartData`, or
   `LockstepOfflineConfig.startData`) and reaches every client before tick 0. Read it with
   `LockstepSessionInfo.GetStartData<T>()` (map id, game mode, rules).
+- **Slot.** A client takes the first free slot unless it asks for one: a lobby that seats its players (the host in
+  slot 0, the guests in lobby order) passes the seat, so every player knows their slot before anyone joins and the
+  order of joining does not matter — `JoinSession(world, settings, joinData, waitForActorRegistry, slot)`,
+  `client.Join(joinData, slot)`, `LockstepOfflineConfig.slot`. A slot another player holds is refused with
+  `SlotTaken`, one the session does not have with `InvalidRequest`.
 
 #### Teams
 
@@ -1447,7 +1452,7 @@ sides.
 | Call | Effect |
 |---|---|
 | `HostSession(serverWorld, settings)` | Hosts a session (replaces the config if one exists) |
-| `JoinSession(clientWorld, settings, joinData, waitForActorRegistry)` | Joins as soon as the world is connected |
+| `JoinSession(clientWorld, settings, joinData, waitForActorRegistry, slot)` | Joins as soon as the world is connected, into `slot` (`LockstepProtocol.ANY_SLOT`: the first free one) |
 | `Listen(serverWorld, endpoint)`, `Connect(clientWorld, endpoint)` | `NetworkStreamDriver.Listen` / `Connect` |
 | `RequestStart(serverWorld)` | Starts the match on the next server update with whoever joined |
 | `RequestEnd(serverWorld, reason)` | Ends the match |
@@ -1517,7 +1522,8 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   simulates the frames it has, such as the last ones of a match the server ended before it closed the connections; the
   Netcode session stays registered until its config is removed or a new connection joins again.
 - **Rejection.** `client.RejectedEvent` reports `LockstepJoinRejectReason`: `InvalidRequest`, `ProtocolMismatch`,
-  `SimulationMismatch` (a different build), `SessionFull`, `GameInProgress` (late join is off), `GameEnded`.
+  `SimulationMismatch` (a different build), `SessionFull`, `GameInProgress` (late join is off), `GameEnded`,
+  `SlotTaken` (the slot the join asked for is held by another player).
 
 #### Session objects
 
@@ -1675,7 +1681,8 @@ Start from `LockstepClientSettings.Default`.
 #### `LockstepOfflineConfig`
 
 `Create<TInput>(tickRate)` fills `tickRate`, `maxPlayers = 1` and `inputSize`. The other fields are `seed`,
-`checksumInterval`, `startData`, `teams`, `joinData` and `waitForActorRegistry`.
+`checksumInterval`, `startData`, `teams`, `joinData`, `slot` (the local player's slot, below `maxPlayers`; 0 by default)
+and `waitForActorRegistry`.
 
 #### `LockstepSimulationOptions`
 
@@ -1875,7 +1882,7 @@ server.Update(now);                                   // every frame
 
 // Client side
 var client = new LockstepClient(clientSettings, myClientTransport, simulationOptions);
-client.Join(joinData);                                // once connected
+client.Join(joinData, slot);                          // once connected; slot: LockstepProtocol.ANY_SLOT or a lobby seat
 client.OnPacket(data, length, now);                  // bytes from the server
 client.Update(now);                                   // every frame
 ```

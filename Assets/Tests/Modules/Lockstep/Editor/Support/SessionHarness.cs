@@ -40,7 +40,8 @@ namespace Pragma.Dots.Tests
             }
         }
 
-        public LockstepClient AddClient(LockstepSimulationOptions options = null, LockstepClientSettings? settings = null, FixedList64Bytes<byte> joinData = default)
+        public LockstepClient AddClient(LockstepSimulationOptions options = null, LockstepClientSettings? settings = null, FixedList64Bytes<byte> joinData = default,
+                                        int slot = LockstepProtocol.ANY_SLOT)
         {
             var connectionId = _nextConnectionId++;
             var client = new LockstepClient(settings ?? ClientSettings, Network.CreateClientTransport(connectionId),
@@ -49,7 +50,7 @@ namespace Pragma.Dots.Tests
             Network.AttachClient(connectionId, client);
             Clients.Add(client);
             _connectionIds.Add(connectionId);
-            client.Join(joinData);
+            client.Join(joinData, slot);
             return client;
         }
 

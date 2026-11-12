@@ -47,6 +47,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The math types are `[DataContract]`s of their public fields: Newtonsoft.Json writes only the raw values
   (`{"rawValue":-98304}`) with any settings and reads them back exactly, the readonly `FixedGrid` included.
   Existing results do not change.
+- A join can ask for a slot: `LockstepClient.Join(joinData, slot)`, `LockstepNetcode.JoinSession(..., slot)`
+  (`LockstepClientConfig.slot`) and `LockstepOfflineConfig.slot`. A lobby that seats its players passes the seat, so
+  every player knows their slot before anyone joins, whatever the order of joins; `LockstepProtocol.ANY_SLOT` keeps
+  the first free slot. A held slot is refused with the new `LockstepJoinRejectReason.SlotTaken`, a slot the session
+  does not have with `InvalidRequest`.
 - `FixedMinAttribute` and `FixedRangeAttribute` (`Pragma.Dots.Mathematics`): the limits of a `FixedPoint` field in the
   inspector, which keeps an edit within them; `[FixedRange]` draws a slider with a number field. Unity's `[Min]` and
   `[Range]` cannot do it: their drawers run before the type's drawer and break a fixed-point field. The limits are
@@ -82,8 +87,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking.** `LockstepProtocol.VERSION` is 3: the session configuration carries the teams, so clients and servers of
-  earlier versions refuse each other and earlier replays do not load. The session entity has `LockstepTeams`, which
+- **Breaking.** `LockstepProtocol.VERSION` is 4: the join request carries the slot (0.3.2 on the `release/0.3` branch
+  has the same join as version 3). The server reads the version of a join request before the rest, so a client of
+  another protocol is refused with `ProtocolMismatch` whatever its layout.
+- **Breaking.** The session configuration carries the teams (protocol version 3), so clients and servers of earlier
+  versions refuse each other and earlier replays do not load. The session entity has `LockstepTeams`, which
   changes the state hash.
 - **Breaking.** Vision: `LockstepVisionGrid.isRevealed` is replaced by `revealedSlots`, a mask of the slots that see
   the whole map (`IsRevealed`, `SetRevealed`, `ALL_SLOTS`): a cheat or a spectator reveals the map to one slot while the

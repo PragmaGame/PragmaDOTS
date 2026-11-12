@@ -124,9 +124,18 @@ namespace Pragma.Dots.Lockstep
         public event Action<LockstepClient> EndedEvent;
         public event Action<LockstepJoinRejectReason> RejectedEvent;
 
-        /// <summary>Asks the server for a slot. <paramref name="joinData"/> reaches the simulation in <see cref="LockstepPlayer.joinData"/>.</summary>
-        public void Join(in FixedList64Bytes<byte> joinData = default)
+        /// <summary>
+        /// Asks the server for a slot. <paramref name="joinData"/> reaches the simulation in <see cref="LockstepPlayer.joinData"/>.
+        /// <paramref name="slot"/> is the slot to take, as a lobby that seats its players knows it before anyone joins;
+        /// <see cref="LockstepProtocol.ANY_SLOT"/> takes the first free one. A slot another player holds is refused
+        /// (<see cref="LockstepJoinRejectReason.SlotTaken"/>), and so is one the session does not have.
+        /// </summary>
+        public void Join(in FixedList64Bytes<byte> joinData = default, int slot = LockstepProtocol.ANY_SLOT)
         {
+            if (slot < LockstepProtocol.ANY_SLOT || slot >= LockstepProtocol.MAX_PLAYERS)
+            {
+                throw new ArgumentOutOfRangeException(nameof(slot), slot, $"A slot is below {LockstepProtocol.MAX_PLAYERS}, or {LockstepProtocol.ANY_SLOT} for any.");
+            }
             if (State != LockstepClientState.Idle && State != LockstepClientState.Rejected)
             {
                 return;
@@ -135,6 +144,7 @@ namespace Pragma.Dots.Lockstep
             writer.WriteUShort(LockstepProtocol.VERSION);
             writer.WriteULong(LockstepSimulation.DefaultSimulationHash);
             writer.WriteByte((byte)(_settings.Simulate ? LockstepJoinFlags.Simulates : LockstepJoinFlags.None));
+            writer.WriteByte(slot == LockstepProtocol.ANY_SLOT ? LockstepProtocol.ANY_SLOT_BYTE : (byte)slot);
             writer.WriteByte((byte)joinData.Length);
             for (var i = 0; i < joinData.Length; i++)
             {

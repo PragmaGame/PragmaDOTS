@@ -20,6 +20,11 @@ namespace Pragma.Dots.Lockstep
         /// <summary>The team of every slot, as <see cref="LockstepSessionConfig.Teams"/>: for matches against AI players.</summary>
         public FixedList128Bytes<byte> teams;
         public FixedList64Bytes<byte> joinData;
+        /// <summary>
+        /// The slot the local player takes, below <see cref="maxPlayers"/>: the other slots stay free, as on a map where
+        /// the player plays one side and the game the others.
+        /// </summary>
+        public int slot;
         /// <summary>Wait until an actor registry exists in this world before creating the simulation.</summary>
         public bool waitForActorRegistry;
 
