@@ -524,6 +524,14 @@ These came up while building on Entities; neither reference package deals with t
     they were, and the cost is a pass over the planes of a team. A mask of slots that see only through their own
     sources covers matches without shared vision and research that grants it to one player.
 
+22. **A join may ask for its slot.** A slot is a player's place in the match (their side of the map, their team,
+    their color), and a lobby knows the places before anyone joins: the host first, the guests in lobby order. With
+    the first free slot taken on every join, the place depended on who pressed "ready" first, so a player could not
+    see their side while preparing. The join request carries the slot it wants (or any), and the server refuses a held
+    slot (`SlotTaken`) instead of giving another one: a lobby that seats its players expects exactly that seat, and a
+    silent fallback would put two players' sides the wrong way round. The slot is a byte of the join request, not of
+    the join data: the server assigns slots and never reads the game's join data.
+
 ## Limitations and future work
 
 - **Prediction and rollback**: a predicted copy of the simulation world, restored from the confirmed one and
