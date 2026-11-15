@@ -6,9 +6,14 @@ namespace Pragma.Dots.Lockstep
 {
     /// <summary>
     /// In-process network between one server endpoint (<see cref="LockstepServer"/>, <see cref="LockstepReplayHost"/>) and
-    /// any number of <see cref="LockstepClient"/>s. Used for offline play, replays and tests; latency and jitter are
+    /// any number of clients (<see cref="LockstepClient"/>). Used for offline play, replays and tests; latency and jitter are
     /// simulated, order per connection is preserved.
     /// </summary>
+    /// <remarks>
+    /// <see cref="Loss"/> and <see cref="Reorder"/> make it an unreliable network, for testing a
+    /// <see cref="LockstepRedundantChannel"/> over it; a session needs a reliable, ordered network otherwise. Packets are
+    /// pooled: a steady session allocates nothing.
+    /// </remarks>
     public sealed unsafe class LockstepLoopbackNetwork
     {
         private sealed class Packet
@@ -16,7 +21,8 @@ namespace Pragma.Dots.Lockstep
             public double deliveryTime;
             public int connectionId;
             public bool toServer;
-            public byte[] data;
+            public byte[] data = Array.Empty<byte>();
+            public int length;
         }
 
         private sealed class Endpoint : ILockstepTransport
@@ -34,18 +40,14 @@ namespace Pragma.Dots.Lockstep
 
             public void Send(int connectionId, byte* data, int length)
             {
-                var bytes = new byte[length];
-                fixed (byte* destination = bytes)
-                {
-                    UnsafeUtility.MemCpy(destination, data, length);
-                }
-                _network.Enqueue(_toServer, _toServer ? _clientConnectionId : connectionId, bytes);
+                _network.Enqueue(_toServer, _toServer ? _clientConnectionId : connectionId, data, length);
             }
         }
 
         private readonly List<Packet> _inFlight = new List<Packet>();
+        private readonly Stack<Packet> _free = new Stack<Packet>();
         private readonly Dictionary<long, double> _lastDelivery = new Dictionary<long, double>();
-        private readonly Dictionary<int, LockstepClient> _clients = new Dictionary<int, LockstepClient>();
+        private readonly Dictionary<int, ILockstepClientEndpoint> _clients = new Dictionary<int, ILockstepClientEndpoint>();
         private readonly Random _random;
         private ILockstepServerEndpoint _server;
         private double _now;
@@ -58,20 +60,30 @@ namespace Pragma.Dots.Lockstep
 
         /// <summary>One-way latency in seconds.</summary>
         public double Latency { get; set; }
-        /// <summary>Extra random one-way delay in [0, Jitter) seconds; packet order is still preserved.</summary>
+        /// <summary>Extra random one-way delay in [0, Jitter) seconds; packet order is still preserved unless <see cref="Reorder"/> is set.</summary>
         public double Jitter { get; set; }
+        /// <summary>Share of packets lost, in [0, 1], in each direction. Only for testing a <see cref="LockstepRedundantChannel"/>.</summary>
+        public double Loss { get; set; }
+        /// <summary>Lets the jitter reorder packets of a connection. Only for testing a <see cref="LockstepRedundantChannel"/>.</summary>
+        public bool Reorder { get; set; }
 
         /// <summary>The transport to create the server with.</summary>
         public ILockstepTransport ServerTransport { get; }
 
         public int PacketsInFlight => _inFlight.Count;
 
+        /// <summary>Packets handed to the network, lost ones included.</summary>
+        public long PacketsSent { get; private set; }
+
+        /// <summary>Bytes handed to the network, lost ones included.</summary>
+        public long BytesSent { get; private set; }
+
         public void AttachServer(ILockstepServerEndpoint server) => _server = server;
 
         /// <summary>The transport to create a client with; <paramref name="connectionId"/> identifies it on the server.</summary>
         public ILockstepTransport CreateClientTransport(int connectionId) => new Endpoint(this, true, connectionId);
 
-        public void AttachClient(int connectionId, LockstepClient client)
+        public void AttachClient(int connectionId, ILockstepClientEndpoint client)
         {
             _clients[connectionId] = client;
             _server?.OnConnected(connectionId);
@@ -81,7 +93,14 @@ namespace Pragma.Dots.Lockstep
         public void DetachClient(int connectionId)
         {
             _clients.Remove(connectionId);
-            _inFlight.RemoveAll(packet => packet.connectionId == connectionId);
+            for (var i = _inFlight.Count - 1; i >= 0; i--)
+            {
+                if (_inFlight[i].connectionId == connectionId)
+                {
+                    _free.Push(_inFlight[i]);
+                    _inFlight.RemoveAt(i);
+                }
+            }
             _server?.OnDisconnected(connectionId);
         }
 
@@ -97,34 +116,53 @@ namespace Pragma.Dots.Lockstep
                 {
                     if (packet.toServer)
                     {
-                        _server?.OnPacket(packet.connectionId, data, packet.data.Length, now);
+                        _server?.OnPacket(packet.connectionId, data, packet.length, now);
                     }
                     else if (_clients.TryGetValue(packet.connectionId, out var client))
                     {
-                        client.OnPacket(data, packet.data.Length, now);
+                        client.OnPacket(data, packet.length, now);
                     }
                 }
+                // Returned only after the endpoint is done with the bytes.
+                _free.Push(packet);
             }
         }
 
-        private void Enqueue(bool toServer, int connectionId, byte[] data)
+        private void Enqueue(bool toServer, int connectionId, byte* data, int length)
         {
-            var delay = Latency + (Jitter > 0 ? _random.NextDouble() * Jitter : 0);
-            var channel = ((long)connectionId << 1) | (toServer ? 1L : 0L);
-            var deliveryTime = _now + delay;
-            if (_lastDelivery.TryGetValue(channel, out var last) && last > deliveryTime)
+            PacketsSent++;
+            BytesSent += length;
+            if (Loss > 0 && _random.NextDouble() < Loss)
             {
-                deliveryTime = last;
+                return;
             }
-            _lastDelivery[channel] = deliveryTime;
 
-            var packet = new Packet
+            var delay = Latency + (Jitter > 0 ? _random.NextDouble() * Jitter : 0);
+            var deliveryTime = _now + delay;
+            if (!Reorder)
             {
-                deliveryTime = deliveryTime,
-                connectionId = connectionId,
-                toServer = toServer,
-                data = data,
-            };
+                var channel = ((long)connectionId << 1) | (toServer ? 1L : 0L);
+                if (_lastDelivery.TryGetValue(channel, out var last) && last > deliveryTime)
+                {
+                    deliveryTime = last;
+                }
+                _lastDelivery[channel] = deliveryTime;
+            }
+
+            var packet = _free.Count > 0 ? _free.Pop() : new Packet();
+            if (packet.data.Length < length)
+            {
+                packet.data = new byte[Math.Max(length, 256)];
+            }
+            fixed (byte* destination = packet.data)
+            {
+                UnsafeUtility.MemCpy(destination, data, length);
+            }
+            packet.length = length;
+            packet.deliveryTime = deliveryTime;
+            packet.connectionId = connectionId;
+            packet.toServer = toServer;
+
             // Keep the list sorted by delivery time; a packet goes after the ones due at the same time, so ties keep the
             // send order.
             var index = _inFlight.Count;

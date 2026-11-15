@@ -25,6 +25,16 @@ namespace Pragma.Dots.Lockstep
         /// <summary>Stop simulating after the server reports a desync.</summary>
         [field: SerializeField] public bool StopOnDesync { get; set; }
         [field: SerializeField] public int MaxPacketSize { get; set; }
+        /// <summary>
+        /// The most the input margin grows by after inputs reached the server late, in ticks; it never grows past a round
+        /// trip either. Zero keeps the margin at <see cref="InputMarginTicks"/>.
+        /// </summary>
+        [field: SerializeField] public float MaxExtraInputMarginTicks { get; set; }
+        /// <summary>
+        /// The most the playout delay grows by after stalls, in ticks: each stall (the confirmed frames ran out) adds one,
+        /// and it decays by a tick in ten seconds. Zero sizes the delay by the jitter alone.
+        /// </summary>
+        [field: SerializeField] public float MaxStallDelayTicks { get; set; }
 
         public static LockstepClientSettings Default => new LockstepClientSettings
         {
@@ -38,6 +48,8 @@ namespace Pragma.Dots.Lockstep
             RecordReplay = true,
             StopOnDesync = false,
             MaxPacketSize = LockstepProtocol.DEFAULT_MAX_PACKET_SIZE,
+            MaxExtraInputMarginTicks = 2f,
+            MaxStallDelayTicks = 3f,
         };
 
         /// <summary>Throws for values a client cannot run with, such as the zeros of settings never filled in.</summary>
@@ -55,7 +67,7 @@ namespace Pragma.Dots.Lockstep
             {
                 throw new ArgumentOutOfRangeException(nameof(PingIntervalSeconds), PingIntervalSeconds, "The ping interval must be positive.");
             }
-            if (InputMarginTicks < 0f || PlayoutDelayTicks < 0f || MaxPlayoutDelayTicks < 0f)
+            if (InputMarginTicks < 0f || PlayoutDelayTicks < 0f || MaxPlayoutDelayTicks < 0f || MaxExtraInputMarginTicks < 0f || MaxStallDelayTicks < 0f)
             {
                 throw new ArgumentOutOfRangeException(nameof(InputMarginTicks), "Margins and delays cannot be negative.");
             }

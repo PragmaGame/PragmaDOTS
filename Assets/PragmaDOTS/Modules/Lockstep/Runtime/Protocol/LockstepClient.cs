@@ -21,10 +21,16 @@ namespace Pragma.Dots.Lockstep
     /// <para>The class is transport-agnostic: feed it with <see cref="OnPacket"/>, call <see cref="Update"/> every frame
     /// and it sends through the <see cref="ILockstepTransport"/>.</para>
     /// </remarks>
-    public sealed unsafe class LockstepClient : IDisposable
+    public sealed unsafe class LockstepClient : ILockstepClientEndpoint, IDisposable
     {
         private const int SERVER_CONNECTION_ID = 0;
         private const float FEEDBACK_IGNORE_SECONDS = 0.25f;
+        // Ticks of input margin added by a feedback with late inputs, and taken off per second without them.
+        private const float EXTRA_MARGIN_STEP = 0.5f;
+        private const float EXTRA_MARGIN_DECAY_PER_SECOND = 0.5f;
+        // Ticks of playout delay added by a stall, and taken off per second of playback.
+        private const float STALL_DELAY_STEP = 1f;
+        private const float STALL_DELAY_DECAY_PER_SECOND = 0.1f;
         // Command bytes per input message, well under the server's default message limit; a larger command goes alone.
         private const int MAX_COMMAND_BYTES_PER_MESSAGE = 256 * 1024;
 
@@ -49,7 +55,11 @@ namespace Pragma.Dots.Lockstep
         private float _inputSpeed = 1f;
         private float _smoothedEarliness = float.NaN;
         private float _extraMargin;
+        private double _lastFeedbackTime = double.NaN;
         private double _ignoreFeedbackUntil;
+        private float _stallDelay;
+        private bool _isStarved;
+        private double _lastPacketTime = double.NaN;
         private double _playoutClock;
         // Real time scaled by the playback speed: what the playout and the arrival of frames are measured in.
         private double _playbackTime;
@@ -117,6 +127,28 @@ namespace Pragma.Dots.Lockstep
         }
         /// <summary>First tick reported as desynced, or -1.</summary>
         public int DesyncTick { get; private set; } = -1;
+
+        /// <summary>
+        /// Ticks the input margin grew by after inputs reached the server too late; it shrinks again while they arrive in
+        /// time. At most <see cref="LockstepClientSettings.MaxExtraInputMarginTicks"/>, and at most a round trip.
+        /// </summary>
+        public float ExtraInputMarginTicks => _extraMargin;
+
+        /// <summary>
+        /// The delay behind the newest confirmed frame the playout aims for, in ticks: <see cref="LockstepClientSettings.PlayoutDelayTicks"/>,
+        /// twice the jitter, and the delay stalls added (<see cref="LockstepClientSettings.MaxStallDelayTicks"/>).
+        /// </summary>
+        public float TargetPlayoutDelayTicks { get; private set; }
+
+        /// <summary>How many times the running match ran out of confirmed frames to show: the picture stood still waiting for the network.</summary>
+        public int StallCount { get; private set; }
+
+        /// <summary>Seconds of playback the running match stood still waiting for frames, over all stalls: their share of the match for a network indicator.</summary>
+        public double StalledSeconds { get; private set; }
+
+        /// <summary>Seconds between the last packet from the server and the last update; NaN before the first packet.</summary>
+        public double SecondsSinceLastPacket =>
+            double.IsNaN(_lastPacketTime) || double.IsNaN(_lastUpdateTime) ? double.NaN : Math.Max(0, _lastUpdateTime - _lastPacketTime);
 
         public event Action<LockstepClient> StartedEvent;
         /// <summary>Tick and whether the local client is one of the clients that disagree.</summary>
@@ -229,7 +261,12 @@ namespace Pragma.Dots.Lockstep
 
         public void OnPacket(byte* data, int length, double now)
         {
-            if (_disposed || !_framer.Receive(SERVER_CONNECTION_ID, data, length, out var message, out var messageLength))
+            if (_disposed)
+            {
+                return;
+            }
+            _lastPacketTime = now;
+            if (!_framer.Receive(SERVER_CONNECTION_ID, data, length, out var message, out var messageLength))
             {
                 return;
             }
@@ -466,8 +503,17 @@ namespace Pragma.Dots.Lockstep
                 return;
             }
 
-            // Inputs that came too late raise the safety margin; it slowly decays back while all is well.
-            _extraMargin = lateDrops > 0 ? Math.Min(_extraMargin + 0.5f, 4f) : Math.Max(0f, _extraMargin - 0.02f);
+            // Inputs that came too late raise the safety margin, and it decays back while all is well. A late input costs
+            // its tick (the previous input repeats, commands move to the next frame) while the margin delays every input:
+            // keep it small. Beyond a round trip it buys nothing, the loss it would cover is repaired sooner.
+            var elapsed = double.IsNaN(_lastFeedbackTime) ? 0 : Math.Max(0, now - _lastFeedbackTime);
+            _lastFeedbackTime = now;
+            var rttTicks = double.IsNaN(RoundTripTime) ? float.MaxValue : (float)(RoundTripTime * Config.TickRate);
+            var cap = Math.Min(_settings.MaxExtraInputMarginTicks, Math.Max(EXTRA_MARGIN_STEP, rttTicks));
+            _extraMargin = lateDrops > 0
+                ? _extraMargin + EXTRA_MARGIN_STEP
+                : _extraMargin - (float)(elapsed * EXTRA_MARGIN_DECAY_PER_SECOND);
+            _extraMargin = Math.Max(0f, Math.Min(_extraMargin, cap));
 
             // Feedback describes inputs sent about one round trip ago; after a correction, wait for fresh data.
             if (now < _ignoreFeedbackUntil)
@@ -630,7 +676,12 @@ namespace Pragma.Dots.Lockstep
         {
             var available = _frames.EndTick;
             var tickRate = Config.TickRate;
-            var targetDelay = math.clamp(_settings.PlayoutDelayTicks + 2f * JitterTicks, 0f, Math.Max(_settings.PlayoutDelayTicks, _settings.MaxPlayoutDelayTicks));
+            // The jitter estimate leaves bursts out, and a frame held back by a lost packet comes in one: stalls raise the
+            // delay on their own, and it decays while frames come in time.
+            _stallDelay = Math.Max(0f, _stallDelay - (float)(deltaTime * STALL_DELAY_DECAY_PER_SECOND));
+            var targetDelay = math.clamp(_settings.PlayoutDelayTicks + 2f * JitterTicks + _stallDelay, 0f,
+                Math.Max(_settings.PlayoutDelayTicks, _settings.MaxPlayoutDelayTicks));
+            TargetPlayoutDelayTicks = targetDelay;
             var desired = available + 1 - targetDelay;
             var error = desired - _playoutClock;
             var catchUpThreshold = Math.Max(4.0, tickRate * 0.25);
@@ -666,6 +717,23 @@ namespace Pragma.Dots.Lockstep
             {
                 _playoutClock = Simulation.Tick + 1;
             }
+
+            // A stall: every frame is simulated, the playout reached the newest one and the next one is not there (a frame
+            // still to simulate is the CPU, not the network). Before the first tick (the start countdown) and after the
+            // end nothing is due, and a held replay does not advance.
+            var isStarved = State == LockstepClientState.Running && Simulation.Tick > 0 && deltaTime > 0 &&
+                            Simulation.Tick >= available && _playoutClock >= available + 1;
+            if (isStarved && !_isStarved)
+            {
+                StallCount++;
+                _stallDelay = Math.Min(_stallDelay + STALL_DELAY_STEP, _settings.MaxStallDelayTicks);
+            }
+            if (isStarved && _isStarved)
+            {
+                StalledSeconds += deltaTime;
+            }
+            _isStarved = isStarved;
+
             InterpolationAlpha = (float)math.clamp(_playoutClock - Simulation.Tick, 0.0, 1.0);
 
             if (!_settings.RecordReplay && Simulation.Tick - _frames.FirstTick > 1024)
