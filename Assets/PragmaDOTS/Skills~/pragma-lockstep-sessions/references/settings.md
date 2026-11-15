@@ -24,6 +24,7 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxCommandDataSize` | 1 MB | Largest data of one command; larger = protocol violation; 0 = default. Must fit `MaxMessageSize` and `MaxBufferedCommandBytes` |
 | `MaxCommandBytesPerTick` | 64 KB | Command bytes of one player per frame; the rest waits, a single larger command goes alone; 0 = default |
 | `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player held by the server (ring and backlog); beyond = protocol violation, dropped; 0 = default |
+| `PlayerTimeoutSeconds` | 10 | A player whose connection sends nothing this long leaves (announced in the next frame, `ConnectionTimedOutEvent`; the Netcode server system disconnects it); 0 = only the transport notices. A server that itself did not update for over a second (a paused host) times nobody out for it |
 | `ValidateSimulationHash` | true | Reject clients whose `LockstepSimulation.DefaultSimulationHash` differs |
 | `StartData` | empty | `FixedList128Bytes<byte>` (126 bytes) for match parameters |
 | `Teams` | empty | `FixedList128Bytes<byte>`: the team of slot `s` at index `s`, 1-255, 0 or missing = none; at most `MaxPlayers` entries. `server.SetTeam` changes it in the lobby |
@@ -33,15 +34,17 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | Setting | Default | Meaning |
 |---|---|---|
 | `Simulate` | true | False for bots and thin clients (no simulation, no checksums) |
-| `InputMarginTicks` | 1.5 | Target arrival margin of input before its deadline; late inputs add up to 4 ticks automatically, decaying back |
-| `PlayoutDelayTicks` | 1 | Frames kept in reserve before display; 2 × measured jitter is added |
+| `InputMarginTicks` | 1.5 | Target arrival margin of input before its deadline; late inputs add half a tick each automatically, decaying half a tick a second |
+| `PlayoutDelayTicks` | 1 | Frames kept in reserve before display; 2 × measured jitter and the stall delay are added |
 | `MaxPlayoutDelayTicks` | 10 | Cap of the playout delay; it never cuts `PlayoutDelayTicks` itself |
 | `MaxTicksPerUpdate` | 60 | Most ticks simulated in one update while catching up |
 | `MaxSimulationMillisecondsPerUpdate` | 16 | Time budget per update while catching up; at least one tick runs |
 | `PingIntervalSeconds` | 0.5 | Round-trip measurement interval |
 | `RecordReplay` | true | Keep all frames for `ExportReplay`; a thin client without it keeps none |
 | `StopOnDesync` | false | Stop simulating after a desync report |
-| `MaxPacketSize` | 1024 | Packet size limit (0 or less means 1024); Netcode caps it at 1024 |
+| `MaxPacketSize` | 1024 | Packet size limit (0 or less means 1024); Netcode caps it at 1024, at 990 with the redundant channel |
+| `MaxExtraInputMarginTicks` | 2 | Cap of the margin late inputs add; it never exceeds a round trip either; 0 = no automatic margin |
+| `MaxStallDelayTicks` | 3 | Cap of the playout delay stalls add (one tick per stall, decaying a tick per ten seconds); 0 = jitter alone |
 
 `LockstepClient` validates its settings (`LockstepClientSettings.Validate`): settings never filled in (`default`)
 throw instead of running one tick per update.
@@ -58,7 +61,18 @@ player joins (no countdown, no late join).
 ## `LockstepClientConfig` (Netcode client worlds; `Pragma.Dots.Lockstep.Netcode`, only with com.unity.netcode)
 
 `settings` (`LockstepClientSettings`), `joinData` (`FixedList64Bytes<byte>`), `waitForActorRegistry`, `slot`
-(`OptionalValue<int>`: the slot to join; unset takes the first free one).
+(`OptionalValue<int>`: the slot to join; unset takes the first free one), `redundantChannel` (talk through a
+`LockstepRedundantChannel` in `LockstepDatagramRpc`s on the out-of-band pipeline; needs `LockstepDriverConstructor` or
+`LockstepNetcode.UseUnreliableOutOfBandPipeline` on the server and the clients).
+
+## `LockstepRedundantChannelSettings` (start from `LockstepRedundantChannelSettings.Default`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MaxDatagramSize` | 1024 | Largest datagram; keep it below the path MTU. The session's packets are 34 bytes smaller (`channel.MaxPacketSize`) |
+| `RedundantCopies` | 3 | Datagrams in a row that carry a packet; afterwards only a timeout (round trip based, backing off) resends it. 1 = plain retransmission |
+| `MaxInFlightBytes` | 64 KB | Unacknowledged bytes per connection; newer packets wait. After a second without acknowledgements nothing new is sent |
+| `MaxDatagramsPerFlush` | 8 | Datagrams per connection and `Flush` |
 
 ## `LockstepServerConfig` (Netcode server worlds; `Pragma.Dots.Lockstep.Netcode`, only with com.unity.netcode)
 
@@ -70,7 +84,7 @@ player joins (no countdown, no late join).
 input delay ≈ RTT
             + 1 / TickRate                                   (the server closes tick T when its clock reaches T + 1)
             + (InputMarginTicks + automatic extra margin) / TickRate
-            + min(PlayoutDelayTicks + 2 × jitter, max(PlayoutDelayTicks, MaxPlayoutDelayTicks)) / TickRate
+            + min(PlayoutDelayTicks + 2 × jitter + stall delay, max(PlayoutDelayTicks, MaxPlayoutDelayTicks)) / TickRate
             + one rendered frame
 ```
 
@@ -86,6 +100,9 @@ well; action games do not (no prediction or rollback in this package).
   leave): idle players cost nothing, an active player costs about its input size per tick.
 - Late join: the whole history is sent, limited by `MaxSendBytesPerUpdate` per update.
 - Checksums: one message per `ChecksumInterval` ticks per client.
+- With the redundant channel each datagram repeats the unacknowledged packets (up to `RedundantCopies` times each), so
+  the lockstep payload about doubles, while Transport's acknowledgements of reliable packets go away. Netcode's own
+  snapshot and command packets (at `NetworkTickRate`) exist only for connections in game, which lockstep does not need.
 
 ## Timing internals
 

@@ -61,7 +61,7 @@ ECV, the view layer of the author's own earlier RTS, adapted to lockstep.
 | Replays | Event log, timeline window | Input history + checksums, verification | Frames + checksums, verification |
 | Offline | Local transport | Local mode | Offline mode over the same protocol (loopback) |
 | Presentation | Views module, interpolation from a world copy | Entity views, four frames, misprediction smoothing | GameObject views ported from ECV, `LockstepViewSystem` Entities Graphics copies, direct reads; `LockstepTransformPrevious` interpolation |
-| Transport | Photon, Ragon, local | Photon Realtime | Netcode for Entities RPC, loopback, custom `ILockstepTransport` |
+| Transport | Photon, Ragon, local | Photon Realtime | Netcode for Entities RPC (reliable, or unreliable with redundancy), loopback, custom `ILockstepTransport` |
 
 ## Taken from Photon Quantum
 
@@ -187,9 +187,9 @@ desyncs from state missing in it. With Entities it would also need world seriali
 ids, blob assets and baked content. Re-simulating from tick 0 is exact by construction; its cost grows with the match
 length, which is why snapshots stay on the roadmap.
 
-**Unreliable input with redundancy and delta compression** (Quantum). Netcode RPCs are reliable and ordered, so
-redundancy is unnecessary. Frames already carry only players whose input changed, and clients send a one-byte repeat
-flag for unchanged input.
+**Delta compression of input** (Quantum). Frames already carry only players whose input changed, and clients send a
+one-byte repeat flag for unchanged input. Redundancy itself was left out at first, since Netcode RPCs are reliable and
+ordered, and taken later for lossy networks (decision 23).
 
 **Time dilation** (Quantum). It exists to keep prediction within the rollback window. In strict lockstep a slow client
 only delays its own input, which the server replaces by the previous one.
@@ -531,6 +531,37 @@ These came up while building on Entities; neither reference package deals with t
     slot (`SlotTaken`) instead of giving another one: a lobby that seats its players expects exactly that seat, and a
     silent fallback would put two players' sides the wrong way round. The slot is a byte of the join request, not of
     the join data: the server assigns slots and never reads the game's join data.
+
+23. **A redundant channel for lossy networks.** A game measured on mobile networks through Unity Relay showed that
+    latency alone was absorbed (no stalls up to 300 ms more round trip) but 1 % loss stood the picture still for
+    0.1-0.2 s several times every 40 seconds, and late inputs pushed the input margin to its cap for minutes. The cause
+    is head-of-line blocking: every packet travels as a reliable RPC, and a lost one holds back every frame behind it
+    until Transport resends it, a round trip and a timeout later. Quantum sends input unreliably with redundancy for
+    this reason. Netcode for Entities sends every RPC reliably and has no unreliable message of its own beside ghosts
+    and commands, which serve another model; but it has a second reliable pipeline for out-of-band RPCs, which it does
+    not use itself, and its receive path does not depend on that pipeline being reliable. Pointed at the unreliable
+    fragmented pipeline where the drivers are built (it cannot change later: the RPC system keeps a copy of the
+    pipelines), it carries `LockstepDatagramRpc`s without retransmission.
+    The reliability moves into `LockstepRedundantChannel`, below the framer and transport-agnostic, so the lockstep
+    protocol, its assumption of a reliable ordered stream and determinism stay as they were, and the loopback network
+    with loss tests it without Netcode. Every datagram carries the acknowledgement of the other direction (the next
+    sequence expected and a mask of the 32 after it) and the packets not acknowledged yet, each in up to three
+    datagrams in a row: a lost datagram is replaced by the next, a tick later, at the price of about twice the lockstep
+    payload, while Transport's own acknowledgements of reliable packets go away. What all copies lost comes back after a
+    timeout from the measured round trip, together with everything else in flight, backing off; a peer that stops
+    acknowledging for a second gets no new packets, so a minimized app is not flooded. Sequence numbers are message
+    numbers per side and connection under a random epoch: a client created anew over the same connection starts a
+    stream of its own and the old one is ignored, without a handshake. Tick-based acknowledgement of frames and inputs
+    was the other design; it would have changed the protocol and needed the same machinery for joins, commands and
+    every other message.
+    The same measurements changed two adaptations of the client. The playout delay followed only the jitter estimate,
+    which leaves out the bursts in which a held-back frame arrives, so stalls repeated: each stall now adds a tick,
+    decaying in ten seconds. The input margin grew half a tick per late input up to four ticks and decayed by about 0.15
+    tick a second, so on a lossy network it stayed at four ticks: a late input costs only its tick (the previous input
+    repeats, commands move on), the margin delays every order, so it is now capped at two ticks and a round trip, and
+    decays half a tick a second. A lost player was noticed only by the transport, which took minutes through a relay;
+    the server now times out a slot silent for ten seconds, and forgives the silence it caused itself when a host's app
+    was paused.
 
 ## Limitations and future work
 

@@ -20,7 +20,7 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
 | `Assets/PragmaDOTS/Core/Utils` | `Pragma.Dots.Utils` (`Runtime`): `FixedDictionary4096Bytes`, `OptionalValue`, `EnumId` (enum values as ints, Burst-compatible). `Pragma.Dots.Utils.Editor` (`Editor`): fixed list and fixed string drawers. `Pragma.Dots.Utils.Physics` (`Physics`, only with `com.unity.physics`): `CollisionMatrixToFilter`. `Pragma.Dots.Utils.Entities` (`Entities`): signals (`Signals`, `SignalTag`, `SignalCleanupSystem`), `BufferDictionary`, `EntityManagerExtensions`, `EntityHierarchy` (the editor's hidden tag, found by name) |
 | `Assets/PragmaDOTS/Core/Actors` | `Pragma.Dots.Actors` (`Runtime`): `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorKeyAttribute`, `ActorAuthoring`, `IActorBuilder` and the run-time builder, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` (registry and placed actors at run time), components in `Components`. `Pragma.Dots.Actors.Authoring` (`Authoring`): `ActorCatalogAuthoring`, the actor bakers (catalog into registry, `ActorAuthoring` into placed actor) and the baking builder. `Pragma.Dots.Actors.Editor` (`Editor`): the actor inspectors and the key field drawer |
 | `Assets/PragmaDOTS/Core/Editor` | `Pragma.Dots.Editor`: *Project Settings > Pragma > DOTS* (module defines) |
-| `Assets/PragmaDOTS/Modules/Lockstep/Runtime` | `PRAGMA_DOTS_LOCKSTEP`. `Pragma.Dots.Lockstep`, the lockstep assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components` (`LockstepTeams`: the team of every slot, from `LockstepSessionConfig.Teams`, which the lobby sets through `LockstepServer.SetTeam`). `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`, `LockstepActorUtility` (the registry and placed actors copied into the simulation). `Parts`: the Transform and Entity Id actor parts. `Spatial`: `LockstepSpatialIndex` |
+| `Assets/PragmaDOTS/Modules/Lockstep/Runtime` | `PRAGMA_DOTS_LOCKSTEP`. `Pragma.Dots.Lockstep`, the lockstep assembly. `Protocol`: transport-agnostic `LockstepServer`, `LockstepClient`, settings, framing, `LockstepRedundantChannel` (reliable over unreliable datagrams, with redundancy), frame history, replays, loopback network. `Simulation`: `LockstepSimulation` (the isolated world), the system group, command buffer systems, frame application, checksums, entity ids; components and singletons in `Simulation/Components` (`LockstepTeams`: the team of every slot, from `LockstepSessionConfig.Teams`, which the lobby sets through `LockstepServer.SetTeam`). `Transforms`: `LockstepTransform`, history and interpolation. `Client`: local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`, `LockstepActorUtility` (the registry and placed actors copied into the simulation). `Parts`: the Transform and Entity Id actor parts. `Spatial`: `LockstepSpatialIndex` |
 | `Assets/PragmaDOTS/Modules/Lockstep/Editor` | `Pragma.Dots.Lockstep.Editor`: *Window > Pragma > Lockstep Sessions* |
 | `Assets/PragmaDOTS/Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`, only with `com.unity.netcode`: the RPC and the Netcode server and client systems; config, status and start/end request components in `Components` |
 | `Assets/PragmaDOTS/Modules/Navigation` | `PRAGMA_DOTS_NAVIGATION`, needs Lockstep. `Pragma.Dots.Navigation` (`Runtime`): grid, obstacles and footprint geometry, agents, `LockstepPathfinder` (A* and string pulling in integer math), the navigation systems, the gameplay helpers `LockstepNavGridView` (grid view, places around footprints) and `LockstepNavReach`, and the actor parts (`Parts`) |
@@ -64,7 +64,11 @@ The package is unreleased: backward compatibility is not required yet, prefer cl
   `FORMAT_VERSION`. `LockstepSimulation.DefaultSimulationHash` covers the protocol version and the simulation system
   list, which is what `ValidateSimulationHash` compares.
 - **Netcode integration** is one hand-serialized RPC (`LockstepPacketRpc`, 1024 bytes) on the reliable channel; the
-  framer fragments larger messages. Connections are tracked by entity, not by `NetworkId`.
+  framer fragments larger messages. Connections are tracked by entity, not by `NetworkId`. With
+  `LockstepClientConfig.redundantChannel` the packets go through `LockstepRedundantChannel` (`Protocol`, below the framer)
+  as `LockstepDatagramRpc`s, out-of-band RPCs on the pipeline `LockstepNetcode.UseUnreliableOutOfBandPipeline` makes
+  unreliable in the driver constructor (`LockstepDriverConstructor`); the server answers each client the way it talks.
+  The channel's datagram format has its own format byte; the lockstep protocol above it does not change with it.
 - **Modules.** Lockstep, navigation, vision, stats, views and state machines compile only with their define
   (`defineConstraints`), all off in a new project; this project turns every one on in Player Settings (through *Project Settings > Pragma > DOTS*).
   Navigation, vision, stats and views require Lockstep and list both defines in their constraints; the settings page
@@ -162,9 +166,13 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   non-stacking modifiers, sources, timed modifiers, resources and caps, regeneration, pending and depleted resources, changes, grants, enum ids in Burst, change
   versions, a session with a late joiner, the actor parts and their merging), state machines (transitions, enter and exit, Burst jobs against a managed
   model, several machines per entity, the actor part, a session with a late joiner), sessions
-  (latency, jitter, late join, disconnects, desync attribution, replays, commands with large data), presentation,
-  GameObject views (component and buffer parts, prefabs by key), offline mode and a real Netcode server with two clients (including a command larger than the
-  reliable window and send and received requests hidden from the Hierarchy window).
+  (latency, jitter, late join, disconnects, desync attribution, replays, commands with large data, player timeouts and
+  paused hosts, stalls and the input margin, no garbage in a steady session), the redundant channel (order and exactly
+  once over loss, duplication and reordering, epochs, frozen peers) and sessions over it with loss against plain
+  retransmission, presentation,
+  GameObject views (component and buffer parts, prefabs by key), offline mode and a real Netcode server with two clients
+  over reliable RPCs and over the redundant channel (including a command larger than the reliable window, send and
+  received requests hidden from the Hierarchy window, and 10 % packet loss in Transport's simulator).
 - The suites reach internals through `InternalsVisibleTo` in `Modules/Lockstep/Runtime/AssemblyInfo.cs` (and
   `Core/Actors/Runtime/AssemblyInfo.cs`, `Core/Actors/Editor/AssemblyInfo.cs`, `Core/Utils/Editor/AssemblyInfo.cs`,
   `Core/Mathematics/Runtime/AssemblyInfo.cs`, `Core/Mathematics/Editor/AssemblyInfo.cs`); the module suites reach the internal helpers of the lockstep suite through its

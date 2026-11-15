@@ -105,6 +105,18 @@ LockstepNetcode.Connect(remote, NetworkEndpoint.Parse(address, 7979));
   gets the client with `LockstepWorlds.TryGetClient` and calls `SetInput` / `AddCommand`.
 - Keep `TickRate` at or below Netcode's `ClientServerTickRate.SimulationTickRate`: the server closes lockstep ticks
   inside its own update.
+- **Lossy networks (mobile, Relay over the internet).** Netcode RPCs are reliable and ordered: every lost packet holds
+  the frames behind it until Transport resends it, and the picture stands still for 0.1-0.3 s. Use the redundant
+  channel: on the host and on every client set `NetworkStreamReceiveSystem.DriverConstructor = new LockstepDriverConstructor(gameConstructorOrNull)`
+  before the worlds are created (or call `LockstepNetcode.UseUnreliableOutOfBandPipeline(ref driverStore)` where the game
+  builds its driver store), and join with `JoinSession(..., redundantChannel: true)`. Lockstep packets then travel as
+  `LockstepDatagramRpc`s on the out-of-band pipeline made unreliable, and a `LockstepRedundantChannel` repeats what was
+  not acknowledged in the next datagrams; the server answers each client the way it talks. Both sides need the driver
+  constructor: a datagram on a pipeline the receiver does not take for out of band trips a Netcode assertion, and a
+  client without it logs "The redundant channel runs over a reliable out-of-band pipeline".
+- **Traffic.** Lockstep sends a packet per tick each way plus pings. Netcode adds its own packets at
+  `ClientServerTickRate.NetworkTickRate` only for connections in game (`NetworkStreamInGame`), which lockstep does not
+  need; without the redundant channel Transport also acknowledges every reliable packet with one of its own.
 
 ## Match flow
 
@@ -118,7 +130,7 @@ Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running
 | Joined, waiting | `server.State == Lobby`, `PlayerCount`; `server.SetTeam(slot, team)` puts slots into teams | `client.State == Lobby`, `LocalSlot` |
 | Start | `RequestStart(serverWorld)` or `server.StartGame(now)`: `State` is `Running` at once, `GetTickPosition(now)` is negative during the countdown | The start message arrives during the countdown: `Running`, `StartedEvent`, the simulation world is created |
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
-| Leave | Announced in a frame; the slot frees up | `client.Leave()`, or the connection/world goes away |
+| Leave | Announced in a frame; the slot frees up. A connection silent for `PlayerTimeoutSeconds` (10) leaves too, raises `ConnectionTimedOutEvent`, and the Netcode server system disconnects it; a host whose app was paused times nobody out for that pause | `client.Leave()`, or the connection/world goes away. Over the redundant channel the client system keeps the channel up to 2 s until the server acknowledged the leave |
 | End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent` with `client.EndReason`; the remaining frames are still simulated. A dropped connection ends with `ConnectionLost` (`client.OnDisconnected()`; the Netcode client system calls it and keeps the session registered until the config goes). Ending in the lobby tells the waiting players the same way; later joins get `GameEnded` |
 | Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded`, `SlotTaken` |
 
@@ -173,6 +185,8 @@ if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 {
     // client.State, LocalSlot, JoinTick, RejectReason, EndReason, Config, SimulatedTicks, ConfirmedTicks, ServerTicks, InterpolationAlpha,
     // RoundTripTime (NaN until measured), JitterTicks, IsDesynced, DesyncTick,
+    // StallCount, StalledSeconds (the picture stood still waiting for frames), SecondsSinceLastPacket (server silence),
+    // TargetPlayoutDelayTicks, ExtraInputMarginTicks: what a network indicator shows,
     // Simulation (null before the start and on non-simulating clients; also LockstepWorlds.TryGetSimulation)
 }
 if (LockstepWorlds.TryGetServer(serverWorld, out var server)) // a server world, or the offline world
@@ -184,7 +198,7 @@ if (LockstepWorlds.TryGetServer(serverWorld, out var server)) // a server world,
 ```
 
 Subscribe to `client.StartedEvent`, `DesyncedEvent`, `EndedEvent`, `RejectedEvent` and `server.DesyncDetectedEvent`,
-`ProtocolViolationEvent` for UI and logging. The *Window > Pragma > Lockstep Sessions* debug window shows all of this
+`ProtocolViolationEvent`, `ConnectionTimedOutEvent` for UI and logging. The *Window > Pragma > Lockstep Sessions* debug window shows all of this
 for every session in the editor.
 
 ## Tuning latency and smoothness
@@ -193,9 +207,12 @@ Perceived input delay is roughly one round trip plus `1 + InputMarginTicks + Pla
 (the 1 is the tick itself: the server closes tick T when its clock reaches T + 1; the playout part is capped by
 `MaxPlayoutDelayTicks`). At 30 Hz and 60 ms round trip that is roughly 200 ms.
 
-- Choppy movement on a jittery connection: raise `PlayoutDelayTicks` (smoothness for latency).
-- Frequent late inputs (`server.LateInputCount` grows): raise `InputMarginTicks`; the client already adds margin
-  automatically after late inputs.
+- Choppy movement on a jittery connection: raise `PlayoutDelayTicks` (smoothness for latency). Stalls (the frames
+  ran out) add a tick each to the delay, up to `MaxStallDelayTicks` (3), decaying a tick per ten seconds.
+- Regular short freezes on a lossy network (`client.StallCount` grows, `server.LateInputCount` too): the redundant
+  channel (see Netcode above), not more margin.
+- Frequent late inputs (`server.LateInputCount` grows): raise `InputMarginTicks`; the client already adds half a tick
+  after late inputs, up to `MaxExtraInputMarginTicks` (2) and never past a round trip, decaying half a tick a second.
 - Input feels slow on a good network: lower `InputMarginTicks` and `PlayoutDelayTicks` (not below about 0.5), or
   raise `TickRate` (more bandwidth and simulation cost).
 - One laggy player should not slow everybody: keep `MaxInputWaitTicks = 0` (their previous input repeats). For the
@@ -236,7 +253,14 @@ Requirements: reliable, ordered, exactly-once delivery per connection; packets u
 fragments larger messages); `now` from one monotonic clock in seconds per side. Dispose the server and clients and
 unregister them (`LockstepWorlds.UnregisterClient` / `UnregisterServer`) when the session ends. For local tests and
 bots, `LockstepLoopbackNetwork` (`ServerTransport`, `CreateClientTransport(id)`, `AttachServer`, `AttachClient`,
-`DetachClient`, `Deliver(now)`, `Latency`, `Jitter`) is a ready in-process transport.
+`DetachClient`, `Deliver(now)`, `Latency`, `Jitter`; `Loss` and `Reorder` to test a channel) is a ready in-process transport.
+
+Over an unreliable transport (raw UDP), put a `LockstepRedundantChannel` on each side as the session's transport:
+`new LockstepRedundantChannel(datagramTransport)`, the session's `MaxPacketSize = channel.MaxPacketSize`; on a datagram
+`channel.Receive(peerId, data, length, now)` and then `while (channel.TryRead(out var from, out var packet, out var n))
+session.OnPacket(...)` (a client passes connection id 0 and ignores `from`); `channel.Flush(now)` after the session's
+`Update`; `RemoveConnection(peerId)` when a peer leaves. Datagrams may be lost, duplicated and reordered; keep
+`LockstepRedundantChannelSettings.MaxDatagramSize` (1024) below the MTU.
 
 ## Replays
 
@@ -286,6 +310,10 @@ game's). Replays need the same simulation build.
 | "input set on the client is N bytes but the session input size is M" | `InputSize` != `UnsafeUtility.SizeOf<TInput>()` of the struct written to `LockstepLocalInput` |
 | Starts but nothing reacts to input | No system in `LockstepInputSystemGroup` writes `LockstepLocalInput`, or gameplay systems are outside `LockstepSimulationSystemGroup` |
 | Disconnects when unfocused | `Application.runInBackground = false` |
+| Freezes of 0.1-0.3 s every few seconds on mobile or Relay | Packet loss on the reliable pipeline: use the redundant channel (`LockstepDriverConstructor` on both sides, `redundantChannel: true`) |
+| "The redundant channel runs over a reliable out-of-band pipeline" | The client's drivers were built without `LockstepDriverConstructor` / `UseUnreliableOutOfBandPipeline` |
+| Netcode assertion about the reliable pipeline on the server | Clients send datagrams but the server's drivers were built without `LockstepDriverConstructor` |
+| A player leaves after "sent nothing for 10 s" | `PlayerTimeoutSeconds`: the client stopped sending (minimized app, lost network); raise it for a window to come back, 0 leaves it to the transport |
 | Entities Graphics copies missing | No actor registry in the presentation world, or `waitForActorRegistry` off while the subscene loads late |
 | Actors missing from the simulation | The catalog subscene had not loaded when the simulation was created (`waitForActorRegistry`), or the run-time content (`ActorUtility.CreateRegistry`, `CreatePlaced`) was built after the session started |
 | GameObject views missing in worlds created on demand | The view catalog was baked into a subscene that loaded before the world existed: register it with `EntityViewConfigProvider` (Views module, `pragma-dots-views`) |

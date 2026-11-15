@@ -92,7 +92,8 @@ Each is off after installation; [turn on](#turning-modules-on) the ones you use.
   - Desync detection by majority vote with a per-component breakdown, replays watched through ordinary clients at any
     speed and from any player's view, late join, offline mode over the same protocol.
   - Netcode for Entities integration (host, dedicated server, thin clients) in `Pragma.Dots.Lockstep.Netcode`,
-    compiled when the project has Netcode, over a transport-agnostic protocol.
+    compiled when the project has Netcode, over a transport-agnostic protocol; on lossy networks a redundant channel
+    over an unreliable pipeline replaces the retransmissions that stall the picture. Silent players time out.
   - Interpolated transforms, a spatial index for proximity queries, the Transform and Entity Id actor parts, and the
     registry and placed actors copied into every simulation.
 - **Navigation** (`Pragma.Dots.Navigation`). A walkability grid with ground heights baked from a terrain (steep slopes
@@ -158,7 +159,7 @@ reference.
 | `Pragma.Dots.Actors` | core | `ActorDefinition`, `ActorCatalog`, `ActorPart` and the generic parts, `ActorAuthoring`, `ActorLookup`, `ActorRegistryQuery`, `ActorUtility` and the actor components | simulation and presentation code |
 | `Pragma.Dots.Actors.Authoring` | core | `ActorCatalogAuthoring` and the bakers of the actor catalog and of placed actors | authoring code, if any |
 | `Pragma.Dots.Lockstep` | Lockstep | The protocol, the simulation world, its components, checksums, replays, offline mode, presentation helpers, the spatial index, the Transform and Entity Id actor parts and the copy of actors into the simulation | simulation and presentation code |
-| `Pragma.Dots.Lockstep.Netcode` | Lockstep, with `com.unity.netcode` | The Netcode for Entities RPC, the server and client systems, `LockstepNetcode` | bootstrap code |
+| `Pragma.Dots.Lockstep.Netcode` | Lockstep, with `com.unity.netcode` | The Netcode for Entities RPCs, the server and client systems, `LockstepNetcode`, `LockstepDriverConstructor` | bootstrap code |
 | `Pragma.Dots.Navigation` | Navigation | The walkability grid, obstacles, agents, `LockstepPathfinder`, the navigation systems and their actor parts | simulation code |
 | `Pragma.Dots.Vision` | Vision | The vision grid, vision sources, `LockstepVisionSystem`, the `LockstepVision` queries, their actor parts and the fog texture `LockstepVisionFog` | simulation code, and presentation code that draws the fog of war |
 | `Pragma.Dots.Stats` | Stats | Attributes, resources, modifiers, changes and grants, `LockstepStatSystem` and the `LockstepStats` helpers | simulation code, and presentation code that shows stats |
@@ -1452,14 +1453,15 @@ sides.
 | Call | Effect |
 |---|---|
 | `HostSession(serverWorld, settings)` | Hosts a session (replaces the config if one exists) |
-| `JoinSession(clientWorld, settings, joinData, waitForActorRegistry, slot)` | Joins as soon as the world is connected, into `slot` (`LockstepProtocol.ANY_SLOT`: the first free one) |
+| `JoinSession(clientWorld, settings, joinData, waitForActorRegistry, slot, redundantChannel)` | Joins as soon as the world is connected, into `slot` (`LockstepProtocol.ANY_SLOT`: the first free one), through the [redundant channel](#lossy-networks-the-redundant-channel) or reliable RPCs |
+| `UseUnreliableOutOfBandPipeline(ref driverStore)` | Makes the out-of-band pipeline unreliable, for the redundant channel; `LockstepDriverConstructor` calls it |
 | `Listen(serverWorld, endpoint)`, `Connect(clientWorld, endpoint)` | `NetworkStreamDriver.Listen` / `Connect` |
 | `RequestStart(serverWorld)` | Starts the match on the next server update with whoever joined |
 | `RequestEnd(serverWorld, reason)` | Ends the match |
 | `TryGetServer(serverWorld, out server)`, `TryGetClient(clientWorld, out client)` | The running session objects |
 
 The same can be done with components: create `LockstepServerConfig { settings }` or
-`LockstepClientConfig { settings, joinData, waitForActorRegistry }`, create an entity with
+`LockstepClientConfig { settings, joinData, slot, waitForActorRegistry, redundantChannel }`, create an entity with
 `LockstepStartGameRequest` or `LockstepEndGameRequest { reason }`, and read the `LockstepServerStatus` singleton
 (`state`, `closedTicks`, `playerCount`) in the server world.
 
@@ -1496,6 +1498,40 @@ its snapshot inside the world update and may see it. In the editor both kinds ca
 (`EntityHierarchy`), so the server and client worlds do not flicker in the Hierarchy window, whatever the order of the
 systems.
 
+#### Lossy networks: the redundant channel
+
+Netcode sends every RPC over a reliable, ordered pipeline, so one lost packet holds back every frame behind it until
+Transport resends it, a round trip and more later: on a mobile network with 1 % loss the picture stands still for
+0.1–0.3 s every few seconds, and late inputs push orders further ahead. The redundant channel avoids that. Lockstep packets
+travel as `LockstepDatagramRpc`s, out-of-band RPCs on a pipeline made unreliable, and a `LockstepRedundantChannel` on
+each side makes them reliable again its own way: every datagram repeats the packets the other side has not acknowledged
+yet (each in up to three datagrams in a row), so a lost datagram is replaced by the next one, a tick later. The lockstep
+protocol above it is unchanged, and so is determinism: every client still simulates the same frames in the same order.
+
+```csharp
+// Before the worlds are created, on the host and on every client: the out-of-band pipeline becomes unreliable.
+NetworkStreamReceiveSystem.DriverConstructor = new LockstepDriverConstructor(); // or new LockstepDriverConstructor(myRelayConstructor)
+
+// Each client opts in; the server answers every client the way it talks.
+LockstepNetcode.JoinSession(client, LockstepClientSettings.Default, redundantChannel: true);
+```
+
+- `LockstepDriverConstructor` wraps another driver constructor (Netcode's default, or the game's own, such as a Relay
+  one) and calls `LockstepNetcode.UseUnreliableOutOfBandPipeline(ref driverStore)`, which points the out-of-band pipeline
+  of every driver at Netcode's unreliable fragmented pipeline, with the network simulator when the driver has it. A game
+  that builds its driver store itself calls it before handing the store to Netcode (`ResetDriverStore`). Netcode sends
+  nothing out of band; out-of-band RPCs of the game itself become unreliable too.
+- The host and every client need it: a datagram arriving on a pipeline its receiver does not take for out of band trips
+  an assertion of Netcode. A client with the channel but without the unreliable pipeline works, over a reliable pipeline
+  and without the benefit, and logs a warning.
+- Measured over a loopback network with a 140 ms round trip, two players for 40 seconds: with 1 % and 5 % loss, plain
+  retransmission stood the picture still 2.4 % and 4 % of the time, up to 0.28 s at once, and placed inputs 11.5 and
+  16.6 ticks ahead; the channel stood still 0.1 % of the time for one frame at most and placed inputs 7.3 and 8.2 ticks
+  ahead (6.7 without loss). The lockstep payload about doubles (the copies), while Transport's acknowledgements of the
+  reliable pipeline go away.
+- A client that leaves keeps its channel for up to two seconds, until the server acknowledged the leave.
+- The channel is transport-agnostic: see [custom transports](#custom-transports) for using it over any datagram socket.
+
 #### Match flow
 
 ```
@@ -1513,7 +1549,9 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   grows with the match length.
 - **Leaving.** `client.Leave()`, removing the `LockstepClientConfig`, a dropped connection, or a disposed client
   world: the server announces the leave in a frame and the slot becomes free. A new config joins again over the same
-  connection.
+  connection. A player whose connection goes silent (an app minimized on a phone, a network gone) leaves after
+  `PlayerTimeoutSeconds` (10 by default), whatever the transport's own timeout; the Netcode server system then
+  disconnects it. A host whose own app was paused times nobody out for its pause.
 - **End.** `RequestEnd` / `server.EndGame(reason)` stops closing ticks and tells everybody;
   `client.EndedEvent` fires, `client.EndReason` says why (`Finished`, or `ServerShutdown` when the server config goes
   away) and the client finishes simulating the frames it already has. Ending in the lobby tells the players waiting
@@ -1537,6 +1575,8 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `InterpolationAlpha` | Blend factor for rendering, in `[0, 1]` |
 | `PlaybackSpeed` | How fast the playout runs: 1 is real time, 0 holds the picture (replays) |
 | `RoundTripTime`, `JitterTicks` | Network measurements |
+| `StallCount`, `StalledSeconds`, `SecondsSinceLastPacket` | How often and how long the picture stood still waiting for frames, and how long the server has been silent: the inputs of a network indicator |
+| `TargetPlayoutDelayTicks`, `ExtraInputMarginTicks` | The playout delay the client aims for now (jitter and stalls included) and what late inputs added to the input margin |
 | `IsDesynced`, `DesyncTick`, `LocalChecksums` | Desync state |
 | `EndReason` | Why the match ended, once `State` is `Ended` |
 | `StartedEvent`, `DesyncedEvent`, `EndedEvent`, `RejectedEvent` | Events |
@@ -1548,7 +1588,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `Config`, `Settings` | The session configuration and the server settings |
 | `ClosedTicks`, `PlayerCount`, `History` | Progress, players present, every closed frame |
 | `VerifiedChecksumCount`, `LateInputCount` | Diagnostics |
-| `DesyncDetectedEvent`, `ProtocolViolationEvent` | Events; a violation (malformed data, or a message or commands over the limits) carries the connection id and the reason, and the data is dropped |
+| `DesyncDetectedEvent`, `ProtocolViolationEvent`, `ConnectionTimedOutEvent` | Events; a violation (malformed data, or a message or commands over the limits) carries the connection id and the reason, and the data is dropped; a timeout carries the connection whose player left for `PlayerTimeoutSeconds` of silence |
 | `StartGame`, `EndGame`, `ExportReplay`, `SetTeam`, `GetTeam`, `TryGetPlayerSlot`, `IsSlotInUse` | Actions and queries; `SetTeam` only in the lobby |
 
 | `LockstepReplayHost` | |
@@ -1619,10 +1659,16 @@ a 60 ms round trip this is roughly 200 ms, which suits strategy games. Tune it t
 - **Tick rate.** 15–30 ticks per second is typical for lockstep; 10–20 for RTS. A higher rate shortens the
   quantization delay but costs bandwidth and simulation time. Keep it at or below Netcode's `SimulationTickRate`
   (the server closes ticks inside its update).
-- **`InputMarginTicks`** (default 1.5) trades latency for fewer late inputs. Late inputs raise the margin
-  automatically and it decays back.
+- **`InputMarginTicks`** (default 1.5) trades latency for fewer late inputs. Late inputs raise the margin by half a
+  tick, up to `MaxExtraInputMarginTicks` (2) and never past a round trip, and it decays by half a tick a second while
+  inputs come in time. A late input costs only its tick (the previous input repeats, commands move to the next frame),
+  while the margin delays every input, so it stays small.
 - **`PlayoutDelayTicks`** (default 1) and `MaxPlayoutDelayTicks` (10) trade latency for smoothness on jittery
-  connections.
+  connections. Each stall (the confirmed frames ran out) adds a tick, up to `MaxStallDelayTicks` (3), which decays by a
+  tick in ten seconds: the jitter estimate leaves out the bursts in which a frame held back by a lost packet arrives.
+- **Loss.** On a lossy network (mobile, Wi-Fi far from the router) use the
+  [redundant channel](#lossy-networks-the-redundant-channel): retransmissions of a reliable pipeline stand the picture
+  still for a round trip and more, and push orders ticks further ahead.
 - **`MaxInputWaitTicks`** (default 0) on the server: 0 never waits, so a lagging player's previous input repeats and
   only that player feels the lag. A positive value holds a frame up to that many ticks for missing input: classic
   lockstep, where everybody waits for the slowest player. A player is waited for once one of its inputs arrived in
@@ -1630,7 +1676,10 @@ a 60 ms round trip this is roughly 200 ms, which suits strategy games. Tune it t
 
 Bandwidth: a frame carries a player's record only when something about that player changed, so idle players cost
 nothing and an active player costs roughly the input size per tick downstream to every client. Upstream, each client
-sends its input once per tick (repeats are a single flag).
+sends its input once per tick (repeats are a single flag). Lockstep sends a packet per tick each way (plus a ping and
+its pong twice a second); Netcode adds its own packets at `ClientServerTickRate.NetworkTickRate` for connections that
+are in game (`NetworkStreamInGame`), which lockstep does not need, and Transport acknowledges reliable packets with
+packets of its own unless the redundant channel is used.
 
 ### Configuration reference
 
@@ -1657,6 +1706,7 @@ Start from `LockstepServerSettings.Default`. The settings are serializable, so t
 | `MaxCommandDataSize` | 1 MB | Largest data of one command; a larger one is a protocol violation |
 | `MaxCommandBytesPerTick` | 64 KB | Command bytes of one player per frame; the rest waits for the next ticks, a single larger command goes alone |
 | `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player the server holds (sent ahead or waiting); beyond it they are dropped as a protocol violation |
+| `PlayerTimeoutSeconds` | 10 | A player whose connection sends nothing for this long leaves (the next frame announces it) and `ConnectionTimedOutEvent` is raised; 0 leaves it to the transport. A server that itself stood still (a paused host) times nobody out for it |
 | `ValidateSimulationHash` | true | Refuse clients whose `DefaultSimulationHash` differs |
 | `StartData` | empty | Up to 126 bytes, readable in the simulation through `LockstepSessionInfo` |
 | `Teams` | empty | The [team](#teams) of every slot at its index, at most `MaxPlayers` entries: 1–255, or 0 (and a missing entry) for none |
@@ -1677,6 +1727,19 @@ Start from `LockstepClientSettings.Default`.
 | `RecordReplay` | true | Keep every frame so the match can be exported; a thin client without it keeps no frames at all |
 | `StopOnDesync` | false | Stop simulating after a reported desync |
 | `MaxPacketSize` | 1024 | Largest packet handed to the transport |
+| `MaxExtraInputMarginTicks` | 2 | How far the input margin grows after late inputs (and never past a round trip); 0 keeps it at `InputMarginTicks` |
+| `MaxStallDelayTicks` | 3 | How far the playout delay grows after stalls; 0 sizes it by the jitter alone |
+
+#### `LockstepRedundantChannelSettings`
+
+Start from `LockstepRedundantChannelSettings.Default`; see [lossy networks](#lossy-networks-the-redundant-channel).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MaxDatagramSize` | 1024 | Largest datagram handed to the transport; keep it below the path MTU |
+| `RedundantCopies` | 3 | Datagrams in a row that carry a packet before only a timeout sends it again; 1 is plain retransmission |
+| `MaxInFlightBytes` | 64 KB | Bytes sent and not acknowledged per connection; newer packets wait |
+| `MaxDatagramsPerFlush` | 8 | Datagrams per connection and flush; bursts spread over flushes |
 
 #### `LockstepOfflineConfig`
 
@@ -1893,6 +1956,32 @@ client.Update(now);                                   // every frame
 - Register the client with `LockstepWorlds.RegisterClient(presentationWorld, client)` so `LockstepViewSystem` and the
   debug window find it, and unregister it when done.
 
+Over an unreliable transport (raw UDP, an unreliable channel of a relay), put a `LockstepRedundantChannel` on each side:
+it is the session's transport, it sends datagrams through the unreliable one and turns the datagrams it receives back
+into the session's packets, in order and exactly once.
+
+```csharp
+var channel = new LockstepRedundantChannel(myDatagramTransport);   // LockstepRedundantChannelSettings optional
+serverSettings.MaxPacketSize = channel.MaxPacketSize;
+var server = new LockstepServer(serverSettings, channel);
+
+// A datagram arrived (the same on a client, with connection id 0 and client.OnPacket):
+channel.Receive(connectionId, data, length, now);
+while (channel.TryRead(out var from, out var packet, out var packetLength))
+{
+    server.OnPacket(from, packet, packetLength, now);
+}
+
+server.Update(now);
+channel.Flush(now);                                   // after the session's update
+channel.RemoveConnection(connectionId);               // a peer left
+```
+
+The datagrams may be lost, duplicated and reordered; `MaxDatagramSize` should stay below the path MTU.
+`DatagramsSent`, `DatagramsReceived`, `PacketsResent` and `GetRoundTripTime` tell how the link is doing. In tests,
+`LockstepLoopbackNetwork.Loss` and `Reorder` make the loopback network unreliable, and `ILockstepClientEndpoint` lets
+it deliver to whatever stands in front of a client.
+
 ### Protocol
 
 All messages are little-endian byte strings, versioned by `LockstepProtocol.VERSION`.
@@ -1915,6 +2004,12 @@ A frame is a record count followed by one record per player with news: the slot,
 `Commands`) and the matching payloads. A player without a record keeps the previous input. A command is written the
 same way in `Input` and in frames: type hash, payload size, payload, data length (var uint), data. The server checks
 that form and relays the bytes without decoding them.
+
+Below the messages, `LockstepPacketFramer` cuts messages into packets (a header byte: complete, fragment, last
+fragment). Over the redundant channel each datagram carries a format byte, the sender's stream epoch, the acknowledged
+epoch, the next sequence expected (var uint) and a mask of the 32 sequences after it, the oldest sequence the sender
+still holds (var uint), and the packets, each as a sequence delta and a length (var uints) with its bytes. An epoch is
+random per side and connection: a side created anew starts a stream of its own, and the old one is ignored.
 
 ### Limits
 
@@ -2672,7 +2767,7 @@ public partial struct SpellActiveState : ISystem
 | `Core/Utils/Physics` | `Pragma.Dots.Utils.Physics`: `CollisionMatrixToFilter` |
 | `Core/Utils/Entities` | `Pragma.Dots.Utils.Entities`: signals and their cleanup, `BufferDictionary`, `EntityManagerExtensions`, `EntityHierarchy`; `SignalTag` in `Components` |
 | `Core/Editor` | `Pragma.Dots.Editor`: the modules page |
-| `Modules/Lockstep/Runtime/Protocol` | `LockstepServer`, `LockstepClient`, settings, framing, frame history, replays and `LockstepReplayHost`, loopback network |
+| `Modules/Lockstep/Runtime/Protocol` | `LockstepServer`, `LockstepClient`, settings, framing, the redundant channel, frame history, replays and `LockstepReplayHost`, loopback network |
 | `Modules/Lockstep/Runtime/Simulation` | `LockstepSimulation`, the system group, command buffer systems, frame application, checksums, entity ids |
 | `Modules/Lockstep/Runtime/Simulation/Components` | The simulation components and singletons (`LockstepTime`, `LockstepPlayer`, `LockstepCommand`...) |
 | `Modules/Lockstep/Runtime/Spatial` | `LockstepSpatialIndex`: points sorted into cells for proximity queries |
@@ -2680,7 +2775,7 @@ public partial struct SpellActiveState : ISystem
 | `Modules/Lockstep/Runtime/Client` | Local input, `LockstepWorlds`, offline mode, `LockstepViewSystem`, `LockstepActorUtility` (actors into the simulation) |
 | `Modules/Lockstep/Runtime/Parts` | The Transform and Entity Id actor parts |
 | `Modules/Lockstep/Editor` | `Pragma.Dots.Lockstep.Editor`: the debug window |
-| `Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`: the RPC, server and client systems, `LockstepNetcode`; config, status and request components in `Components` |
+| `Modules/Lockstep/Netcode` | `Pragma.Dots.Lockstep.Netcode`: the RPCs (reliable packets, datagrams of the redundant channel), server and client systems, `LockstepNetcode`, `LockstepDriverConstructor`; config, status and request components in `Components` |
 | `Modules/Navigation` | `Runtime`: `Pragma.Dots.Navigation`, its parts in `Parts` |
 | `Modules/Vision` | `Runtime`: `Pragma.Dots.Vision`, its parts in `Parts`, the fog texture `LockstepVisionFog` in `Presentation` |
 | `Modules/Stats` | `Runtime`: `Pragma.Dots.Stats`, its parts in `Parts` |
@@ -2746,6 +2841,10 @@ Copy-Item -Recurse -Force (Resolve-Path "Library/PackageCache/com.pragma.dots@*/
 | A capped resource stays empty or ignores its cap | The entity has no attribute of the `cap` type, so the resource is uncapped; list the cap attribute in the same *Stats* part (it warns) |
 | `LockstepStatSystem` recalculates every tick | A system writes the stats every tick, also by only taking `DynamicBuffer<LockstepStat>` in a `SystemAPI.Query`, which is read-write: read them with `in` in an `IJobEntity` or with a read-only `BufferLookup` |
 | Connections drop when the window loses focus | `Application.runInBackground` is off |
+| The picture stands still for a fraction of a second every few seconds on mobile networks | Packet loss on the reliable pipeline: every loss waits for a retransmission. Use the [redundant channel](#lossy-networks-the-redundant-channel) |
+| "The redundant channel runs over a reliable out-of-band pipeline" | The client joined with `redundantChannel` but its drivers were built without `LockstepDriverConstructor` / `UseUnreliableOutOfBandPipeline`; the server needs it too |
+| A Netcode assertion about the reliable pipeline on the server | A client sends datagrams on an unreliable out-of-band pipeline the server did not make its out-of-band one: build the server's drivers with `LockstepDriverConstructor` too |
+| "Connection N sent nothing for 10 s" and the player leaves | The client stopped sending (minimized app, lost network): `PlayerTimeoutSeconds`; raise it to give players a window to come back |
 | A product of two `FixedPoint` values comes out as a huge or negative number | The 64-bit intermediate of `a * b` overflowed (magnitudes above about 2·10⁹): use `FixedMath.MulDiv` or `TryMultiply`, and find the place with `PRAGMA_DOTS_CHECKED_MATH`, which makes the operators throw |
 | A "Burst error" in the console | Burst falls back to managed code silently in some cases; fix the reported construct (for example a managed array in a Burst method) |
 | A state machine stays in `NONE` | No subclass of `StateMachineSystemGroup<T>` updates its component, or the subclass is not in a group of this world (in a lockstep simulation: `LockstepSimulationSystemGroup`) |

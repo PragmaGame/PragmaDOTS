@@ -4,6 +4,49 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The redundant channel (Lockstep): `LockstepRedundantChannel`, a reliable, ordered channel over an unreliable datagram
+  transport in which every datagram repeats the packets the other side has not acknowledged (each in up to
+  `RedundantCopies` datagrams in a row, then after a timeout from the round trip), so a lost datagram is replaced by the
+  next one instead of holding back everything behind it. Acknowledgements ride on every datagram (cumulative plus a
+  mask of 32), a peer that stops acknowledging gets no new packets and backed-off retransmissions, and a side created
+  anew over the same connection starts a stream of its own (random epochs). `LockstepRedundantChannelSettings`;
+  `DatagramsSent`, `DatagramsReceived`, `PacketsResent`, `GetRoundTripTime` for diagnostics. Transport-agnostic, like
+  the protocol above it, which does not change.
+- The redundant channel over Netcode for Entities: `LockstepClientConfig.redundantChannel` (`JoinSession(...,
+  redundantChannel: true)`) sends lockstep packets as `LockstepDatagramRpc`s, out-of-band RPCs, on the pipeline that
+  `LockstepNetcode.UseUnreliableOutOfBandPipeline` makes unreliable (Netcode's unreliable fragmented pipeline, with the
+  network simulator when the driver has it); `LockstepDriverConstructor` wraps a driver constructor and does it. The
+  server answers every client the way it talks, and a client that leaves keeps its channel until the leave is
+  acknowledged (two seconds at most). On a loopback network with a 140 ms round trip and 1-5 % loss, retransmission
+  stood the picture still 2.4-4 % of the time for up to 0.28 s; the channel 0.1 % at most, for a frame.
+- `LockstepServerSettings.PlayerTimeoutSeconds` (10 by default): a player whose connection sends nothing for that long
+  leaves, announced in the next frame, and `LockstepServer.ConnectionTimedOutEvent` is raised; the Netcode server system
+  disconnects the connection. A server that itself stood still for over a second (a host whose app was paused) times
+  nobody out for it. Players no longer stay in the match for the minutes a transport may take to notice a lost peer.
+- Network measurements of `LockstepClient` for a network indicator: `StallCount` and `StalledSeconds` (the running
+  match stood still waiting for frames), `SecondsSinceLastPacket`, `TargetPlayoutDelayTicks`, `ExtraInputMarginTicks`.
+- `ILockstepClientEndpoint`, implemented by `LockstepClient`, which `LockstepLoopbackNetwork.AttachClient` takes; the
+  loopback network's `Loss` and `Reorder` make it unreliable for testing a channel, and `PacketsSent` / `BytesSent`
+  count its traffic.
+
+### Changed
+
+- The playout delay takes stalls into account: each stall adds a tick, up to `LockstepClientSettings.MaxStallDelayTicks`
+  (3), decaying a tick per ten seconds. The jitter estimate leaves out the bursts in which a frame held back by a lost
+  packet arrives, so stalls repeated before.
+- The extra input margin after late inputs is capped by `LockstepClientSettings.MaxExtraInputMarginTicks` (2, was a
+  fixed 4) and by a round trip, and decays by half a tick a second (was 0.02 tick per feedback message, about 0.15 a
+  second): on a lossy network it sat at its cap, adding 133 ms to every order for minutes.
+- `LockstepChecksum` allocates nothing once warm: the layouts of archetypes are cached by their type sets, and the
+  scratch collections are kept (it allocated 14.8 KB per checksum on 63 archetypes). `LockstepLoopbackNetwork` pools its
+  packets and `LockstepServer` its checksum rounds, so a steady session over the loopback, offline mode included,
+  allocates nothing per frame.
+- Offline mode turns the player timeout off.
+
 ## [0.4.0] - 2026-11-12
 
 ### Fixed
