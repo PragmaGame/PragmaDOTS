@@ -52,6 +52,37 @@ namespace Pragma.Dots.Tests
             AssertSameState(_a.EntityManager, _b.EntityManager);
         }
 
+        [Test]
+        public void Compute_AllocatesNothing_OnceWarm()
+        {
+            // 63 archetypes: every combination of six component types.
+            var types = new ComponentType[]
+            {
+                typeof(ChecksumPadded), typeof(ChecksumValue), typeof(ChecksumToggle), typeof(ChecksumElement), typeof(ChecksumLink), typeof(ChecksumTag),
+            };
+            for (var mask = 1; mask < 1 << types.Length; mask++)
+            {
+                var set = new System.Collections.Generic.List<ComponentType>();
+                for (var t = 0; t < types.Length; t++)
+                {
+                    if ((mask & (1 << t)) != 0)
+                    {
+                        set.Add(types[t]);
+                    }
+                }
+                _a.EntityManager.CreateEntity(set.ToArray());
+            }
+            var warm = LockstepChecksum.Compute(_a.EntityManager);
+            LockstepChecksum.Compute(_b.EntityManager);
+
+            var before = System.GC.GetAllocatedBytesForCurrentThread();
+            var hash = LockstepChecksum.Compute(_a.EntityManager);
+            var bytes = System.GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.AreEqual(0L, bytes);
+            Assert.AreEqual(warm, hash, "the cached layouts hash the same");
+        }
+
         /// <summary>Compares per type first, so a failure names the component that differs.</summary>
         internal static void AssertSameState(EntityManager a, EntityManager b)
         {

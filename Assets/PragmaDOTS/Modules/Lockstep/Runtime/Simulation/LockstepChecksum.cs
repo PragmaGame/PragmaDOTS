@@ -55,7 +55,20 @@ namespace Pragma.Dots.Lockstep
             public ulong high;
         }
 
+        // The layouts of the types of an archetype, cached by its type set, which means the same in every world.
+        private sealed class ArchetypeEntry
+        {
+            public int[] typeIndices;
+            public TypeLayout[] layouts;
+        }
+
         private static readonly Dictionary<int, TypeLayout> Layouts = new Dictionary<int, TypeLayout>();
+        private static readonly Dictionary<ulong, ArchetypeEntry> ArchetypeLayouts = new Dictionary<ulong, ArchetypeEntry>();
+        private static readonly List<TypeLayout> LayoutScratch = new List<TypeLayout>();
+        // Scratch of one computation, kept so that a checksum allocates nothing once warm: handles belong to the world
+        // being hashed, archetypes too.
+        private static readonly Dictionary<int, DynamicComponentTypeHandle> Handles = new Dictionary<int, DynamicComponentTypeHandle>();
+        private static readonly Dictionary<EntityArchetype, TypeLayout[]> ChunkArchetypes = new Dictionary<EntityArchetype, TypeLayout[]>();
 
         // Entities tags the world time and system entities with HideInHierarchy only in the editor (#if UNITY_EDITOR); it
         // is internal, hence the names. The entities of a subscene open for editing keep EntityGuid (live baking patches
@@ -87,7 +100,8 @@ namespace Pragma.Dots.Lockstep
             entityManager.CompleteAllTrackedJobs();
             var hash = new xxHash3.StreamingState(true, seed);
             var gather = new NativeList<byte>(1024, Allocator.Temp);
-            var handles = new Dictionary<int, DynamicComponentTypeHandle>();
+            var handles = Handles;
+            handles.Clear();
             var entityHandle = entityManager.GetEntityTypeHandle();
 
             using (var chunks = entityManager.GetAllChunks(Allocator.Temp))
@@ -110,7 +124,8 @@ namespace Pragma.Dots.Lockstep
                 }
 
                 // Pass 2: archetype signatures and component values.
-                var archetypeCache = new Dictionary<EntityArchetype, TypeLayout[]>();
+                var archetypeCache = ChunkArchetypes;
+                archetypeCache.Clear();
                 for (var c = 0; c < chunks.Length; c++)
                 {
                     var chunk = chunks[c];
@@ -261,7 +276,17 @@ namespace Pragma.Dots.Lockstep
         {
             using (var types = archetype.GetComponentTypes(Allocator.Temp))
             {
-                var layouts = new List<TypeLayout>(types.Length);
+                var key = 14695981039346656037UL ^ (ulong)types.Length;
+                for (var i = 0; i < types.Length; i++)
+                {
+                    key = (key ^ (uint)types[i].TypeIndex.Value) * 1099511628211UL;
+                }
+                if (ArchetypeLayouts.TryGetValue(key, out var cached) && HasTypes(cached, types))
+                {
+                    return cached.layouts;
+                }
+
+                LayoutScratch.Clear();
                 for (var i = 0; i < types.Length; i++)
                 {
                     // The entity column is represented by the traversal order itself.
@@ -269,11 +294,37 @@ namespace Pragma.Dots.Lockstep
                     {
                         continue;
                     }
-                    layouts.Add(GetLayout(types[i].TypeIndex));
+                    LayoutScratch.Add(GetLayout(types[i].TypeIndex));
                 }
-                layouts.Sort((a, b) => a.stableHash.CompareTo(b.stableHash));
-                return layouts.ToArray();
+                LayoutScratch.Sort((a, b) => a.stableHash.CompareTo(b.stableHash));
+                var layouts = LayoutScratch.ToArray();
+                if (cached == null)
+                {
+                    var typeIndices = new int[types.Length];
+                    for (var i = 0; i < types.Length; i++)
+                    {
+                        typeIndices[i] = types[i].TypeIndex.Value;
+                    }
+                    ArchetypeLayouts.Add(key, new ArchetypeEntry { typeIndices = typeIndices, layouts = layouts });
+                }
+                return layouts;
             }
+        }
+
+        private static bool HasTypes(ArchetypeEntry entry, NativeArray<ComponentType> types)
+        {
+            if (entry.typeIndices.Length != types.Length)
+            {
+                return false;
+            }
+            for (var i = 0; i < types.Length; i++)
+            {
+                if (entry.typeIndices[i] != types[i].TypeIndex.Value)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static TypeLayout GetLayout(TypeIndex typeIndex)

@@ -61,6 +61,8 @@ namespace Pragma.Dots.Lockstep
             serverSettings.MinPlayersToStart = 1;
             serverSettings.StartDelaySeconds = 0f;
             serverSettings.AllowLateJoin = false;
+            // The client lives in this process and updates with the server.
+            serverSettings.PlayerTimeoutSeconds = 0f;
 
             var clientSettings = LockstepClientSettings.Default;
             clientSettings.InputMarginTicks = 0.5f;

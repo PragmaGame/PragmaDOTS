@@ -53,6 +53,13 @@ namespace Pragma.Dots.Lockstep
         /// as a protocol violation. Zero takes 4 MB.
         /// </summary>
         [field: SerializeField] public int MaxBufferedCommandBytes { get; set; }
+        /// <summary>
+        /// A player whose connection sends nothing for this long leaves the session (the next frame announces it), and the
+        /// server raises <see cref="LockstepServer.ConnectionTimedOutEvent"/>; zero leaves it to the transport to notice.
+        /// Clients send input every tick and pings every half second, so a few seconds tell a lost player. A server that
+        /// itself stood still for a while (a host whose app was paused) times nobody out for it.
+        /// </summary>
+        [field: SerializeField] public float PlayerTimeoutSeconds { get; set; }
         /// <summary>Refuse clients whose <see cref="LockstepSimulation.DefaultSimulationHash"/> differs from this one.</summary>
         [field: SerializeField] public bool ValidateSimulationHash { get; set; }
         /// <summary>Game-defined start parameters, readable in the simulation through <see cref="LockstepSessionInfo"/>.</summary>
@@ -82,6 +89,7 @@ namespace Pragma.Dots.Lockstep
             MaxCommandDataSize = 1024 * 1024,
             MaxCommandBytesPerTick = 64 * 1024,
             MaxBufferedCommandBytes = 4 * 1024 * 1024,
+            PlayerTimeoutSeconds = 10f,
             ValidateSimulationHash = true,
         };
 
@@ -119,6 +127,10 @@ namespace Pragma.Dots.Lockstep
             if (Teams.Length > MaxPlayers)
             {
                 throw new ArgumentOutOfRangeException(nameof(Teams), Teams.Length, "Teams has more entries than there are player slots.");
+            }
+            if (PlayerTimeoutSeconds < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(PlayerTimeoutSeconds), PlayerTimeoutSeconds, "The timeout cannot be negative.");
             }
             if (MaxInputWaitTicks < 0)
             {

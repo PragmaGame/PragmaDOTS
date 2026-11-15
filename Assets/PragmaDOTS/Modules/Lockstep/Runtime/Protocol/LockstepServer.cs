@@ -99,7 +99,13 @@ namespace Pragma.Dots.Lockstep
             public int slot = -1;
             public bool started;
             public int nextFrameToSend;
+            // Server time of the last packet from the connection; NaN before the first.
+            public double lastHeard = double.NaN;
         }
+
+        // An update this long after the previous one means the server itself stood still (a host whose app was paused):
+        // its connections could not be heard meanwhile and are not timed out for it.
+        private const double SERVER_PAUSE_SECONDS = 1;
 
         private sealed class ChecksumRound
         {
@@ -118,12 +124,14 @@ namespace Pragma.Dots.Lockstep
         private readonly List<Connection> _connectionOrder = new List<Connection>();
         private readonly List<byte[]> _receivedCommands = new List<byte[]>();
         private readonly Dictionary<int, ChecksumRound> _pendingChecksums = new Dictionary<int, ChecksumRound>();
+        private readonly Stack<ChecksumRound> _freeChecksumRounds = new Stack<ChecksumRound>();
         private readonly Dictionary<int, ulong> _resolvedChecksums = new Dictionary<int, ulong>();
         private readonly List<int> _checksumTicksToResolve = new List<int>();
         private NativeList<byte> _message;
         private NativeList<byte> _frame;
         private LockstepSessionConfig _config;
         private double _startTime;
+        private double _lastUpdateTime = double.NaN;
         private int _ticksSinceFeedback;
         // Slots a desync was reported for: later rounds that only repeat them are not reported again.
         private ulong _reportedDesyncs;
@@ -200,6 +208,12 @@ namespace Pragma.Dots.Lockstep
         /// <summary>Raised with a connection id that sent malformed data; the transport may want to drop it.</summary>
         public event Action<int, string> ProtocolViolationEvent;
 
+        /// <summary>
+        /// Raised with a connection id whose player sent nothing for <see cref="LockstepServerSettings.PlayerTimeoutSeconds"/>:
+        /// the player left (the next frame announces it). The transport should drop the connection.
+        /// </summary>
+        public event Action<int> ConnectionTimedOutEvent;
+
         /// <summary>The server clock in ticks: negative during the start countdown.</summary>
         public double GetTickPosition(double now) => State == LockstepServerState.Lobby ? 0 : (now - _startTime) * _settings.TickRate;
 
@@ -274,6 +288,7 @@ namespace Pragma.Dots.Lockstep
                 return;
             }
             var connection = GetOrAddConnection(connectionId);
+            connection.lastHeard = now;
             if (!_framer.Receive(connectionId, data, length, out var message, out var messageLength, out var isTooLarge))
             {
                 if (isTooLarge)
@@ -316,7 +331,12 @@ namespace Pragma.Dots.Lockstep
         /// <summary>Closes the ticks that are due and streams frames. Call it every server update.</summary>
         public void Update(double now)
         {
-            if (_disposed || State != LockstepServerState.Running)
+            if (_disposed)
+            {
+                return;
+            }
+            TimeOutSilentPlayers(now);
+            if (State != LockstepServerState.Running)
             {
                 return;
             }
@@ -672,7 +692,9 @@ namespace Pragma.Dots.Lockstep
 
             if (!_pendingChecksums.TryGetValue(tick, out var round))
             {
-                round = new ChecksumRound { tick = tick, hashes = new ulong[_slots.Length] };
+                round = _freeChecksumRounds.Count > 0 ? _freeChecksumRounds.Pop() : new ChecksumRound { hashes = new ulong[_slots.Length] };
+                round.tick = tick;
+                round.reported = 0;
                 _pendingChecksums.Add(tick, round);
             }
             round.hashes[slot.index] = hash;
@@ -710,6 +732,36 @@ namespace Pragma.Dots.Lockstep
             {
                 // Never appeared in a frame: forget it silently.
                 slot.Reset();
+            }
+        }
+
+        private void TimeOutSilentPlayers(double now)
+        {
+            var gap = double.IsNaN(_lastUpdateTime) ? 0 : now - _lastUpdateTime;
+            _lastUpdateTime = now;
+            var timeout = _settings.PlayerTimeoutSeconds;
+            if (timeout <= 0 || State == LockstepServerState.Ended)
+            {
+                return;
+            }
+
+            var serverPaused = gap > SERVER_PAUSE_SECONDS;
+            foreach (var connection in _connectionOrder)
+            {
+                if (serverPaused)
+                {
+                    connection.lastHeard = now;
+                    continue;
+                }
+                if (connection.slot < 0 || double.IsNaN(connection.lastHeard) || now - connection.lastHeard < timeout)
+                {
+                    continue;
+                }
+                Debug.LogWarning($"[Lockstep] Connection {connection.id} sent nothing for {timeout} s: the player of slot {connection.slot} left.");
+                ReleaseSlot(connection.slot);
+                connection.slot = -1;
+                connection.started = false;
+                ConnectionTimedOutEvent?.Invoke(connection.id);
             }
         }
 
@@ -976,8 +1028,10 @@ namespace Pragma.Dots.Lockstep
             _checksumTicksToResolve.Sort();
             foreach (var tick in _checksumTicksToResolve)
             {
-                ResolveChecksumRound(_pendingChecksums[tick]);
+                var round = _pendingChecksums[tick];
+                ResolveChecksumRound(round);
                 _pendingChecksums.Remove(tick);
+                _freeChecksumRounds.Push(round);
             }
         }
 
