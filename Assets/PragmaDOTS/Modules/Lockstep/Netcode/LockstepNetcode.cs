@@ -18,9 +18,11 @@ namespace Pragma.Dots.Lockstep.Netcode
         /// <summary>
         /// Makes a client world join the lockstep session of the server it is (or will be) connected to, in
         /// <paramref name="slot"/> (<see cref="LockstepProtocol.ANY_SLOT"/>: the first free one; see <see cref="LockstepClient.Join"/>).
+        /// With <paramref name="redundantChannel"/> the session talks through a <see cref="LockstepRedundantChannel"/> over
+        /// the out-of-band pipeline (see <see cref="LockstepClientConfig.redundantChannel"/>).
         /// </summary>
         public static void JoinSession(World clientWorld, in LockstepClientSettings settings, in FixedList64Bytes<byte> joinData = default, bool waitForActorRegistry = false,
-                                       int slot = LockstepProtocol.ANY_SLOT)
+                                       int slot = LockstepProtocol.ANY_SLOT, bool redundantChannel = false)
         {
             SetSingleton(clientWorld.EntityManager, new LockstepClientConfig
             {
@@ -28,7 +30,29 @@ namespace Pragma.Dots.Lockstep.Netcode
                 joinData = joinData,
                 waitForActorRegistry = waitForActorRegistry,
                 slot = slot == LockstepProtocol.ANY_SLOT ? default : new OptionalValue<int>(slot),
+                redundantChannel = redundantChannel,
             });
+        }
+
+        /// <summary>
+        /// Makes the out-of-band RPC pipeline of every driver in <paramref name="driverStore"/> unreliable (Netcode's
+        /// unreliable fragmented pipeline, with the network simulator when the driver has it), so that the redundant channel
+        /// of <see cref="LockstepDatagramRpc"/> is not held back by retransmissions. Call it where the drivers are built, after
+        /// registering them and before the store is handed to Netcode: in an <c>INetworkStreamDriverConstructor</c>
+        /// (<see cref="LockstepDriverConstructor"/> does it), or before <c>NetworkStreamDriver.ResetDriverStore</c>. Netcode
+        /// itself sends nothing out of band; the game's own out-of-band RPCs become unreliable too. The server and every client
+        /// need it: a datagram on a pipeline the receiver does not take for out-of-band trips an assertion of Netcode.
+        /// </summary>
+        public static void UseUnreliableOutOfBandPipeline(ref NetworkDriverStore driverStore)
+        {
+            for (var id = driverStore.FirstDriver; id < driverStore.LastDriver; id++)
+            {
+                ref var instance = ref driverStore.GetDriverInstanceRW(id);
+                if (instance.driver.IsCreated && instance.unreliableFragmentedPipeline != NetworkPipeline.Null)
+                {
+                    instance.outOfBandPipeline = instance.unreliableFragmentedPipeline;
+                }
+            }
         }
 
         /// <summary>Starts listening on the server world's network driver.</summary>

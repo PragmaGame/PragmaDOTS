@@ -17,5 +17,13 @@ namespace Pragma.Dots.Lockstep.Netcode
         public OptionalValue<int> slot;
         /// <summary>Wait until an actor registry exists in the client world before creating the simulation.</summary>
         public bool waitForActorRegistry;
+        /// <summary>
+        /// Talk through a <see cref="LockstepRedundantChannel"/> carried by <see cref="LockstepDatagramRpc"/>s instead of
+        /// reliable RPCs: on a lossy network a lost packet is replaced by the next one instead of holding every later frame
+        /// back until it is resent. The server answers each client the way it talks. Needs the out-of-band pipeline made
+        /// unreliable on the server and the clients (<see cref="LockstepNetcode.UseUnreliableOutOfBandPipeline"/>); without it
+        /// the channel runs over a reliable pipeline and only costs traffic.
+        /// </summary>
+        public bool redundantChannel;
     }
 }

@@ -10,16 +10,46 @@ namespace Pragma.Dots.Lockstep.Netcode
     /// Runs a <see cref="LockstepServer"/> in a Netcode server world while a <see cref="LockstepServerConfig"/> exists.
     /// </summary>
     /// <remarks>
-    /// Every connection entity gets its own lockstep connection id. Packets travel as <see cref="LockstepPacketRpc"/>.
-    /// The system runs in the server simulation group, so ticks are closed on the server's fixed tick rate; keep the
-    /// lockstep tick rate at or below <c>ClientServerTickRate.SimulationTickRate</c>.
+    /// Every connection entity gets its own lockstep connection id. Packets travel as <see cref="LockstepPacketRpc"/>, or,
+    /// for a client that talks through the redundant channel (<see cref="LockstepClientConfig.redundantChannel"/>), as
+    /// datagrams of a <see cref="LockstepRedundantChannel"/> in <see cref="LockstepDatagramRpc"/>s: each client is answered
+    /// the way it talks. The system runs in the server simulation group, so ticks are closed on the server's fixed tick
+    /// rate; keep the lockstep tick rate at or below <c>ClientServerTickRate.SimulationTickRate</c>. A connection that
+    /// breaks the protocol or times out (<see cref="LockstepServerSettings.PlayerTimeoutSeconds"/>) is disconnected.
     /// </remarks>
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(NetworkReceiveSystemGroup))]
     public partial class LockstepNetcodeServerSystem : SystemBase
     {
+        // Packets of the server: through the channel to the clients that talk through it, as reliable RPCs otherwise.
         private sealed unsafe class Transport : ILockstepTransport
+        {
+            public EntityManager entityManager;
+            public EntityArchetype archetype;
+            public NativeHashMap<int, Entity> connections;
+            public NativeHashSet<int> redundantConnections;
+            public LockstepRedundantChannel channel;
+
+            public void Send(int connectionId, byte* data, int length)
+            {
+                if (redundantConnections.Contains(connectionId))
+                {
+                    channel.Send(connectionId, data, length);
+                    return;
+                }
+                if (!connections.TryGetValue(connectionId, out var connection))
+                {
+                    return;
+                }
+                var entity = entityManager.CreateEntity(archetype);
+                entityManager.SetComponentData(entity, LockstepPacketRpc.Create(data, length));
+                entityManager.SetComponentData(entity, new SendRpcCommandRequest { TargetConnection = connection });
+            }
+        }
+
+        // Datagrams of the channel, as out-of-band RPCs.
+        private sealed unsafe class DatagramTransport : ILockstepTransport
         {
             public EntityManager entityManager;
             public EntityArchetype archetype;
@@ -32,36 +62,45 @@ namespace Pragma.Dots.Lockstep.Netcode
                     return;
                 }
                 var entity = entityManager.CreateEntity(archetype);
-                entityManager.SetComponentData(entity, LockstepPacketRpc.Create(data, length));
+                entityManager.SetComponentData(entity, LockstepDatagramRpc.Create(data, length));
                 entityManager.SetComponentData(entity, new SendRpcCommandRequest { TargetConnection = connection });
             }
         }
 
         private LockstepServer _server;
+        private LockstepRedundantChannel _channel;
         private Transport _transport;
         private Entity _handle;
         private EntityQuery _connectionQuery;
         private EntityQuery _receivedQuery;
+        private EntityQuery _receivedDatagramQuery;
         private EntityQuery _startRequestQuery;
         private EntityQuery _endRequestQuery;
         private NativeHashMap<int, Entity> _connectionsById;
         private NativeHashMap<Entity, int> _idsByConnection;
+        private NativeHashSet<int> _redundantConnections;
         private readonly List<int> _removed = new List<int>();
         private int _lastConnectionId;
         private readonly List<int> _violations = new List<int>();
+        private readonly List<int> _timedOut = new List<int>();
 
         /// <summary>The running server, or null.</summary>
         public LockstepServer Server => _server;
+
+        /// <summary>The channel of the clients that talk through it, or null.</summary>
+        public LockstepRedundantChannel Channel => _channel;
 
         protected override void OnCreate()
         {
             _connectionQuery = GetEntityQuery(ComponentType.ReadOnly<NetworkId>(), ComponentType.ReadOnly<NetworkStreamConnection>());
             _receivedQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
+            _receivedDatagramQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepDatagramRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
             _startRequestQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepStartGameRequest>());
             _endRequestQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepEndGameRequest>());
             _connectionsById = new NativeHashMap<int, Entity>(16, Allocator.Persistent);
             _idsByConnection = new NativeHashMap<Entity, int>(16, Allocator.Persistent);
-            LockstepPacketRpc.HideReceivedRequests();
+            _redundantConnections = new NativeHashSet<int>(16, Allocator.Persistent);
+            LockstepRpcHiddenTag.Initialize();
         }
 
         protected override void OnDestroy()
@@ -69,6 +108,7 @@ namespace Pragma.Dots.Lockstep.Netcode
             Shutdown();
             _connectionsById.Dispose();
             _idsByConnection.Dispose();
+            _redundantConnections.Dispose();
         }
 
         protected override unsafe void OnUpdate()
@@ -88,6 +128,10 @@ namespace Pragma.Dots.Lockstep.Netcode
                 if (!_receivedQuery.IsEmptyIgnoreFilter)
                 {
                     EntityManager.DestroyEntity(_receivedQuery);
+                }
+                if (!_receivedDatagramQuery.IsEmptyIgnoreFilter)
+                {
+                    EntityManager.DestroyEntity(_receivedDatagramQuery);
                 }
                 return;
             }
@@ -109,6 +153,25 @@ namespace Pragma.Dots.Lockstep.Netcode
                     }
                 }
             }
+            if (!_receivedDatagramQuery.IsEmptyIgnoreFilter)
+            {
+                var datagrams = _receivedDatagramQuery.ToComponentDataArray<LockstepDatagramRpc>(Allocator.Temp);
+                var requests = _receivedDatagramQuery.ToComponentDataArray<ReceiveRpcCommandRequest>(Allocator.Temp);
+                EntityManager.DestroyEntity(_receivedDatagramQuery);
+                var datagramPtr = (LockstepDatagramRpc*)datagrams.GetUnsafeReadOnlyPtr();
+                for (var i = 0; i < datagrams.Length; i++)
+                {
+                    if (_idsByConnection.TryGetValue(requests[i].SourceConnection, out var connectionId) &&
+                        _channel.Receive(connectionId, LockstepDatagramRpc.GetData(datagramPtr + i), datagrams[i].length, now))
+                    {
+                        _redundantConnections.Add(connectionId);
+                    }
+                }
+                while (_channel.TryRead(out var connectionId, out var packet, out var length))
+                {
+                    _server.OnPacket(connectionId, packet, length, now);
+                }
+            }
 
             if (!_startRequestQuery.IsEmptyIgnoreFilter)
             {
@@ -123,15 +186,10 @@ namespace Pragma.Dots.Lockstep.Netcode
             }
 
             _server.Update(now);
+            _channel.Flush(now);
 
-            foreach (var connectionId in _violations)
-            {
-                if (_connectionsById.TryGetValue(connectionId, out var connection) && EntityManager.Exists(connection))
-                {
-                    EntityManager.AddComponentData(connection, new NetworkStreamRequestDisconnect { Reason = NetworkStreamDisconnectReason.InvalidRpc });
-                }
-            }
-            _violations.Clear();
+            Disconnect(_violations, NetworkStreamDisconnectReason.InvalidRpc);
+            Disconnect(_timedOut, NetworkStreamDisconnectReason.Timeout);
 
             SystemAPI.SetSingleton(new LockstepServerStatus
             {
@@ -141,23 +199,48 @@ namespace Pragma.Dots.Lockstep.Netcode
             });
         }
 
+        private void Disconnect(List<int> connectionIds, NetworkStreamDisconnectReason reason)
+        {
+            foreach (var connectionId in connectionIds)
+            {
+                if (_connectionsById.TryGetValue(connectionId, out var connection) && EntityManager.Exists(connection) &&
+                    !EntityManager.HasComponent<NetworkStreamRequestDisconnect>(connection))
+                {
+                    EntityManager.AddComponentData(connection, new NetworkStreamRequestDisconnect { Reason = reason });
+                }
+            }
+            connectionIds.Clear();
+        }
+
         private void Startup(in LockstepServerSettings settings)
         {
+            var archetype = LockstepRpcHiddenTag.CreateRequestArchetype<LockstepPacketRpc>(EntityManager);
+            _channel = new LockstepRedundantChannel(new DatagramTransport
+            {
+                entityManager = EntityManager,
+                archetype = LockstepRpcHiddenTag.CreateRequestArchetype<LockstepDatagramRpc>(EntityManager),
+                connections = _connectionsById,
+            });
             _transport = new Transport
             {
                 entityManager = EntityManager,
-                archetype = LockstepPacketRpc.CreateRequestArchetype(EntityManager),
+                archetype = archetype,
                 connections = _connectionsById,
+                redundantConnections = _redundantConnections,
+                channel = _channel,
             };
+            // One packet size for every connection: it has to fit the channel's datagrams too.
             var effective = settings;
-            if (effective.MaxPacketSize <= 0 || effective.MaxPacketSize > LockstepPacketRpc.CAPACITY)
+            if (effective.MaxPacketSize <= 0 || effective.MaxPacketSize > _channel.MaxPacketSize)
             {
-                effective.MaxPacketSize = LockstepPacketRpc.CAPACITY;
+                effective.MaxPacketSize = _channel.MaxPacketSize;
             }
             _server = new LockstepServer(effective, _transport);
             _server.ProtocolViolationEvent += (connectionId, _) => _violations.Add(connectionId);
+            _server.ConnectionTimedOutEvent += connectionId => _timedOut.Add(connectionId);
             _connectionsById.Clear();
             _idsByConnection.Clear();
+            _redundantConnections.Clear();
 
             _handle = EntityManager.CreateEntity(ComponentType.ReadWrite<LockstepServerStatus>());
             EntityManager.SetName(_handle, "LockstepServer");
@@ -172,8 +255,12 @@ namespace Pragma.Dots.Lockstep.Netcode
             }
             LockstepWorlds.UnregisterServer(World);
             _server.EndGame(LockstepEndReason.ServerShutdown);
+            // One datagram, which may be lost: a client that misses it ends when its connection drops.
+            _channel.Flush(World.Time.ElapsedTime);
             _server.Dispose();
+            _channel.Dispose();
             _server = null;
+            _channel = null;
             _transport = null;
             if (EntityManager.Exists(_handle))
             {
@@ -208,6 +295,8 @@ namespace Pragma.Dots.Lockstep.Netcode
                     _idsByConnection.Remove(entity);
                 }
                 _connectionsById.Remove(connectionId);
+                _redundantConnections.Remove(connectionId);
+                _channel.RemoveConnection(connectionId);
                 _server.OnDisconnected(connectionId);
             }
 

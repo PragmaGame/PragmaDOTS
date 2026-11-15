@@ -4,6 +4,7 @@ using Pragma.Dots.Lockstep.Netcode;
 #if PRAGMA_DOTS_UNITY_NETCODE
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Pragma.Dots.Lockstep;
 using Pragma.Dots.Lockstep.Netcode;
@@ -14,6 +15,7 @@ using Unity.Core;
 using Unity.Entities;
 using Unity.Netcode;
 using Unity.Networking.Transport;
+using UnityEngine.TestTools;
 
 namespace Pragma.Dots.Tests
 {
@@ -24,6 +26,7 @@ namespace Pragma.Dots.Tests
         private double _time;
         private bool _runInBackground;
         private ushort _autoConnectPort;
+        private INetworkStreamDriverConstructor _driverConstructor;
 
         [SetUp]
         public void SetUp()
@@ -34,6 +37,7 @@ namespace Pragma.Dots.Tests
             // Worlds created with a non-zero auto connect port listen and connect by themselves; the test does it.
             _autoConnectPort = ClientServerBootstrap.AutoConnectPort;
             ClientServerBootstrap.AutoConnectPort = 0;
+            _driverConstructor = NetworkStreamReceiveSystem.DriverConstructor;
         }
 
         [TearDown]
@@ -49,6 +53,7 @@ namespace Pragma.Dots.Tests
             _worlds.Clear();
             UnityEngine.Application.runInBackground = _runInBackground;
             ClientServerBootstrap.AutoConnectPort = _autoConnectPort;
+            NetworkStreamReceiveSystem.DriverConstructor = _driverConstructor;
         }
 
         private World Track(World world)
@@ -82,9 +87,17 @@ namespace Pragma.Dots.Tests
             }
         }
 
-        /// <summary>A server world hosting a session for two players and two client worlds joining it.</summary>
-        private (World Server, World ClientA, World ClientB) StartSession(ushort port)
+        /// <summary>
+        /// A server world hosting a session for two players and two client worlds joining it, through the redundant channel
+        /// over the unreliable out-of-band pipeline when <paramref name="redundant"/> (or over the reliable one, without
+        /// <paramref name="unreliablePipeline"/>).
+        /// </summary>
+        private (World Server, World ClientA, World ClientB) StartSession(ushort port, bool redundant = false, bool unreliablePipeline = true)
         {
+            if (redundant && unreliablePipeline)
+            {
+                NetworkStreamReceiveSystem.DriverConstructor = new LockstepDriverConstructor(_driverConstructor);
+            }
             var server = Track(ClientServerBootstrap.CreateServerWorld("Lockstep Test Server"));
             var clientA = Track(ClientServerBootstrap.CreateClientWorld("Lockstep Test Client A"));
             var clientB = Track(ClientServerBootstrap.CreateClientWorld("Lockstep Test Client B"));
@@ -96,8 +109,8 @@ namespace Pragma.Dots.Tests
             settings.ChecksumInterval = 10;
             settings.StartDelaySeconds = 0.2f;
             LockstepNetcode.HostSession(server, settings);
-            LockstepNetcode.JoinSession(clientA, LockstepClientSettings.Default);
-            LockstepNetcode.JoinSession(clientB, LockstepClientSettings.Default);
+            LockstepNetcode.JoinSession(clientA, LockstepClientSettings.Default, redundantChannel: redundant);
+            LockstepNetcode.JoinSession(clientB, LockstepClientSettings.Default, redundantChannel: redundant);
 
             var endpoint = NetworkEndpoint.LoopbackIpv4.WithPort(port);
             Assert.IsTrue(LockstepNetcode.Listen(server, endpoint));
@@ -106,10 +119,11 @@ namespace Pragma.Dots.Tests
             return (server, clientA, clientB);
         }
 
-        [Test]
-        public void ServerAndClients_RunASessionOverRpcs()
+        [TestCase(false, 7971)]
+        [TestCase(true, 7974)]
+        public void ServerAndClients_RunASessionOverRpcs(bool redundant, int port)
         {
-            var (server, clientA, clientB) = StartSession(7971);
+            var (server, clientA, clientB) = StartSession((ushort)port, redundant);
 
             var desyncs = 0;
             Tick(30);
@@ -138,11 +152,21 @@ namespace Pragma.Dots.Tests
             Assert.AreEqual(1, lockstepServer.PlayerCount, "the leave freed the slot");
             Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(a.Simulation.World.EntityManager));
 
-            LockstepNetcode.JoinSession(clientB, LockstepClientSettings.Default);
+            LockstepNetcode.JoinSession(clientB, LockstepClientSettings.Default, redundantChannel: redundant);
             Tick(60 * 3);
             Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var rejoined), "client B joined again");
             Assert.AreEqual(LockstepClientState.Running, rejoined.State);
             Assert.AreEqual(2, TestUtility.Count<LockstepPlayer>(a.Simulation.World.EntityManager));
+            var serverChannel = server.GetExistingSystemManaged<LockstepNetcodeServerSystem>().Channel;
+            if (redundant)
+            {
+                Assert.Greater(serverChannel.DatagramsReceived, 100, "the clients talk through the channel");
+                Assert.Greater(clientA.GetExistingSystemManaged<LockstepNetcodeClientSystem>().Channel.DatagramsReceived, 100, "and so does the server");
+            }
+            else
+            {
+                Assert.AreEqual(0, serverChannel.DatagramsReceived);
+            }
 
             // Disconnecting a client is announced to the other one.
             using (var query = clientB.EntityManager.CreateEntityQuery(typeof(NetworkStreamConnection)))
@@ -165,10 +189,11 @@ namespace Pragma.Dots.Tests
             Assert.IsFalse(LockstepNetcode.TryGetClient(clientB, out _));
         }
 
-        [Test]
-        public void ACommandLargerThanTheReliableWindow_ReachesEveryClient()
+        [TestCase(false, 7972)]
+        [TestCase(true, 7975)]
+        public void ACommandLargerThanTheReliableWindow_ReachesEveryClient(bool redundant, int port)
         {
-            var (_, clientA, clientB) = StartSession(7972);
+            var (_, clientA, clientB) = StartSession((ushort)port, redundant);
             Tick(60 * 3);
             Assert.IsTrue(LockstepNetcode.TryGetClient(clientA, out var a), "client A joined");
             Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var b), "client B joined");
@@ -211,11 +236,12 @@ namespace Pragma.Dots.Tests
             }
         }
 
-        [Test]
-        public void Requests_AreHiddenFromTheHierarchy()
+        [TestCase(false, 7973)]
+        [TestCase(true, 7976)]
+        public void Requests_AreHiddenFromTheHierarchy(bool redundant, int port)
         {
             Assert.IsTrue(EntityHierarchy.TryGetHiddenTag(out var hidden), "the editor has the tag");
-            var (server, clientA, clientB) = StartSession(7973);
+            var (server, clientA, clientB) = StartSession((ushort)port, redundant);
             var worlds = new[] { server, clientA, clientB };
             var probes = new List<ReceivedRequestProbeSystem>();
 
@@ -235,10 +261,16 @@ namespace Pragma.Dots.Tests
                 foreach (var world in worlds)
                 {
                     var entityManager = world.EntityManager;
-                    using (var sent = entityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>()))
+                    var packets = new[] { ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<LockstepDatagramRpc>() };
+                    using (var sent = entityManager.CreateEntityQuery(new EntityQueryDesc
+                           {
+                               All = new[] { ComponentType.ReadOnly<SendRpcCommandRequest>() },
+                               Any = packets,
+                           }))
                     using (var shown = entityManager.CreateEntityQuery(new EntityQueryDesc
                            {
-                               All = new[] { ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>() },
+                               All = new[] { ComponentType.ReadOnly<SendRpcCommandRequest>() },
+                               Any = packets,
                                None = new[] { hidden },
                            }))
                     {
@@ -254,6 +286,54 @@ namespace Pragma.Dots.Tests
                 Assert.Greater(probe.Received, 0, $"{probe.World.Name} received packets");
                 Assert.AreEqual(0, probe.Shown, $"a received request in {probe.World.Name} shows in the Hierarchy");
             }
+        }
+
+        [Test]
+        public void TheRedundantChannel_KeepsASessionInSync_ThroughPacketLoss()
+        {
+            // A tenth of the clients' packets is lost both ways, in Transport's simulator.
+            NetworkStreamReceiveSystem.DriverConstructor = new LossyDriverConstructor(10);
+            var (server, clientA, clientB) = StartSession(7978, redundant: true, unreliablePipeline: false);
+
+            // Netcode's handshake goes over its reliable pipeline, which resends on real time while the test ticks faster.
+            var timer = Stopwatch.StartNew();
+            LockstepClient a = null;
+            LockstepClient b = null;
+            do
+            {
+                Tick(60);
+                LockstepNetcode.TryGetClient(clientA, out a);
+                LockstepNetcode.TryGetClient(clientB, out b);
+            }
+            while ((a == null || b == null || a.SimulatedTicks < 600 || b.SimulatedTicks < 600) && timer.Elapsed.TotalSeconds < 30);
+
+            Assert.IsNotNull(a, "client A joined");
+            Assert.IsNotNull(b, "client B joined");
+            Assert.AreEqual(LockstepClientState.Running, a.State);
+            Assert.AreEqual(LockstepClientState.Running, b.State);
+            Assert.GreaterOrEqual(a.SimulatedTicks, 600);
+            Assert.GreaterOrEqual(b.SimulatedTicks, 600);
+            Assert.IsFalse(a.IsDesynced || b.IsDesynced);
+            Assert.IsTrue(LockstepNetcode.TryGetServer(server, out var lockstepServer));
+            Assert.Greater(lockstepServer.VerifiedChecksumCount, 10);
+            TestUtility.AssertSameChecksums(a, b, 10);
+            Assert.Greater(server.GetExistingSystemManaged<LockstepNetcodeServerSystem>().Channel.DatagramsReceived, 500);
+        }
+
+        [Test]
+        public void TheRedundantChannel_OverAReliablePipeline_WarnsAndStillWorks()
+        {
+            LogAssert.Expect(UnityEngine.LogType.Warning, new Regex("runs over a reliable out-of-band pipeline"));
+            LogAssert.Expect(UnityEngine.LogType.Warning, new Regex("runs over a reliable out-of-band pipeline"));
+            var (_, clientA, clientB) = StartSession(7977, redundant: true, unreliablePipeline: false);
+            Tick(60 * 4);
+
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientA, out var a), "client A joined");
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var b), "client B joined");
+            Assert.AreEqual(LockstepClientState.Running, a.State);
+            Assert.AreEqual(LockstepClientState.Running, b.State);
+            Assert.Greater(a.SimulatedTicks, 60);
+            Assert.IsFalse(a.IsDesynced || b.IsDesynced);
         }
 
         /// <summary>

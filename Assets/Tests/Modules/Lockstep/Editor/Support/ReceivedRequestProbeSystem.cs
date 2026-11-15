@@ -22,11 +22,17 @@ namespace Pragma.Dots.Tests
 
         protected override void OnCreate()
         {
-            _received = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
+            var packets = new[] { ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<LockstepDatagramRpc>() };
+            _received = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<ReceiveRpcCommandRequest>() },
+                Any = packets,
+            });
             EntityHierarchy.TryGetHiddenTag(out var hidden);
             _shown = GetEntityQuery(new EntityQueryDesc
             {
-                All = new[] { ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>() },
+                All = new[] { ComponentType.ReadOnly<ReceiveRpcCommandRequest>() },
+                Any = packets,
                 None = new[] { hidden },
             });
         }
