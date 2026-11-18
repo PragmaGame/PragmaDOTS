@@ -11,8 +11,8 @@ namespace Pragma.Dots.Tests
 {
     /// <summary>
     /// Players that leave once the match started but before their join reached a frame: during the start countdown, or a
-    /// late joiner before its first tick. Every client hears of them as of anybody else: a join, then a leave on the next
-    /// tick.
+    /// late joiner before its first tick. Every client hears of them as of anybody else: a join, then a leave on the
+    /// next tick. And when the server has sent a leave (<see cref="LockstepServer.IsLeaveSent"/>).
     /// </summary>
     public class EarlyLeaveTests
     {
@@ -84,6 +84,9 @@ namespace Pragma.Dots.Tests
                 // frame.
                 var closed = session.Server.ClosedTicks;
                 var late = session.AddClient();
+                // Its input and a command for the join tick reach the server before the leave, and go with the player.
+                late.SetInput(new TestInput { moveX = 1, moveY = 5, buttons = 1 });
+                late.AddCommand(new TestCommand { value = 9 });
                 session.StepClientsOnly(0.15);
                 Assert.AreEqual(LockstepClientState.Running, late.State, "the start reached the late joiner");
                 Assert.AreEqual(closed, late.JoinTick);
@@ -120,10 +123,13 @@ namespace Pragma.Dots.Tests
                 var guest = session.AddClient(slot: 2);
                 session.Run(0.5, VaryingInput);
                 Assert.AreEqual(LockstepClientState.Lobby, guest.State);
+                Assert.IsFalse(session.Server.IsLeaveSent(2), "the guest is there");
 
                 guest.Leave();
                 session.Run(0.5, VaryingInput);
                 Assert.IsFalse(session.Server.IsSlotInUse(2), "the server let the guest go");
+                Assert.IsTrue(session.Server.IsLeaveSent(2), "nobody is to hear of the leave");
+                Assert.IsFalse(session.Server.IsLeaveSent(3), "nobody left slot 3");
 
                 session.Server.StartGame(session.Time);
                 session.Run(START_DELAY_SECONDS + 1, VaryingInput);
@@ -137,6 +143,95 @@ namespace Pragma.Dots.Tests
                     }
                 }
                 Assert.AreEqual(2, TestUtility.Count<LockstepPlayer>(a.Simulation.World.EntityManager));
+            }
+        }
+
+        [Test]
+        public void IsLeaveSent_OnceTheFrameOfTheLeaveWentOut()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 2), latency: 0.03, jitter: 0.02))
+            {
+                var leaver = session.AddClient();
+                var stays = session.AddClient();
+                StepUntil(session, () => leaver.State == LockstepClientState.Running, "the start reached the leaver");
+                var slot = leaver.LocalSlot;
+                Assert.IsFalse(session.Server.IsLeaveSent(slot), "the player is there");
+                Assert.IsFalse(session.Server.IsLeaveSent(3), "nobody left slot 3");
+
+                // Like the player of a host that leaves during the countdown: the server has the leave, and no frame
+                // carries it yet.
+                leaver.Leave();
+                session.StepClientsOnly(0.1);
+                Assert.IsFalse(session.Server.IsSlotInUse(slot));
+                Assert.IsFalse(session.Server.IsLeaveSent(slot), "no frame announces the leave yet");
+
+                // Frame 0 has the join and frame 1 the leave; the update that closes a frame sends it.
+                StepUntil(session, () => session.Server.IsLeaveSent(slot), "the frame of the leave went out");
+                Assert.AreEqual(2, session.Server.ClosedTicks);
+                session.Run(1, VaryingInput);
+                var players = TestUtility.Count<LockstepPlayer>(stays.Simulation.World.EntityManager);
+                Assert.AreEqual(1, players, "the leave arrived");
+
+                // A new player in the slot has not left.
+                session.AddClient();
+                StepUntil(session, () => session.Server.PlayerCount == 2, "the server took the join");
+                Assert.IsTrue(session.Server.IsSlotInUse(slot));
+                Assert.IsFalse(session.Server.IsLeaveSent(slot), "a new player holds the slot");
+            }
+        }
+
+        [Test]
+        public void IsLeaveSent_WaitsForALateJoinerCatchingUp()
+        {
+            var settings = Settings(minPlayers: 2);
+            // A few frames per message and one message per update: a late joiner catches up for a while.
+            settings.MaxPacketSize = 64;
+            settings.MaxSendBytesPerUpdate = 1;
+            using (var session = new SessionHarness(settings, latency: 0.03, jitter: 0.02))
+            {
+                var a = session.AddClient();
+                var b = session.AddClient();
+                session.Run(START_DELAY_SECONDS + 10, VaryingInput);
+                var slot = b.LocalSlot;
+
+                var late = session.AddClient();
+                StepUntil(session, () => session.Server.PlayerCount == 3, "the server took the late join");
+                b.Leave();
+                StepUntil(session, () => LeaveTick(session.Server, slot) >= 0, "a frame announces the leave");
+                var leaveTick = LeaveTick(session.Server, slot);
+                Assert.LessOrEqual(late.ConfirmedTicks, leaveTick, "the late joiner has not got that frame");
+                Assert.IsFalse(session.Server.IsLeaveSent(slot), "so the leave has not gone to everybody");
+
+                StepUntil(session, () => session.Server.IsLeaveSent(slot), "the late joiner was sent the frame too");
+                session.Run(2, VaryingInput);
+                Assert.AreEqual(2, TestUtility.Count<LockstepPlayer>(late.Simulation.World.EntityManager));
+                Assert.IsEmpty(session.Desyncs);
+                TestUtility.AssertSameChecksums(a, late, 10);
+            }
+        }
+
+        [Test]
+        public void IsLeaveSent_AfterTheEnd_WaitsForNothing()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 2), latency: 0.03, jitter: 0.02))
+            {
+                var a = session.AddClient();
+                var b = session.AddClient();
+                session.Run(START_DELAY_SECONDS + 1, VaryingInput);
+
+                // The server has the leave, and the match ends before a frame carries it.
+                var slotB = b.LocalSlot;
+                b.Leave();
+                session.StepClientsOnly(0.1);
+                Assert.IsFalse(session.Server.IsLeaveSent(slotB), "a frame is still to carry the leave");
+                session.Server.EndGame();
+                Assert.IsTrue(session.Server.IsLeaveSent(slotB), "no frame closes after the end");
+
+                // A player that leaves after the end frees its slot at once.
+                var slotA = a.LocalSlot;
+                session.Disconnect(a);
+                Assert.IsFalse(session.Server.IsSlotInUse(slotA));
+                Assert.IsTrue(session.Server.IsLeaveSent(slotA));
             }
         }
 
@@ -194,12 +289,29 @@ namespace Pragma.Dots.Tests
             Assert.IsTrue(condition(), what);
         }
 
+        // The tick of the frame that announced the last leave of the slot, or -1.
+        private static int LeaveTick(LockstepServer server, int slot)
+        {
+            using (var replay = LockstepReplay.Read(server.ExportReplay()))
+            {
+                var tick = -1;
+                foreach (var player in replay.Players)
+                {
+                    if (player.slot == slot && player.leaveTick >= 0)
+                    {
+                        tick = player.leaveTick;
+                    }
+                }
+                return tick;
+            }
+        }
+
         /// <summary>
         /// The recording has the player of <paramref name="slot"/> join on <paramref name="joinTick"/> and leave on the next
-        /// tick, a simulation of it has the player joined on the one tick and leaving on the other, and re-simulating it
-        /// reproduces the recorded checksums.
+        /// tick, a simulation of it has the player joined on the one tick, without input or commands, and leaving on the
+        /// other, and re-simulating it reproduces the recorded checksums.
         /// </summary>
-        private static unsafe void AssertJoinedThenLeft(byte[] recording, int slot, int joinTick)
+        private static void AssertJoinedThenLeft(byte[] recording, int slot, int joinTick)
         {
             using (var replay = LockstepReplay.Read(recording))
             {
@@ -226,6 +338,9 @@ namespace Pragma.Dots.Tests
                     Assert.AreNotEqual(Entity.Null, entity, "the player is in the simulation on its join tick");
                     Assert.IsTrue(entityManager.IsComponentEnabled<LockstepPlayerJoined>(entity));
                     Assert.IsFalse(entityManager.IsComponentEnabled<LockstepPlayerLeft>(entity));
+                    Assert.AreEqual(default(TestInput), entityManager.GetComponentData<LockstepPlayerInput>(entity).Get<TestInput>(),
+                        "the input of a player that left goes with it, also on its join tick");
+                    Assert.AreEqual(0, entityManager.GetBuffer<LockstepCommand>(entity).Length, "and so do its commands");
 
                     StepRecorded(simulation, replay);
                     Assert.AreEqual(entity, TestUtility.PlayerEntity(simulation, slot));

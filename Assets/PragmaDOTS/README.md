@@ -1254,7 +1254,9 @@ foreach (var (player, commands, commandData) in
   slot 0, the guests in lobby order) passes the seat, so every player knows their slot before anyone joins and the
   order of joining does not matter — `JoinSession(world, settings, joinData, waitForActorRegistry, slot)`,
   `client.Join(joinData, slot)`, `LockstepOfflineConfig.slot`. A slot another player holds is refused with
-  `SlotTaken`, one the session does not have with `InvalidRequest`.
+  `SlotTaken`, one the session does not have with `InvalidRequest`. During the match a slot stays held until the frame
+  of its player's leave closes, so a player that left gets `SlotTaken` for its own slot until then: one that left
+  during the countdown, until frame 1 closes.
 
 #### Teams
 
@@ -1554,10 +1556,15 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 - **Leaving.** `client.Leave()`, removing the `LockstepClientConfig`, a dropped connection, or a disposed client
   world: once the match started, the server announces the leave in a frame and the slot becomes free; in the lobby the
   slot is free at once. A player that leaves before its join reached a frame (during the countdown, or a late joiner
-  before its first tick) still joins and leaves on the next tick, so the others learn of it like of any leave. A new
-  config joins again over the same connection. A player whose connection goes silent (an app minimized on a phone, a
-  network gone) leaves after `PlayerTimeoutSeconds` (10 by default), whatever the transport's own timeout; the Netcode
-  server system then disconnects it. A host whose own app was paused times nobody out for its pause.
+  before its first tick) still joins and leaves on the next tick, so the others learn of it like of any leave (its
+  slot is held until then: see *Slot* above). `server.IsLeaveSent(slot)` turns true once the frame of the leave went
+  to every client that receives frames (or no frame needs to: a leave in the lobby or after the end): a host whose own
+  player leaves keeps its server world until then, so nobody misses the leave. The frame is handed to the transport by
+  then, sent by Netcode in the same server world update; what the network loses afterwards is resent only while the
+  server world lives. A new config joins again over the same connection. A player whose connection goes silent (an
+  app minimized on a phone, a network gone) leaves after `PlayerTimeoutSeconds` (10 by default), whatever the
+  transport's own timeout; the Netcode server system then disconnects it. A host whose own app was paused times nobody
+  out for its pause.
 - **End.** `RequestEnd` / `server.EndGame(reason)` stops closing ticks and tells everybody;
   `client.EndedEvent` fires, `client.EndReason` says why (`Finished`, or `ServerShutdown` when the server config goes
   away) and the client finishes simulating the frames it already has. Ending in the lobby tells the players waiting
@@ -1595,7 +1602,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `ClosedTicks`, `PlayerCount`, `History` | Progress, players present, every closed frame |
 | `VerifiedChecksumCount`, `LateInputCount` | Diagnostics |
 | `DesyncDetectedEvent`, `ProtocolViolationEvent`, `ConnectionTimedOutEvent` | Events; a violation (malformed data, or a message or commands over the limits) carries the connection id and the reason, and the data is dropped; a timeout carries the connection whose player left for `PlayerTimeoutSeconds` of silence |
-| `StartGame`, `EndGame`, `ExportReplay`, `SetTeam`, `GetTeam`, `TryGetPlayerSlot`, `IsSlotInUse` | Actions and queries; `SetTeam` only in the lobby |
+| `StartGame`, `EndGame`, `ExportReplay`, `SetTeam`, `GetTeam`, `TryGetPlayerSlot`, `IsSlotInUse`, `IsLeaveSent` | Actions and queries; `SetTeam` only in the lobby; `IsLeaveSent(slot)`: the frame announcing the leave of the slot's player went to every client (see *Leaving*) |
 
 | `LockstepReplayHost` | |
 |---|---|

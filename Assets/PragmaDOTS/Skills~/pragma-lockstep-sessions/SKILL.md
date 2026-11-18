@@ -130,7 +130,7 @@ Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running
 | Joined, waiting | `server.State == Lobby`, `PlayerCount`; `server.SetTeam(slot, team)` puts slots into teams | `client.State == Lobby`, `LocalSlot` |
 | Start | `RequestStart(serverWorld)` or `server.StartGame(now)`: `State` is `Running` at once, `GetTickPosition(now)` is negative during the countdown | The start message arrives during the countdown: `Running`, `StartedEvent`, the simulation world is created |
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
-| Leave | Once the match started, announced in a frame, then the slot frees up; in the lobby the slot frees up at once. A player that leaves before its join reached a frame (during the countdown, a late joiner before its first tick) still joins, and leaves on the next tick. A connection silent for `PlayerTimeoutSeconds` (10) leaves too, raises `ConnectionTimedOutEvent`, and the Netcode server system disconnects it; a host whose app was paused times nobody out for that pause | `client.Leave()`, or the connection/world goes away. Over the redundant channel the client system keeps the channel up to 2 s until the server acknowledged the leave |
+| Leave | Once the match started, announced in a frame, then the slot frees up; in the lobby the slot frees up at once. A player that leaves before its join reached a frame (during the countdown, a late joiner before its first tick) still joins, and leaves on the next tick; until the frame of its leave closes the slot is held, and the same player joining it again gets `SlotTaken`. `server.IsLeaveSent(slot)`: the frame of the leave went to every client receiving frames (handed to the transport; true at once for a leave in the lobby or after the end) - a host whose own player leaves keeps its server world until then. A connection silent for `PlayerTimeoutSeconds` (10) leaves too, raises `ConnectionTimedOutEvent`, and the Netcode server system disconnects it; a host whose app was paused times nobody out for that pause | `client.Leave()`, or the connection/world goes away. Over the redundant channel the client system keeps the channel up to 2 s until the server acknowledged the leave |
 | End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent` with `client.EndReason`; the remaining frames are still simulated. A dropped connection ends with `ConnectionLost` (`client.OnDisconnected()`; the Netcode client system calls it and keeps the session registered until the config goes). Ending in the lobby tells the waiting players the same way; later joins get `GameEnded` |
 | Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded`, `SlotTaken` |
 
@@ -192,7 +192,8 @@ if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 if (LockstepWorlds.TryGetServer(serverWorld, out var server)) // a server world, or the offline world
 {
     // server.State, PlayerCount, ClosedTicks, StartTime, GetTickPosition(now), LateInputCount, VerifiedChecksumCount,
-    // IsSlotInUse(slot), TryGetPlayerSlot(connectionId, out slot), GetTeam(slot), SetTeam(slot, team) (lobby only)
+    // IsSlotInUse(slot), IsLeaveSent(slot) (the leave of the slot's player went out to every client),
+    // TryGetPlayerSlot(connectionId, out slot), GetTeam(slot), SetTeam(slot, team) (lobby only)
 }
 // Every session of the process: LockstepWorlds.GetClients(list), GetServers(list).
 ```

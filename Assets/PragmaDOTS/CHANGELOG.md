@@ -24,14 +24,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   acknowledged (two seconds at most). On a loopback network with a 140 ms round trip and 1-5 % loss, retransmission
   stood the picture still 2.4-4 % of the time for up to 0.28 s; the channel 0.1 % at most, for a frame.
 - `LockstepServerSettings.PlayerTimeoutSeconds` (10 by default): a player whose connection sends nothing for that long
-  leaves, announced in the next frame, and `LockstepServer.ConnectionTimedOutEvent` is raised; the Netcode server system
-  disconnects the connection. A server that itself stood still for over a second (a host whose app was paused) times
-  nobody out for it. Players no longer stay in the match for the minutes a transport may take to notice a lost peer.
+  leaves, announced in a frame like any leave, and `LockstepServer.ConnectionTimedOutEvent` is raised; the Netcode
+  server system disconnects the connection. A server that itself stood still for over a second (a host whose app was
+  paused) times nobody out for it. Players no longer stay in the match for the minutes a transport may take to notice
+  a lost peer.
 - Network measurements of `LockstepClient` for a network indicator: `StallCount` and `StalledSeconds` (the running
   match stood still waiting for frames), `SecondsSinceLastPacket`, `TargetPlayoutDelayTicks`, `ExtraInputMarginTicks`.
 - `ILockstepClientEndpoint`, implemented by `LockstepClient`, which `LockstepLoopbackNetwork.AttachClient` takes; the
   loopback network's `Loss` and `Reorder` make it unreliable for testing a channel, and `PacketsSent` / `BytesSent`
   count its traffic.
+- `LockstepServer.IsLeaveSent(slot)`: the frame that announces the leave of the slot's player is closed and went to
+  every client that receives frames, a late joiner still catching up included (true at once for a leave that needs no
+  frame: in the lobby, or after the end). A host whose own player leaves keeps its server until then instead of
+  guessing from frame counts.
 
 ### Changed
 
@@ -52,8 +57,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A player that leaves once the match started but before its join reached a frame (by `Leave`, a dropped connection
   or a timeout during the start countdown, or a late joiner before its first tick) is announced like any other: it
   joins in a frame and leaves in the next one. The server forgot it silently, so the others never learned of it, though
-  its client had the start. The join and the leave of a player never share a tick, and a leave in the lobby still frees
-  the slot without a word.
+  its client had the start. The join and the leave of a player never share a tick, the input and commands of a player
+  that left are dropped also on its join tick, and a leave in the lobby still frees the slot without a word. Until the
+  frame of the leave closes the slot stays held: the same player joining it again gets `SlotTaken`. A leave after the end
+  of the match frees the slot at once.
 
 ## [0.4.0] - 2026-11-12
 

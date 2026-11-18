@@ -34,15 +34,16 @@ namespace Pragma.Dots.Lockstep
             public readonly List<byte[]>[] ringCommands;
             public readonly List<byte[]> pendingCommands = new List<byte[]>();
 
-            // Reserved by a player; once the match started, it stays reserved until the leave has been announced in a
-            // frame.
+            // Reserved by a player; during the match it stays reserved until the leave has been announced in a frame.
             public bool inUse;
-            // Announced in a frame and not left yet.
-            public bool active;
             public bool pendingJoin;
             // The player left during the match: the next frame announces it, or the one after the join if the join is
             // still pending.
             public bool pendingLeave;
+            // The last player of the free slot left, announced in the frame of leaveTick, or in none (-1) when nobody was
+            // to hear of it.
+            public bool hasLeft;
+            public int leaveTick;
             public int connectionId = -1;
             public int joinTick;
             public bool reportsChecksums;
@@ -73,9 +74,10 @@ namespace Pragma.Dots.Lockstep
             public void Reset()
             {
                 inUse = false;
-                active = false;
                 pendingJoin = false;
                 pendingLeave = false;
+                hasLeft = false;
+                leaveTick = -1;
                 connectionId = -1;
                 joinTick = 0;
                 reportsChecksums = false;
@@ -213,7 +215,7 @@ namespace Pragma.Dots.Lockstep
 
         /// <summary>
         /// Raised with a connection id whose player sent nothing for <see cref="LockstepServerSettings.PlayerTimeoutSeconds"/>:
-        /// the player left (the next frame announces it). The transport should drop the connection.
+        /// the player left (a frame announces it, like any leave). The transport should drop the connection.
         /// </summary>
         public event Action<int> ConnectionTimedOutEvent;
 
@@ -228,6 +230,43 @@ namespace Pragma.Dots.Lockstep
 
         /// <summary>True when a player occupies the slot (joined, or about to be announced).</summary>
         public bool IsSlotInUse(int slot) => slot >= 0 && slot < _slots.Length && _slots[slot].inUse && !_slots[slot].pendingLeave;
+
+        /// <summary>
+        /// True once nothing is left to send about the leave of the player of <paramref name="slot"/>: the frame that
+        /// announces it is closed and went to every client that receives frames, a late joiner still catching up included,
+        /// or no frame needs to carry it (a leave in the lobby, or one the end of the match came first). A host whose own
+        /// player leaves may shut its server down from then on without anybody missing the leave. False while a player
+        /// holds the slot, also one that joined after the leave, and for a slot nobody left.
+        /// </summary>
+        /// <remarks>
+        /// The frame went to the transport (with Netcode, as RPCs sent in the same server world update); a packet the
+        /// network loses afterwards is resent only while the transport runs.
+        /// </remarks>
+        public bool IsLeaveSent(int slot)
+        {
+            if (slot < 0 || slot >= _slots.Length)
+            {
+                return false;
+            }
+            var entry = _slots[slot];
+            if (entry.inUse)
+            {
+                // After the end no frame closes: a leave still waiting for one has nothing more to send.
+                return entry.pendingLeave && State == LockstepServerState.Ended;
+            }
+            if (!entry.hasLeft)
+            {
+                return false;
+            }
+            foreach (var connection in _connectionOrder)
+            {
+                if (connection.started && connection.nextFrameToSend <= entry.leaveTick)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         /// <summary>The team <paramref name="slot"/> starts the match in; <see cref="LockstepTeams.NONE"/> for none.</summary>
         public int GetTeam(int slot) => slot >= 0 && slot < _config.Teams.Length ? _config.Teams[slot] : LockstepTeams.NONE;
@@ -725,14 +764,16 @@ namespace Pragma.Dots.Lockstep
             {
                 return;
             }
-            if (State == LockstepServerState.Lobby)
+            if (State != LockstepServerState.Running)
             {
-                // No client has the start and no frame will name the player: the slot is free again at once.
+                // In the lobby no client has the start, and after the end no frame closes: nobody is to hear of the leave,
+                // and the slot is free again at once.
                 slot.Reset();
+                slot.hasLeft = true;
                 return;
             }
-            // Once the match started, the player's client has the start, and the player is in a frame or will be in the
-            // next one: its leave is announced too, after the join, and the slot stays reserved until then.
+            // During the match the player's client has the start, and the player is in a frame or will be in the next
+            // one: its leave is announced too, after the join, and the slot stays reserved until then.
             slot.pendingLeave = true;
             slot.connectionId = -1;
         }
@@ -911,12 +952,13 @@ namespace Pragma.Dots.Lockstep
                 if (joining)
                 {
                     slot.pendingJoin = false;
-                    slot.active = true;
                     slot.joinTick = tick;
                 }
                 if (leaving)
                 {
                     slot.Reset();
+                    slot.hasLeft = true;
+                    slot.leaveTick = tick;
                 }
             }
 

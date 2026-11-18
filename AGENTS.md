@@ -166,7 +166,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   non-stacking modifiers, sources, timed modifiers, resources and caps, regeneration, pending and depleted resources, changes, grants, enum ids in Burst, change
   versions, a session with a late joiner, the actor parts and their merging), state machines (transitions, enter and exit, Burst jobs against a managed
   model, several machines per entity, the actor part, a session with a late joiner), sessions
-  (latency, jitter, late join, disconnects, leaves before the join reached a frame, desync attribution, replays,
+  (latency, jitter, late join, disconnects, leaves before the join reached a frame and when a leave has gone out, desync attribution, replays,
   commands with large data, player timeouts and paused hosts, stalls and the input margin, no garbage in a steady
   session), the redundant channel (order and exactly once over loss, duplication and reordering, epochs, frozen peers)
   and sessions over it with loss against plain

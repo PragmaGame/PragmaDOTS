@@ -563,6 +563,19 @@ These came up while building on Entities; neither reference package deals with t
     the server now times out a slot silent for ten seconds, and forgives the silence it caused itself when a host's app
     was paused.
 
+24. **Every started player is announced, and never joins and leaves on one tick.** The start message tells a client its
+    slot and join tick, and the game around it (the lobby, the other players' screens) counts on that player. A player
+    that left before its join reached a frame, during the start countdown or as a late joiner between two ticks, was
+    forgotten silently, so the others neither saw it come nor go: a host never learned that its guest had dropped. Such
+    a player is now announced like anybody else. The frame record can carry `Joined` and `Left` together, but then the
+    player would join and leave on one tick, and code that spawns on the join and cleans up on the leave (through a
+    command buffer, or in systems of either order) would keep what it spawned. So the join goes into one frame and the
+    leave into the next, and the input and commands of the player that left are dropped also on its join tick. The
+    slot stays held until then, so the same player cannot take it again for a tick or two. A host whose own player
+    leaves must not shut its server down before the leave went out: `IsLeaveSent` tells when the frame of the leave
+    went to every client receiving frames. It stops at the transport: acknowledging frames would change the protocol
+    (see 23), and the game decides how long its server lives beyond that.
+
 ## Limitations and future work
 
 - **Prediction and rollback**: a predicted copy of the simulation world, restored from the confirmed one and
