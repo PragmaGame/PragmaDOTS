@@ -54,10 +54,10 @@ namespace Pragma.Dots.Lockstep
         /// </summary>
         [field: SerializeField] public int MaxBufferedCommandBytes { get; set; }
         /// <summary>
-        /// A player whose connection sends nothing for this long leaves the session (the next frame announces it), and the
-        /// server raises <see cref="LockstepServer.ConnectionTimedOutEvent"/>; zero leaves it to the transport to notice.
-        /// Clients send input every tick and pings every half second, so a few seconds tell a lost player. A server that
-        /// itself stood still for a while (a host whose app was paused) times nobody out for it.
+        /// A player whose connection sends nothing for this long leaves the session (a frame announces it, like any leave),
+        /// and the server raises <see cref="LockstepServer.ConnectionTimedOutEvent"/>; zero leaves it to the transport to
+        /// notice. Clients send input every tick and pings every half second, so a few seconds tell a lost player. A server
+        /// that itself stood still for a while (a host whose app was paused) times nobody out for it.
         /// </summary>
         [field: SerializeField] public float PlayerTimeoutSeconds { get; set; }
         /// <summary>Refuse clients whose <see cref="LockstepSimulation.DefaultSimulationHash"/> differs from this one.</summary>

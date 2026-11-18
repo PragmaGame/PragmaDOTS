@@ -34,11 +34,14 @@ namespace Pragma.Dots.Lockstep
             public readonly List<byte[]>[] ringCommands;
             public readonly List<byte[]> pendingCommands = new List<byte[]>();
 
-            // Reserved by a player; stays reserved until the leave has been announced in a frame.
+            // Reserved by a player; once the match started, it stays reserved until the leave has been announced in a
+            // frame.
             public bool inUse;
             // Announced in a frame and not left yet.
             public bool active;
             public bool pendingJoin;
+            // The player left during the match: the next frame announces it, or the one after the join if the join is
+            // still pending.
             public bool pendingLeave;
             public int connectionId = -1;
             public int joinTick;
@@ -722,17 +725,16 @@ namespace Pragma.Dots.Lockstep
             {
                 return;
             }
-            if (slot.active)
+            if (State == LockstepServerState.Lobby)
             {
-                // Announce the leave in the next frame; the slot stays reserved until then.
-                slot.pendingLeave = true;
-                slot.connectionId = -1;
-            }
-            else
-            {
-                // Never appeared in a frame: forget it silently.
+                // No client has the start and no frame will name the player: the slot is free again at once.
                 slot.Reset();
+                return;
             }
+            // Once the match started, the player's client has the start, and the player is in a frame or will be in the
+            // next one: its leave is announced too, after the join, and the slot stays reserved until then.
+            slot.pendingLeave = true;
+            slot.connectionId = -1;
         }
 
         private void TimeOutSilentPlayers(double now)
@@ -820,7 +822,10 @@ namespace Pragma.Dots.Lockstep
 
                 var flags = LockstepFrameRecordFlags.None;
                 var joining = slot.pendingJoin;
-                var leaving = slot.pendingLeave;
+                // A player that left before its join reached a frame joins in this frame and leaves in the next one: the
+                // simulation never sees a join and a leave on one tick, so spawning on the join and cleaning up on the
+                // leave works whatever order the systems run in.
+                var leaving = slot.pendingLeave && !joining;
                 if (joining)
                 {
                     flags |= LockstepFrameRecordFlags.Joined;
@@ -832,7 +837,8 @@ namespace Pragma.Dots.Lockstep
 
                 var hasInput = slot.ringTicks[index] == tick;
                 var commandCount = 0;
-                if (!leaving)
+                // The input and commands of a player that left go with it, also on the tick it joins.
+                if (!slot.pendingLeave)
                 {
                     // A missing input simply repeats the previous one: no Input flag.
                     if (hasInput && inputSize > 0)

@@ -170,6 +170,8 @@ foreach (var (avatar, entity) in SystemAPI.Query<RefRO<Avatar>>().WithEntityAcce
 ```
 
 A freed slot can be reused by a later joiner, so per-player data keyed by `slot` must be removed on the leave tick.
+The leave tick always comes after the join tick, also for a player that dropped during the start countdown (it joins on
+tick 0 and leaves on tick 1), so the spawn above always has something for the clean-up to remove.
 
 ## Teams
 

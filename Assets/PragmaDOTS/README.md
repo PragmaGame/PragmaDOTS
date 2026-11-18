@@ -1149,6 +1149,10 @@ survive the leave: the entity is destroyed on the tick after `LockstepPlayerLeft
 A slot becomes free once the leave has been announced in a frame, and a later joiner may get it. Key per-player data
 by `slot` only while the player is present.
 
+A player leaves on a later tick than it joined, also one that left before its join reached a frame (during the start
+countdown it joins on tick 0 and leaves on tick 1): the join and the leave never share a tick, so the systems that
+spawn on the one and clean up on the other may run in any order.
+
 #### Input
 
 `LockstepPlayerInput.Get<T>()` returns the input confirmed for this tick, `GetPrevious<T>()` the one of the previous
@@ -1548,10 +1552,12 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   ticks the server has closed, from its start and pong messages) gives the progress for a loading screen. The cost
   grows with the match length.
 - **Leaving.** `client.Leave()`, removing the `LockstepClientConfig`, a dropped connection, or a disposed client
-  world: the server announces the leave in a frame and the slot becomes free. A new config joins again over the same
-  connection. A player whose connection goes silent (an app minimized on a phone, a network gone) leaves after
-  `PlayerTimeoutSeconds` (10 by default), whatever the transport's own timeout; the Netcode server system then
-  disconnects it. A host whose own app was paused times nobody out for its pause.
+  world: once the match started, the server announces the leave in a frame and the slot becomes free; in the lobby the
+  slot is free at once. A player that leaves before its join reached a frame (during the countdown, or a late joiner
+  before its first tick) still joins and leaves on the next tick, so the others learn of it like of any leave. A new
+  config joins again over the same connection. A player whose connection goes silent (an app minimized on a phone, a
+  network gone) leaves after `PlayerTimeoutSeconds` (10 by default), whatever the transport's own timeout; the Netcode
+  server system then disconnects it. A host whose own app was paused times nobody out for its pause.
 - **End.** `RequestEnd` / `server.EndGame(reason)` stops closing ticks and tells everybody;
   `client.EndedEvent` fires, `client.EndReason` says why (`Finished`, or `ServerShutdown` when the server config goes
   away) and the client finishes simulating the frames it already has. Ending in the lobby tells the players waiting
@@ -1706,7 +1712,7 @@ Start from `LockstepServerSettings.Default`. The settings are serializable, so t
 | `MaxCommandDataSize` | 1 MB | Largest data of one command; a larger one is a protocol violation |
 | `MaxCommandBytesPerTick` | 64 KB | Command bytes of one player per frame; the rest waits for the next ticks, a single larger command goes alone |
 | `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player the server holds (sent ahead or waiting); beyond it they are dropped as a protocol violation |
-| `PlayerTimeoutSeconds` | 10 | A player whose connection sends nothing for this long leaves (the next frame announces it) and `ConnectionTimedOutEvent` is raised; 0 leaves it to the transport. A server that itself stood still (a paused host) times nobody out for it |
+| `PlayerTimeoutSeconds` | 10 | A player whose connection sends nothing for this long leaves (a frame announces it, like any leave) and `ConnectionTimedOutEvent` is raised; 0 leaves it to the transport. A server that itself stood still (a paused host) times nobody out for it |
 | `ValidateSimulationHash` | true | Refuse clients whose `DefaultSimulationHash` differs |
 | `StartData` | empty | Up to 126 bytes, readable in the simulation through `LockstepSessionInfo` |
 | `Teams` | empty | The [team](#teams) of every slot at its index, at most `MaxPlayers` entries: 1–255, or 0 (and a missing entry) for none |

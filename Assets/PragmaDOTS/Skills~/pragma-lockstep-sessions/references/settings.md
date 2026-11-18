@@ -24,7 +24,7 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxCommandDataSize` | 1 MB | Largest data of one command; larger = protocol violation; 0 = default. Must fit `MaxMessageSize` and `MaxBufferedCommandBytes` |
 | `MaxCommandBytesPerTick` | 64 KB | Command bytes of one player per frame; the rest waits, a single larger command goes alone; 0 = default |
 | `MaxBufferedCommandBytes` | 4 MB | Command bytes of one player held by the server (ring and backlog); beyond = protocol violation, dropped; 0 = default |
-| `PlayerTimeoutSeconds` | 10 | A player whose connection sends nothing this long leaves (announced in the next frame, `ConnectionTimedOutEvent`; the Netcode server system disconnects it); 0 = only the transport notices. A server that itself did not update for over a second (a paused host) times nobody out for it |
+| `PlayerTimeoutSeconds` | 10 | A player whose connection sends nothing this long leaves (announced in a frame like any leave, `ConnectionTimedOutEvent`; the Netcode server system disconnects it); 0 = only the transport notices. A server that itself did not update for over a second (a paused host) times nobody out for it |
 | `ValidateSimulationHash` | true | Reject clients whose `LockstepSimulation.DefaultSimulationHash` differs |
 | `StartData` | empty | `FixedList128Bytes<byte>` (126 bytes) for match parameters |
 | `Teams` | empty | `FixedList128Bytes<byte>`: the team of slot `s` at index `s`, 1-255, 0 or missing = none; at most `MaxPlayers` entries. `server.SetTeam` changes it in the lobby |

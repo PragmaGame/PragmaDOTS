@@ -47,6 +47,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   allocates nothing per frame.
 - Offline mode turns the player timeout off.
 
+### Fixed
+
+- A player that leaves once the match started but before its join reached a frame (by `Leave`, a dropped connection
+  or a timeout during the start countdown, or a late joiner before its first tick) is announced like any other: it
+  joins in a frame and leaves in the next one. The server forgot it silently, so the others never learned of it, though
+  its client had the start. The join and the leave of a player never share a tick, and a leave in the lobby still frees
+  the slot without a word.
+
 ## [0.4.0] - 2026-11-12
 
 ### Fixed
