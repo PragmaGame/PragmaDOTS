@@ -1561,7 +1561,10 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   to every client that receives frames (or no frame needs to: a leave in the lobby or after the end): a host whose own
   player leaves keeps its server world until then, so nobody misses the leave. The frame is handed to the transport by
   then, sent by Netcode in the same server world update; what the network loses afterwards is resent only while the
-  server world lives. A new config joins again over the same connection. A player whose connection goes silent (an
+  server world lives. Over the redundant channel a host makes sure of the delivery: after `IsLeaveSent` it ends the
+  match (`RequestEnd`: no new frames, the closed ones and the end go out) and keeps its server world until
+  `LockstepNetcodeServerSystem.Channel.GetUnacknowledgedCount()` is zero, with a time limit of its own for a client
+  that went silent. A new config joins again over the same connection. A player whose connection goes silent (an
   app minimized on a phone, a network gone) leaves after `PlayerTimeoutSeconds` (10 by default), whatever the
   transport's own timeout; the Netcode server system then disconnects it. A host whose own app was paused times nobody
   out for its pause.
@@ -1991,7 +1994,9 @@ channel.RemoveConnection(connectionId);               // a peer left
 ```
 
 The datagrams may be lost, duplicated and reordered; `MaxDatagramSize` should stay below the path MTU.
-`DatagramsSent`, `DatagramsReceived`, `PacketsResent` and `GetRoundTripTime` tell how the link is doing. In tests,
+`DatagramsSent`, `DatagramsReceived`, `PacketsResent` and `GetRoundTripTime` tell how the link is doing;
+`GetUnacknowledgedCount(connectionId)` and `GetUnacknowledgedCount()` (every connection), what has not arrived yet: zero
+means everything sent so far was acknowledged, so a side that stopped sending may close its transport. In tests,
 `LockstepLoopbackNetwork.Loss` and `Reorder` make the loopback network unreliable, and `ILockstepClientEndpoint` lets
 it deliver to whatever stands in front of a client.
 

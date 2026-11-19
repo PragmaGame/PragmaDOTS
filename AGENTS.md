@@ -168,9 +168,10 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   model, several machines per entity, the actor part, a session with a late joiner), sessions
   (latency, jitter, late join, disconnects, leaves before the join reached a frame and when a leave has gone out, desync attribution, replays,
   commands with large data, player timeouts and paused hosts, stalls and the input margin, no garbage in a steady
-  session), the redundant channel (order and exactly once over loss, duplication and reordering, epochs, frozen peers)
+  session), the redundant channel (order and exactly once over loss, duplication and reordering, epochs, frozen peers,
+  the unacknowledged count of a connection and of all of them)
   and sessions over it with loss against plain
-  retransmission, presentation,
+  retransmission and a host that leaves, ends the match and waits for its channel to empty, presentation,
   GameObject views (component and buffer parts, prefabs by key), offline mode and a real Netcode server with two clients
   over reliable RPCs and over the redundant channel (including a command larger than the reliable window, send and
   received requests hidden from the Hierarchy window, and 10 % packet loss in Transport's simulator).

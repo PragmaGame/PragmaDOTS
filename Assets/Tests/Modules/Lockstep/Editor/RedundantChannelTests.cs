@@ -135,6 +135,44 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void UnacknowledgedCount_AddsUpEveryConnection_AndEmptiesWithTheAcknowledgements()
+        {
+            using (var channel = new LockstepRedundantChannel(new Silence()))
+            {
+                var packet = new byte[] { 1, 2 };
+                fixed (byte* data = packet)
+                {
+                    channel.Send(1, data, packet.Length);
+                    channel.Send(1, data, packet.Length);
+                    channel.Send(2, data, packet.Length);
+                }
+                channel.Flush(1);
+                Assert.AreEqual(2, channel.GetUnacknowledgedCount(1));
+                Assert.AreEqual(3, channel.GetUnacknowledgedCount(), "the packets of every connection");
+
+                channel.RemoveConnection(1);
+                Assert.AreEqual(1, channel.GetUnacknowledgedCount(), "a closed connection takes its packets along");
+            }
+
+            using (var link = new DatagramLink(10) { Loss = 0.2, Jitter = 0.02 })
+            {
+                for (byte i = 0; i < 20; i++)
+                {
+                    link.SendFromA(new[] { i });
+                }
+                link.Step(0.016);
+                Assert.Greater(link.A.GetUnacknowledgedCount(), 0, "nothing has arrived yet");
+
+                for (var step = 0; step < 500 && link.A.GetUnacknowledgedCount() > 0; step++)
+                {
+                    link.Step(0.016);
+                }
+                Assert.AreEqual(0, link.A.GetUnacknowledgedCount(), "every packet was acknowledged");
+                Assert.AreEqual(20, link.ReceivedByB.Count);
+            }
+        }
+
+        [Test]
         public void ASideCreatedAnew_GetsAStreamOfItsOwn()
         {
             using (var link = new DatagramLink(2))
@@ -274,6 +312,14 @@ namespace Pragma.Dots.Tests
                 var bytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
                 Assert.AreEqual(0L, bytes);
                 Assert.Greater(a.Received, 450);
+            }
+        }
+
+        // A network that loses everything: nothing is ever acknowledged.
+        private sealed class Silence : ILockstepTransport
+        {
+            public void Send(int connectionId, byte* data, int length)
+            {
             }
         }
 

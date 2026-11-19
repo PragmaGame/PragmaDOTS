@@ -280,6 +280,20 @@ namespace Pragma.Dots.Lockstep
         /// <summary>Packets queued for a connection and not acknowledged yet.</summary>
         public int GetUnacknowledgedCount(int connectionId) => _peers.TryGetValue(connectionId, out var peer) ? peer.outPackets.Length : 0;
 
+        /// <summary>
+        /// Packets queued for every connection and not acknowledged yet. Zero means everything sent so far has arrived: a
+        /// server that stopped sending (its match ended) may shut down without its last packets dying with the transport.
+        /// </summary>
+        public int GetUnacknowledgedCount()
+        {
+            var count = 0;
+            for (var i = 0; i < _peerList.Count; i++)
+            {
+                count += _peerList[i].outPackets.Length;
+            }
+            return count;
+        }
+
         public void Dispose()
         {
             if (_disposed)

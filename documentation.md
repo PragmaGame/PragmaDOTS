@@ -574,7 +574,11 @@ These came up while building on Entities; neither reference package deals with t
     slot stays held until then, so the same player cannot take it again for a tick or two. A host whose own player
     leaves must not shut its server down before the leave went out: `IsLeaveSent` tells when the frame of the leave
     went to every client receiving frames. It stops at the transport: acknowledging frames would change the protocol
-    (see 23), and the game decides how long its server lives beyond that.
+    (see 23), and the game decides how long its server lives beyond that. Over the redundant channel the channel's own
+    acknowledgements tell it: the host ends the match after `IsLeaveSent`, so that no new frames follow, and waits until
+    `GetUnacknowledgedCount()` of the server channel is zero. A count per connection would not do while frames keep
+    coming, and tracking which channel packet carried the frame of the leave would put a session concept into the
+    channel.
 
 ## Limitations and future work
 

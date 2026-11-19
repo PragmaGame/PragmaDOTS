@@ -37,6 +37,9 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every client that receives frames, a late joiner still catching up included (true at once for a leave that needs no
   frame: in the lobby, or after the end). A host whose own player leaves keeps its server until then instead of
   guessing from frame counts.
+- `LockstepRedundantChannel.GetUnacknowledgedCount()`: the packets not acknowledged yet over every connection. A host
+  whose own player leaves ends the match after `IsLeaveSent` and keeps its server world until the server channel has
+  nothing unacknowledged, so the clients get the frame of the leave and the end before the transport goes.
 
 ### Changed
 

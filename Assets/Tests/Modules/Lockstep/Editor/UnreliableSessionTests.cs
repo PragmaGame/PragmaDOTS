@@ -158,6 +158,48 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void AHostThatLeaves_EndsTheMatch_AndShutsDownOnceItsChannelIsEmpty()
+        {
+            using (var session = new SessionHarness(Settings(2), latency: 0.06, jitter: 0.04, redundant: true, loss: 0.05))
+            {
+                var host = session.AddClient();
+                var guest = session.AddClient();
+                session.Run(3, VaryingInput);
+                Assert.AreEqual(LockstepClientState.Running, guest.State);
+                var slot = host.LocalSlot;
+
+                // The host's own player leaves: its server must outlive the frame of the leave.
+                host.Leave();
+                for (var step = 0; step < 500 && !session.Server.IsLeaveSent(slot); step++)
+                {
+                    session.Step(0.01, VaryingInput);
+                }
+                Assert.IsTrue(session.Server.IsLeaveSent(slot), "the frame of the leave went out");
+                Assert.Greater(session.ServerChannel.GetUnacknowledgedCount(), 0, "handed to the network, not delivered yet");
+
+                // No new frames, the last ones and the end go out; the channel empties once the guest has them all.
+                session.Server.EndGame();
+                for (var step = 0; step < 500 && session.ServerChannel.GetUnacknowledgedCount() > 0; step++)
+                {
+                    session.Step(0.01, VaryingInput);
+                }
+                Assert.AreEqual(0, session.ServerChannel.GetUnacknowledgedCount(), "everything the server sent has arrived");
+                Assert.AreEqual(LockstepClientState.Ended, guest.State, "the guest got the end");
+                Assert.AreEqual(LockstepEndReason.Finished, guest.EndReason);
+                Assert.AreEqual(session.Server.ClosedTicks, guest.ConfirmedTicks, "and every closed frame, the leave's among them");
+
+                session.Run(1, VaryingInput);
+                var entities = guest.Simulation.World.EntityManager;
+                Assert.AreEqual(guest.ConfirmedTicks, guest.SimulatedTicks, "the guest played every frame it got");
+                // The last tick may be the one of the leave, which the player entity outlives until the next tick.
+                Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(entities) - TestUtility.Count<LockstepPlayerLeft>(entities),
+                    "the guest played the host's leave");
+                Assert.AreEqual(0, session.ServerChannel.GetUnacknowledgedCount(), "an ended server sends nothing more: it may shut down");
+                Assert.IsEmpty(session.Desyncs);
+            }
+        }
+
+        [Test]
         public void ALateJoiner_CatchesUp_OverALossyNetwork()
         {
             using (var session = new SessionHarness(Settings(2), latency: 0.05, jitter: 0.03, redundant: true, loss: 0.05))

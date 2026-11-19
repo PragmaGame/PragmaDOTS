@@ -138,6 +138,17 @@ With Netcode (`Pragma.Dots.Lockstep.Netcode`), the component equivalents in the 
 `LockstepStartGameRequest`, an entity with `LockstepEndGameRequest { reason }`, and the `LockstepServerStatus`
 singleton (`state`, `closedTicks`, `playerCount`) for UI.
 
+A host whose own player leaves shuts its server down only once the clients have the leave. `IsLeaveSent` stops at the
+transport, and Netcode drops the RPCs of the last updates when the server world goes, so over the redundant channel:
+
+1. `client.Leave()`, then wait for `server.IsLeaveSent(slot)`;
+2. `RequestEnd(serverWorld, LockstepEndReason.Finished)`: no new frames, the closed ones and the end go out;
+3. keep the server world until `serverWorld.GetExistingSystemManaged<LockstepNetcodeServerSystem>().Channel.GetUnacknowledgedCount() == 0`
+   (every client acknowledged everything), with a time limit of the game's own for a client that went silent;
+4. close the worlds.
+
+Over reliable RPCs no acknowledgements are visible: `IsLeaveSent` is all there is.
+
 Late-join loading screen: show `client.SimulatedTicks / (float)client.ServerTicks` (the ticks the server has closed,
 from its start and pong messages) while `client.BufferedTicks` is large; re-simulation speed is bounded by
 `MaxTicksPerUpdate` and `MaxSimulationMillisecondsPerUpdate`.
@@ -261,7 +272,8 @@ Over an unreliable transport (raw UDP), put a `LockstepRedundantChannel` on each
 `channel.Receive(peerId, data, length, now)` and then `while (channel.TryRead(out var from, out var packet, out var n))
 session.OnPacket(...)` (a client passes connection id 0 and ignores `from`); `channel.Flush(now)` after the session's
 `Update`; `RemoveConnection(peerId)` when a peer leaves. Datagrams may be lost, duplicated and reordered; keep
-`LockstepRedundantChannelSettings.MaxDatagramSize` (1024) below the MTU.
+`LockstepRedundantChannelSettings.MaxDatagramSize` (1024) below the MTU. `GetUnacknowledgedCount(peerId)` and
+`GetUnacknowledgedCount()` (every peer) count the packets not acknowledged yet: zero means everything sent has arrived.
 
 ## Replays
 
