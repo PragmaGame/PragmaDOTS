@@ -74,6 +74,7 @@ namespace Pragma.Dots.Lockstep.Netcode
         private EntityQuery _connectionQuery;
         private EntityQuery _receivedQuery;
         private EntityQuery _receivedDatagramQuery;
+        private EntityQuery _sentQuery;
         private EntityQuery _startRequestQuery;
         private EntityQuery _endRequestQuery;
         private NativeHashMap<int, Entity> _connectionsById;
@@ -90,11 +91,30 @@ namespace Pragma.Dots.Lockstep.Netcode
         /// <summary>The channel of the clients that talk through it, or null.</summary>
         public LockstepRedundantChannel Channel => _channel;
 
+        /// <summary>
+        /// Everything the server sent has reached its clients as far as this world can tell: the clients on the redundant
+        /// channel acknowledged it, and what went to the others as reliable RPCs was handed to the transport, which resends it
+        /// while the connection lives. An ended server sends nothing more, so after the end this tells when the world may go
+        /// without taking the last frames and the end with it. Without a server: true.
+        /// </summary>
+        public bool IsDelivered
+        {
+            get
+            {
+                if (_server == null)
+                {
+                    return true;
+                }
+                return _channel.GetUnacknowledgedCount() == 0 && LockstepRpcSendQueue.IsEmpty(EntityManager, _sentQuery, _connectionQuery);
+            }
+        }
+
         protected override void OnCreate()
         {
             _connectionQuery = GetEntityQuery(ComponentType.ReadOnly<NetworkId>(), ComponentType.ReadOnly<NetworkStreamConnection>());
             _receivedQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
             _receivedDatagramQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepDatagramRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
+            _sentQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>());
             _startRequestQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepStartGameRequest>());
             _endRequestQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepEndGameRequest>());
             _connectionsById = new NativeHashMap<int, Entity>(16, Allocator.Persistent);

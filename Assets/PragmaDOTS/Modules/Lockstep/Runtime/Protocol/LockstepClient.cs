@@ -117,6 +117,12 @@ namespace Pragma.Dots.Lockstep
         public IReadOnlyList<KeyValuePair<int, ulong>> LocalChecksums => _localChecksums;
         public bool IsDesynced { get; private set; }
         /// <summary>
+        /// The simulation stopped for good and plays no more frames, however many arrive: it desynced with
+        /// <see cref="LockstepClientSettings.StopOnDesync"/>. A client waiting for the end of its frames (a lost connection,
+        /// an ended match) has nothing more to wait for.
+        /// </summary>
+        public bool IsSimulationStopped => _settings.StopOnDesync && IsDesynced;
+        /// <summary>
         /// How fast the playout runs: 1 is real time. A <see cref="LockstepReplayHost"/> streams frames faster, slower or
         /// not at all, and the client follows at the same speed; 0 holds the simulation where it is. Never negative.
         /// </summary>
@@ -340,8 +346,7 @@ namespace Pragma.Dots.Lockstep
                 }
             }
 
-            if (Simulation != null && (State == LockstepClientState.Running || State == LockstepClientState.Ended) &&
-                !(_settings.StopOnDesync && IsDesynced))
+            if (Simulation != null && (State == LockstepClientState.Running || State == LockstepClientState.Ended) && !IsSimulationStopped)
             {
                 AdvanceSimulation(deltaTime * _playbackSpeed);
             }

@@ -1464,6 +1464,7 @@ sides.
 | `Listen(serverWorld, endpoint)`, `Connect(clientWorld, endpoint)` | `NetworkStreamDriver.Listen` / `Connect` |
 | `RequestStart(serverWorld)` | Starts the match on the next server update with whoever joined |
 | `RequestEnd(serverWorld, reason)` | Ends the match |
+| `UpdateLeave(serverWorld, clientWorld, slot)` | The local player leaves (on the first call), and the leave is followed until it has reached everyone: call it every frame and close the worlds once it returns true (see *Leaving*) |
 | `TryGetServer(serverWorld, out server)`, `TryGetClient(clientWorld, out client)` | The running session objects |
 
 The same can be done with components: create `LockstepServerConfig { settings }` or
@@ -1535,7 +1536,8 @@ LockstepNetcode.JoinSession(client, LockstepClientSettings.Default, redundantCha
   16.6 ticks ahead; the channel stood still 0.1 % of the time for one frame at most and placed inputs 7.3 and 8.2 ticks
   ahead (6.7 without loss). The lockstep payload about doubles (the copies), while Transport's acknowledgements of the
   reliable pipeline go away.
-- A client that leaves keeps its channel for up to two seconds, until the server acknowledged the leave.
+- A client that leaves by removing its config keeps its channel for up to two seconds, until the server acknowledged
+  the leave (the rule of `LockstepNetcodeClientSystem.IsDelivered`).
 - The channel is transport-agnostic: see [custom transports](#custom-transports) for using it over any datagram socket.
 
 #### Match flow
@@ -1558,13 +1560,18 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   slot is free at once. A player that leaves before its join reached a frame (during the countdown, or a late joiner
   before its first tick) still joins and leaves on the next tick, so the others learn of it like of any leave (its
   slot is held until then: see *Slot* above). `server.IsLeaveSent(slot)` turns true once the frame of the leave went
-  to every client that receives frames (or no frame needs to: a leave in the lobby or after the end): a host whose own
-  player leaves keeps its server world until then, so nobody misses the leave. The frame is handed to the transport by
-  then, sent by Netcode in the same server world update; what the network loses afterwards is resent only while the
-  server world lives. Over the redundant channel a host makes sure of the delivery: after `IsLeaveSent` it ends the
-  match (`RequestEnd`: no new frames, the closed ones and the end go out) and keeps its server world until
-  `LockstepNetcodeServerSystem.Channel.GetUnacknowledgedCount()` is zero, with a time limit of its own for a client
-  that went silent. A new config joins again over the same connection. A player whose connection goes silent (an
+  to every client that receives frames (or no frame needs to: a leave in the lobby or after the end); the frame is
+  handed to the transport by then, sent by Netcode in the same server world update.
+- **Leaving and closing the worlds.** Netcode drops what a world going away has not sent, so a player who closes the
+  worlds after leaving calls `LockstepNetcode.UpdateLeave(serverWorld, clientWorld, slot)` every frame until it returns
+  true; it leaves on the first call. A guest passes no server world: its leave has reached everyone once the server has
+  it (`LockstepNetcodeClientSystem.IsDelivered`: acknowledged over the redundant channel, handed to the transport over
+  reliable RPCs, which Netcode resends while the connection lives). A host passes its server world, which goes with it:
+  once the frame of its leave went out, the match ends on the next server update (`RequestEnd`: no new frames, the
+  closed ones and the end go out), and the leave has reached everyone once the server has ended it and every client
+  has what it sent (`LockstepNetcodeServerSystem.IsDelivered`, the same rule). Until then the guests would see a lost
+  connection instead of the leave. How long to wait for a peer that went silent is the caller's.
+- **Rejoining and silence.** A new config joins again over the same connection. A player whose connection goes silent (an
   app minimized on a phone, a network gone) leaves after `PlayerTimeoutSeconds` (10 by default), whatever the
   transport's own timeout; the Netcode server system then disconnects it. A host whose own app was paused times nobody
   out for its pause.
@@ -1594,6 +1601,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `StallCount`, `StalledSeconds`, `SecondsSinceLastPacket` | How often and how long the picture stood still waiting for frames, and how long the server has been silent: the inputs of a network indicator |
 | `TargetPlayoutDelayTicks`, `ExtraInputMarginTicks` | The playout delay the client aims for now (jitter and stalls included) and what late inputs added to the input margin |
 | `IsDesynced`, `DesyncTick`, `LocalChecksums` | Desync state |
+| `IsSimulationStopped` | The simulation stopped for good and plays no more frames (a desync with `StopOnDesync`): a client waiting for the end of its frames has nothing more to wait for |
 | `EndReason` | Why the match ended, once `State` is `Ended` |
 | `StartedEvent`, `DesyncedEvent`, `EndedEvent`, `RejectedEvent` | Events |
 | `SetInput`, `AddCommand`, `Join`, `Leave`, `ExportReplay` | Actions |
@@ -1741,7 +1749,7 @@ Start from `LockstepClientSettings.Default`.
 | `MaxSimulationMillisecondsPerUpdate` | 16 | Catch-up time budget per update; at least one tick always runs |
 | `PingIntervalSeconds` | 0.5 | Round-trip measurement interval |
 | `RecordReplay` | true | Keep every frame so the match can be exported; a thin client without it keeps no frames at all |
-| `StopOnDesync` | false | Stop simulating after a reported desync |
+| `StopOnDesync` | false | Stop simulating after a reported desync (`client.IsSimulationStopped`) |
 | `MaxPacketSize` | 1024 | Largest packet handed to the transport |
 | `MaxExtraInputMarginTicks` | 2 | How far the input margin grows after late inputs (and never past a round trip); 0 keeps it at `InputMarginTicks` |
 | `MaxStallDelayTicks` | 3 | How far the playout delay grows after stalls; 0 sizes it by the jitter alone |
@@ -1789,7 +1797,7 @@ hash to the server. The server compares the hashes of a tick by majority and bro
   later round too: the server reports a round only when it flags a slot no earlier report did (a new player in the
   slot counts as new). Hashes are taken only for ticks on the `ChecksumInterval`.
 - Each client raises `DesyncedEvent(tick, isLocalClientAffected)` and logs an error. With `StopOnDesync` it stops
-  simulating.
+  simulating (`client.IsSimulationStopped`).
 
 The hash covers every entity and every unmanaged component of the simulation world. It is independent of padding
 bytes, type indices and entity ids (entities are identified by traversal position, and `Entity` fields by the

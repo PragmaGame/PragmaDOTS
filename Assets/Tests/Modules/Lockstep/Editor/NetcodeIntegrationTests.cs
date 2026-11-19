@@ -23,6 +23,7 @@ namespace Pragma.Dots.Tests
     public class NetcodeIntegrationTests
     {
         private readonly List<World> _worlds = new List<World>();
+        private readonly HashSet<World> _frozen = new HashSet<World>();
         private double _time;
         private bool _runInBackground;
         private ushort _autoConnectPort;
@@ -51,6 +52,7 @@ namespace Pragma.Dots.Tests
                 }
             }
             _worlds.Clear();
+            _frozen.Clear();
             UnityEngine.Application.runInBackground = _runInBackground;
             ClientServerBootstrap.AutoConnectPort = _autoConnectPort;
             NetworkStreamReceiveSystem.DriverConstructor = _driverConstructor;
@@ -81,10 +83,38 @@ namespace Pragma.Dots.Tests
                 _time += deltaTime;
                 foreach (var world in _worlds)
                 {
+                    if (_frozen.Contains(world))
+                    {
+                        continue;
+                    }
                     world.SetTime(new TimeData(_time, (float)deltaTime));
                     world.Update();
                 }
             }
+        }
+
+        /// <summary>
+        /// The worlds never update again, as if their process closed them: they send nothing more, and Netcode does not tell
+        /// the other side either, so what reaches it is what went out before.
+        /// </summary>
+        private void Freeze(params World[] worlds)
+        {
+            _frozen.UnionWith(worlds);
+        }
+
+        /// <summary>Ticks one frame at a time until <paramref name="condition"/> holds, within a real-time bound.</summary>
+        private bool TickUntil(System.Func<bool> condition, double seconds = 20)
+        {
+            var timer = Stopwatch.StartNew();
+            while (!condition())
+            {
+                if (timer.Elapsed.TotalSeconds > seconds)
+                {
+                    return false;
+                }
+                Tick(1);
+            }
+            return true;
         }
 
         /// <summary>
@@ -334,6 +364,124 @@ namespace Pragma.Dots.Tests
             Assert.AreEqual(LockstepClientState.Running, b.State);
             Assert.Greater(a.SimulatedTicks, 60);
             Assert.IsFalse(a.IsDesynced || b.IsDesynced);
+        }
+
+        [TestCase(false, 7980)]
+        [TestCase(true, 7981)]
+        public void AHostThatLeaves_HasItDelivered_OnlyOnceItsServerEndedTheMatchAndSentEverything(bool redundant, int port)
+        {
+            var (server, clientA, clientB) = StartSession((ushort)port, redundant);
+            Tick(60 * 3);
+            Assert.IsTrue(LockstepNetcode.TryGetServer(server, out var lockstepServer));
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientA, out var host));
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var guest));
+            Assert.AreEqual(LockstepClientState.Running, guest.State);
+
+            // The host's own player leaves, and its server goes with it.
+            var sentBeforeTheEnd = 0;
+            Assert.IsTrue(TickUntil(() =>
+            {
+                var isEnded = lockstepServer.State == LockstepServerState.Ended;
+                var isDelivered = LockstepNetcode.UpdateLeave(server, clientA, host.LocalSlot);
+                if (lockstepServer.IsLeaveSent(host.LocalSlot) && !isEnded)
+                {
+                    sentBeforeTheEnd++;
+                }
+                Assert.IsTrue(isEnded || !isDelivered, "not before the server has ended the match: the end has not gone out");
+                return isDelivered;
+            }), "the leave was delivered");
+            Assert.Greater(sentBeforeTheEnd, 0, "the frame of the leave went out first");
+
+            AssertTheGuestHasTheLeaveAndTheEnd(server, clientA, guest);
+        }
+
+        [TestCase(false, 7982)]
+        [TestCase(true, 7983)]
+        public void AGuestThatLeaves_HasItDelivered_OnceTheServerHasIt(bool redundant, int port)
+        {
+            var (server, clientA, clientB) = StartSession((ushort)port, redundant);
+            Tick(60 * 3);
+            Assert.IsTrue(LockstepNetcode.TryGetServer(server, out var lockstepServer));
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientA, out var other));
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var guest));
+            Assert.AreEqual(LockstepClientState.Running, guest.State);
+
+            Assert.IsFalse(LockstepNetcode.UpdateLeave(null, clientB, guest.LocalSlot), "the leave has just been sent");
+            Assert.IsTrue(TickUntil(() => LockstepNetcode.UpdateLeave(null, clientB, guest.LocalSlot)), "the leave was delivered");
+
+            AssertTheServerHasTheLeave(clientB, lockstepServer, other);
+        }
+
+        [TestCase(true, 7984)]
+        [TestCase(false, 7985)]
+        public void ALeave_OverALossyNetwork_IsDeliveredOnlyOnceAcknowledged(bool isHost, int port)
+        {
+            // A tenth of the clients' packets is lost both ways, in Transport's simulator.
+            NetworkStreamReceiveSystem.DriverConstructor = new LossyDriverConstructor(10);
+            var (server, clientA, clientB) = StartSession((ushort)port, redundant: true, unreliablePipeline: false);
+            LockstepClient a = null;
+            LockstepClient b = null;
+            Assert.IsTrue(TickUntil(() => LockstepNetcode.TryGetClient(clientA, out a) && LockstepNetcode.TryGetClient(clientB, out b) &&
+                                          a.SimulatedTicks > 60 && b.SimulatedTicks > 60, 30), "both clients play");
+            Assert.IsTrue(LockstepNetcode.TryGetServer(server, out var lockstepServer));
+
+            if (isHost)
+            {
+                Assert.IsTrue(TickUntil(() => LockstepNetcode.UpdateLeave(server, clientA, a.LocalSlot)), "the host's leave was delivered");
+                AssertTheGuestHasTheLeaveAndTheEnd(server, clientA, b);
+            }
+            else
+            {
+                Assert.IsTrue(TickUntil(() => LockstepNetcode.UpdateLeave(null, clientB, b.LocalSlot)), "the guest's leave was delivered");
+                AssertTheServerHasTheLeave(clientB, lockstepServer, a);
+            }
+        }
+
+        [Test]
+        public void AHostThatLeavesInTheStartCountdown_HasItDeliveredToo()
+        {
+            var (server, clientA, clientB) = StartSession(7986, redundant: true);
+            LockstepClient host = null;
+            Assert.IsTrue(TickUntil(() => LockstepNetcode.TryGetClient(clientA, out host) && host.State == LockstepClientState.Running), "the match starts");
+            Assert.AreEqual(0, host.ConfirmedTicks, "the first frame is still to come");
+            Assert.IsTrue(LockstepNetcode.TryGetClient(clientB, out var guest));
+
+            Assert.IsTrue(TickUntil(() => LockstepNetcode.UpdateLeave(server, clientA, host.LocalSlot)), "the leave was delivered");
+            Assert.GreaterOrEqual(guest.ConfirmedTicks, 2, "the host joined in the frame of tick 0 and left in a later one");
+
+            AssertTheGuestHasTheLeaveAndTheEnd(server, clientA, guest);
+        }
+
+        /// <summary>The host's worlds stop for good: the guest has the leave and the end from what went out before.</summary>
+        private void AssertTheGuestHasTheLeaveAndTheEnd(World server, World host, LockstepClient guest)
+        {
+            Freeze(server, host);
+            TickUntil(() => guest.State == LockstepClientState.Ended && guest.SimulatedTicks == guest.ConfirmedTicks, 10);
+
+            Assert.AreEqual(LockstepClientState.Ended, guest.State, "the end reached the guest");
+            Assert.AreEqual(LockstepEndReason.Finished, guest.EndReason, "the match ended, the connection is not lost");
+            Assert.AreEqual(guest.ConfirmedTicks, guest.SimulatedTicks, "the guest played every frame it got");
+            var entities = guest.Simulation.World.EntityManager;
+            // The last tick may be the one of the leave, which the player entity outlives until the next tick.
+            Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(entities) - TestUtility.Count<LockstepPlayerLeft>(entities),
+                "the guest played the host's leave");
+        }
+
+        /// <summary>
+        /// The guest's world stops for good: the server has its leave from what went out before, within a second of
+        /// simulated time, long before the player's silence would time it out (<see cref="LockstepServerSettings.PlayerTimeoutSeconds"/>).
+        /// </summary>
+        private void AssertTheServerHasTheLeave(World guest, LockstepServer server, LockstepClient other)
+        {
+            Freeze(guest);
+            var entities = other.Simulation.World.EntityManager;
+            for (var frame = 0; frame < 60 && (server.PlayerCount != 1 || TestUtility.Count<LockstepPlayer>(entities) != 1); frame++)
+            {
+                Tick(1);
+            }
+
+            Assert.AreEqual(1, server.PlayerCount, "the server has the leave");
+            Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(entities), "and announced it to the other player");
         }
 
         /// <summary>

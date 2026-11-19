@@ -130,7 +130,7 @@ Lobby --(MinPlayersToStart reached | RequestStart | server.StartGame)--> Running
 | Joined, waiting | `server.State == Lobby`, `PlayerCount`; `server.SetTeam(slot, team)` puts slots into teams | `client.State == Lobby`, `LocalSlot` |
 | Start | `RequestStart(serverWorld)` or `server.StartGame(now)`: `State` is `Running` at once, `GetTickPosition(now)` is negative during the countdown | The start message arrives during the countdown: `Running`, `StartedEvent`, the simulation world is created |
 | Late join | `AllowLateJoin` (default true) | Receives every frame from tick 0, re-simulates within the catch-up budget, enters at `JoinTick` |
-| Leave | Once the match started, announced in a frame, then the slot frees up; in the lobby the slot frees up at once. A player that leaves before its join reached a frame (during the countdown, a late joiner before its first tick) still joins, and leaves on the next tick; until the frame of its leave closes the slot is held, and the same player joining it again gets `SlotTaken`. `server.IsLeaveSent(slot)`: the frame of the leave went to every client receiving frames (handed to the transport; true at once for a leave in the lobby or after the end) - a host whose own player leaves keeps its server world until then. A connection silent for `PlayerTimeoutSeconds` (10) leaves too, raises `ConnectionTimedOutEvent`, and the Netcode server system disconnects it; a host whose app was paused times nobody out for that pause | `client.Leave()`, or the connection/world goes away. Over the redundant channel the client system keeps the channel up to 2 s until the server acknowledged the leave |
+| Leave | Once the match started, announced in a frame, then the slot frees up; in the lobby the slot frees up at once. A player that leaves before its join reached a frame (during the countdown, a late joiner before its first tick) still joins, and leaves on the next tick; until the frame of its leave closes the slot is held, and the same player joining it again gets `SlotTaken`. `server.IsLeaveSent(slot)`: the frame of the leave went to every client receiving frames (handed to the transport; true at once for a leave in the lobby or after the end). A connection silent for `PlayerTimeoutSeconds` (10) leaves too, raises `ConnectionTimedOutEvent`, and the Netcode server system disconnects it; a host whose app was paused times nobody out for that pause | `client.Leave()`, or the connection/world goes away. A client that leaves by removing its config keeps its redundant channel up to 2 s until the server acknowledged the leave. Closing the worlds after a leave: `LockstepNetcode.UpdateLeave` (below) |
 | End | `RequestEnd(serverWorld, reason)` / `server.EndGame(reason)`; removing `LockstepServerConfig` ends with `ServerShutdown` | `EndedEvent` with `client.EndReason`; the remaining frames are still simulated. A dropped connection ends with `ConnectionLost` (`client.OnDisconnected()`; the Netcode client system calls it and keeps the session registered until the config goes). Ending in the lobby tells the waiting players the same way; later joins get `GameEnded` |
 | Rejected | | `RejectedEvent(reason)`: `InvalidRequest`, `ProtocolMismatch`, `SimulationMismatch`, `SessionFull`, `GameInProgress`, `GameEnded`, `SlotTaken` |
 
@@ -138,16 +138,25 @@ With Netcode (`Pragma.Dots.Lockstep.Netcode`), the component equivalents in the 
 `LockstepStartGameRequest`, an entity with `LockstepEndGameRequest { reason }`, and the `LockstepServerStatus`
 singleton (`state`, `closedTicks`, `playerCount`) for UI.
 
-A host whose own player leaves shuts its server down only once the clients have the leave. `IsLeaveSent` stops at the
-transport, and Netcode drops the RPCs of the last updates when the server world goes, so over the redundant channel:
+A player who leaves and then closes its Netcode worlds keeps them until the leave has reached everyone: Netcode drops
+what a world going away has not sent, and the others would see a lost connection instead of the leave.
 
-1. `client.Leave()`, then wait for `server.IsLeaveSent(slot)`;
-2. `RequestEnd(serverWorld, LockstepEndReason.Finished)`: no new frames, the closed ones and the end go out;
-3. keep the server world until `serverWorld.GetExistingSystemManaged<LockstepNetcodeServerSystem>().Channel.GetUnacknowledgedCount() == 0`
-   (every client acknowledged everything), with a time limit of the game's own for a client that went silent;
-4. close the worlds.
+```csharp
+// From the leave on, every frame (the first call leaves); serverWorld is null for a guest.
+if (LockstepNetcode.UpdateLeave(serverWorld, clientWorld, slot) || Time.realtimeSinceStartupAsDouble > deadline)
+{
+    CloseWorlds(); // the game's own: dispose the client world and, on the host, the server world
+}
+```
 
-Over reliable RPCs no acknowledgements are visible: `IsLeaveSent` is all there is.
+- A guest: delivered once the server has the leave (`LockstepNetcodeClientSystem.IsDelivered`: acknowledged over the
+  redundant channel, handed to the transport over reliable RPCs).
+- A host: once the frame of the leave went out (`server.IsLeaveSent(slot)`), the match ends on the next server update
+  (`RequestEnd(serverWorld, LockstepEndReason.Finished)`: no new frames, the closed ones and the end go out), and the
+  leave is delivered once the server has ended it and every client has what it sent
+  (`LockstepNetcodeServerSystem.IsDelivered`, the same rule).
+- The time limit for a peer that went silent is the game's own (`deadline` above); `UpdateLeave` only tells when the
+  leave has arrived.
 
 Late-join loading screen: show `client.SimulatedTicks / (float)client.ServerTicks` (the ticks the server has closed,
 from its start and pong messages) while `client.BufferedTicks` is large; re-simulation speed is bounded by
@@ -195,7 +204,7 @@ if (LockstepNetcode.TryGetServer(serverWorld, out var server))
 if (LockstepWorlds.TryGetClient(clientWorld, out var client))
 {
     // client.State, LocalSlot, JoinTick, RejectReason, EndReason, Config, SimulatedTicks, ConfirmedTicks, ServerTicks, InterpolationAlpha,
-    // RoundTripTime (NaN until measured), JitterTicks, IsDesynced, DesyncTick,
+    // RoundTripTime (NaN until measured), JitterTicks, IsDesynced, DesyncTick, IsSimulationStopped (StopOnDesync stopped it for good),
     // StallCount, StalledSeconds (the picture stood still waiting for frames), SecondsSinceLastPacket (server silence),
     // TargetPlayoutDelayTicks, ExtraInputMarginTicks: what a network indicator shows,
     // Simulation (null before the start and on non-simulating clients; also LockstepWorlds.TryGetSimulation)

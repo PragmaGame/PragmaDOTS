@@ -37,9 +37,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every client that receives frames, a late joiner still catching up included (true at once for a leave that needs no
   frame: in the lobby, or after the end). A host whose own player leaves keeps its server until then instead of
   guessing from frame counts.
-- `LockstepRedundantChannel.GetUnacknowledgedCount()`: the packets not acknowledged yet over every connection. A host
-  whose own player leaves ends the match after `IsLeaveSent` and keeps its server world until the server channel has
-  nothing unacknowledged, so the clients get the frame of the leave and the end before the transport goes.
+- `LockstepRedundantChannel.GetUnacknowledgedCount()`: the packets not acknowledged yet over every connection.
+- `LockstepNetcode.UpdateLeave(serverWorld, clientWorld, slot)`: the local player leaves (on the first call) and the
+  leave is followed until it has reached everyone, so that the worlds may close: a guest's once the server has it, a
+  host's once its server, after the frame of the leave went out, has ended the match and every client has what it sent.
+  Before, a host on reliable RPCs had nothing to wait for but `IsLeaveSent` and closed before the end went out, and
+  the guests saw a lost connection instead of the leave. The time limit for a silent peer stays with the caller.
+- `LockstepNetcodeClientSystem.IsDelivered` and `LockstepNetcodeServerSystem.IsDelivered`: everything the side sent has
+  reached the other one as far as its world can tell, acknowledged over the redundant channel, handed to the transport
+  over reliable RPCs. A client that leaves by removing its config lets its channel go by the same rule.
+- `LockstepClient.IsSimulationStopped`: the simulation stopped for good (a desync with `StopOnDesync`), so a client
+  waiting for the end of its frames has nothing more to wait for.
 
 ### Changed
 

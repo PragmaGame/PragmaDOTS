@@ -41,7 +41,7 @@ LockstepServerSettings _serverSettings;`). `Validate()` throws for out-of-range 
 | `MaxSimulationMillisecondsPerUpdate` | 16 | Time budget per update while catching up; at least one tick runs |
 | `PingIntervalSeconds` | 0.5 | Round-trip measurement interval |
 | `RecordReplay` | true | Keep all frames for `ExportReplay`; a thin client without it keeps none |
-| `StopOnDesync` | false | Stop simulating after a desync report |
+| `StopOnDesync` | false | Stop simulating after a desync report (`client.IsSimulationStopped`) |
 | `MaxPacketSize` | 1024 | Packet size limit (0 or less means 1024); Netcode caps it at 1024, at 990 with the redundant channel |
 | `MaxExtraInputMarginTicks` | 2 | Cap of the margin late inputs add; it never exceeds a round trip either; 0 = no automatic margin |
 | `MaxStallDelayTicks` | 3 | Cap of the playout delay stalls add (one tick per stall, decaying a tick per ten seconds); 0 = jitter alone |

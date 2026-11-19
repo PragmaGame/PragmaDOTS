@@ -51,7 +51,8 @@ namespace Pragma.Dots.Lockstep.Netcode
             }
         }
 
-        // How long the channel of a client that left keeps sending its leave until the server acknowledges it.
+        // How long the channel of a client that left by removing its config keeps sending the leave until the server
+        // acknowledges it: nobody else holds that channel, so the system lets it go by itself.
         private const double LEAVE_SECONDS = 2;
 
         private LockstepClient _client;
@@ -63,6 +64,7 @@ namespace Pragma.Dots.Lockstep.Netcode
         private EntityQuery _connectionQuery;
         private EntityQuery _receivedQuery;
         private EntityQuery _receivedDatagramQuery;
+        private EntityQuery _sentQuery;
         private EntityQuery _localInputQuery;
 
         /// <summary>The running client, or null.</summary>
@@ -71,11 +73,30 @@ namespace Pragma.Dots.Lockstep.Netcode
         /// <summary>The channel the client talks through, or null when it uses reliable RPCs.</summary>
         public LockstepRedundantChannel Channel => _channel;
 
+        /// <summary>
+        /// Everything the client sent has reached the server as far as this world can tell: over the redundant channel the
+        /// server acknowledged it (also the leave a client that left by removing its config still sends), over reliable RPCs
+        /// it was handed to the transport, which resends it while the connection lives. A client that left sends nothing
+        /// more, so this tells when the server has its leave. Without a connection nothing more can go: true.
+        /// </summary>
+        public bool IsDelivered
+        {
+            get
+            {
+                if (_connectionQuery.CalculateEntityCount() != 1)
+                {
+                    return true;
+                }
+                return IsDeliveredThrough(_channel ?? _leaving);
+            }
+        }
+
         protected override void OnCreate()
         {
             _connectionQuery = GetEntityQuery(ComponentType.ReadOnly<NetworkId>(), ComponentType.ReadOnly<NetworkStreamConnection>());
             _receivedQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
             _receivedDatagramQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepDatagramRpc>(), ComponentType.ReadOnly<ReceiveRpcCommandRequest>());
+            _sentQuery = GetEntityQuery(ComponentType.ReadOnly<LockstepPacketRpc>(), ComponentType.ReadOnly<SendRpcCommandRequest>());
             _localInputQuery = GetEntityQuery(ComponentType.ReadWrite<LockstepLocalInput>(), ComponentType.ReadWrite<LockstepCommand>());
             LockstepRpcHiddenTag.Initialize();
         }
@@ -198,12 +219,19 @@ namespace Pragma.Dots.Lockstep.Netcode
                 {
                 }
             }
-            if (_leaving.GetUnacknowledgedCount(0) == 0)
+            if (IsDeliveredThrough(_leaving))
             {
                 DisposeLeaving();
                 return;
             }
             _leaving.Flush(now);
+        }
+
+        // The one rule of delivery: what went through a channel is delivered once the server acknowledged it, what went
+        // as reliable RPCs once Netcode handed it to the transport.
+        private bool IsDeliveredThrough(LockstepRedundantChannel channel)
+        {
+            return channel != null ? channel.GetUnacknowledgedCount() == 0 : LockstepRpcSendQueue.IsEmpty(EntityManager, _sentQuery, _connectionQuery);
         }
 
         private void DisposeLeaving()

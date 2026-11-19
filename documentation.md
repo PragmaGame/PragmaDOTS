@@ -580,6 +580,19 @@ These came up while building on Entities; neither reference package deals with t
     coming, and tracking which channel packet carried the frame of the leave would put a session concept into the
     channel.
 
+25. **The delivery of a leave is one call of the Netcode layer.** Every game that closes its worlds after a leave
+    needs the same rule, and games got it wrong: a host on reliable RPCs closed as soon as `IsLeaveSent` was true, and
+    the end it had just asked for never went out. `LockstepNetcode.UpdateLeave` holds the rule. Delivered means, for
+    each side, everything it sent has reached the other one as far as its world can tell: over the redundant channel the
+    acknowledgements say so; over reliable RPCs nothing does, so handed to the transport (no send request left and an
+    empty outgoing RPC queue) is the last point this side controls, and Netcode resends from there while the connection
+    lives. A guest's leave is delivered once its own sends are; a host first lets the frame of the leave go out, then
+    ends the match (no new frames) and waits until its server is ended and its sends are delivered, so the end goes out
+    too. The rule is one method per side (`IsDelivered` of the Netcode client and server systems); the channel a client
+    keeps after leaving by removing its config follows it as well and only adds a limit of its own, because nobody else
+    holds that channel. The time limit for a peer that went silent stays with the game: the package cannot tell a slow
+    network from a dead one, and how long a player may wait on the leave screen is a decision of the game.
+
 ## Limitations and future work
 
 - **Prediction and rollback**: a predicted copy of the simulation world, restored from the confirmed one and

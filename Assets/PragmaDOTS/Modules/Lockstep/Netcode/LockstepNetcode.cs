@@ -92,6 +92,66 @@ namespace Pragma.Dots.Lockstep.Netcode
             serverWorld.EntityManager.SetComponentData(entity, new LockstepEndGameRequest { reason = reason });
         }
 
+        /// <summary>
+        /// The player of this process leaves the session of <paramref name="clientWorld"/> (on the first call) and the leave
+        /// is followed until it has reached everyone: call it every frame until it returns true, then close the worlds. The
+        /// other players then learn of the leave itself, not of a lost connection: Netcode drops what a world going away has
+        /// not sent yet.
+        /// </summary>
+        /// <remarks>
+        /// <para>A guest passes no server world: its leave has reached everyone once the server has it
+        /// (<see cref="LockstepNetcodeClientSystem.IsDelivered"/>), and the server announces it to the others in a frame.</para>
+        /// <para>A host passes its <paramref name="serverWorld"/>, which goes with it. Once the frame with the leave of
+        /// <paramref name="slot"/> went out (<see cref="LockstepServer.IsLeaveSent"/>), the match ends on the next server
+        /// update (<see cref="RequestEnd"/>, <see cref="LockstepEndReason.Finished"/>): no new frames, the closed ones and
+        /// the end go out. The leave has reached everyone once the server has ended the match and every client has what it
+        /// sent (<see cref="LockstepNetcodeServerSystem.IsDelivered"/>).</para>
+        /// <para>How long to wait for a peer that went silent is the caller's: this only tells when the leave has
+        /// arrived.</para>
+        /// </remarks>
+        /// <param name="serverWorld">The host's server world; null for a guest.</param>
+        /// <param name="clientWorld">The client world of the player who leaves.</param>
+        /// <param name="slot">The slot the player leaves, whose leave the host's server announces; a guest's is not used.</param>
+        /// <returns>True once the worlds may go: the leave has reached everyone, or nothing is left that could carry it.</returns>
+        public static bool UpdateLeave(World serverWorld, World clientWorld, int slot)
+        {
+            var isClientDelivered = true;
+            if (IsAlive(clientWorld))
+            {
+                if (TryGetClient(clientWorld, out var client))
+                {
+                    client.Leave();
+                }
+                var clientSystem = clientWorld.GetExistingSystemManaged<LockstepNetcodeClientSystem>();
+                isClientDelivered = clientSystem == null || clientSystem.IsDelivered;
+            }
+
+            if (!IsAlive(serverWorld) || !TryGetServer(serverWorld, out var server))
+            {
+                return isClientDelivered;
+            }
+            if (server.State != LockstepServerState.Ended)
+            {
+                if (server.IsLeaveSent(slot) && !HasEndRequest(serverWorld))
+                {
+                    RequestEnd(serverWorld);
+                }
+                return false;
+            }
+            var serverSystem = serverWorld.GetExistingSystemManaged<LockstepNetcodeServerSystem>();
+            return isClientDelivered && (serverSystem == null || serverSystem.IsDelivered);
+        }
+
+        private static bool IsAlive(World world) => world != null && world.IsCreated;
+
+        private static bool HasEndRequest(World serverWorld)
+        {
+            using (var query = serverWorld.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<LockstepEndGameRequest>()))
+            {
+                return !query.IsEmptyIgnoreFilter;
+            }
+        }
+
         private static void SetSingleton<T>(EntityManager entityManager, T value) where T : unmanaged, IComponentData
         {
             using (var query = entityManager.CreateEntityQuery(ComponentType.ReadWrite<T>()))

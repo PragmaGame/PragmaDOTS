@@ -537,6 +537,39 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void StopOnDesync_StopsTheSimulation_AndSaysSo()
+        {
+            using (var session = new SessionHarness(Settings(minPlayers: 3), latency: 0.02))
+            {
+                var settings = SessionHarness.ClientSettings;
+                settings.StopOnDesync = true;
+                var stopping = session.AddClient(settings: settings);
+                var playing = session.AddClient();
+                session.AddClient(TestUtility.Options(typeof(TestGameplaySystem), typeof(TestDesyncSystem)));
+
+                // Every client logs an error per desync report; that is the expected outcome here.
+                LogAssert.ignoreFailingMessages = true;
+                try
+                {
+                    session.Run(2.5, VaryingInput);
+                    Assert.IsTrue(stopping.IsDesynced);
+                    Assert.IsTrue(stopping.IsSimulationStopped, "the desync stopped the simulation");
+                    Assert.IsTrue(playing.IsDesynced);
+                    Assert.IsFalse(playing.IsSimulationStopped, "without StopOnDesync the simulation plays on");
+
+                    var simulated = stopping.SimulatedTicks;
+                    session.Run(1, VaryingInput);
+                    Assert.AreEqual(simulated, stopping.SimulatedTicks, "a stopped simulation plays no more frames");
+                    Assert.Greater(stopping.BufferedTicks, 0, "however many arrive");
+                }
+                finally
+                {
+                    LogAssert.ignoreFailingMessages = false;
+                }
+            }
+        }
+
+        [Test]
         public void EndGame_InTheLobby_TellsTheWaitingPlayersWhy()
         {
             using (var session = new SessionHarness(Settings(minPlayers: 3), latency: 0.05, jitter: 0.04))
