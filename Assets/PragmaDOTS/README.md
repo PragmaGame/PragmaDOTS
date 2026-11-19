@@ -2608,6 +2608,7 @@ simulation world, not even a cleanup component, so views cannot cause desyncs.
 |---|---|
 | `EntityViewManager.TryGet(world, out manager)` | The manager of a presentation world |
 | `manager.TryGetView(entity, out view)`, `manager.Views` | Spawned views by simulation entity |
+| `manager.IsCaughtUp` | The views have caught up with the session: every entity of its current tick whose key a catalog binds has its view, and since the last update the simulation has not stepped and the catalog and the pool have not changed. For a loading screen that waits until the first state is on screen; false without a session, in a hidden world, after a tick until the next update and while the pool gives no view |
 | `manager.TryGetPrefab(key, out prefab)` | The view prefab an entity with the key gets, as the manager picks it (baked catalogs first): for what shows an entity that does not exist yet, such as the ghost of a building being placed. Works without a session; a catalog changed since the last update is read first |
 | `manager.Attach(entity, view)`, `manager.Detach(view)` | Show an entity on a view you own, such as a HUD panel; it gets the same data and is never pooled |
 | `manager.ForceUpdate(entity)` | Push every value of the entity again at the next update |

@@ -38,6 +38,7 @@ namespace Pragma.Dots.Views
         private uint _scannedVersion;
         private int _keyOrderVersion;
         private bool _isScanRequired;
+        private bool _hasUnspawnedViews;
         private int _scanStamp;
         private bool _isShown = true;
 
@@ -59,6 +60,25 @@ namespace Pragma.Dots.Views
 
         /// <summary>The views of this world, by simulation entity.</summary>
         public EntityViewManager Manager => _manager;
+
+        /// <summary>
+        /// The views have caught up with the session: it is shown, and since the last update the simulation has not stepped,
+        /// the catalog and the pool have not changed and no view was lost, while that update gave every keyed entity a
+        /// catalog binds its view. See <see cref="EntityViewManager.IsCaughtUp"/>.
+        /// </summary>
+        internal bool IsCaughtUp
+        {
+            get
+            {
+                if (!_isShown || _simulationWorld == null || !_simulationWorld.IsCreated || _hasUnspawnedViews)
+                {
+                    return false;
+                }
+                var isCatalogChanged = EntityViewConfigs.Version != _configsVersion ||
+                                       EntityManager.GetComponentOrderVersion<EntityViewPrefabElement>() != _registryOrderVersion;
+                return !isCatalogChanged && IsCurrent(_simulationWorld.EntityManager.GlobalSystemVersion);
+            }
+        }
 
         /// <summary>
         /// Whether this world shows its session. Hiding returns every view to the pool at once, and a hidden world spawns
@@ -155,11 +175,11 @@ namespace Pragma.Dots.Views
             // and re-key nothing, so the keyed entities are compared with the views only when that happened.
             var simulationManager = _simulationWorld.EntityManager;
             var version = simulationManager.GlobalSystemVersion;
-            var isScanRequired = _isScanRequired || _manager.IsScanRequested;
-            if (!isScanRequired && version == _scannedVersion)
+            if (IsCurrent(version))
             {
                 return;
             }
+            var isScanRequired = _isScanRequired || _manager.IsScanRequested;
             var keyOrderVersion = simulationManager.GetComponentOrderVersion<EntityViewKey>();
             if (isScanRequired || keyOrderVersion != _keyOrderVersion || HaveKeysChanged(simulationManager))
             {
@@ -170,6 +190,16 @@ namespace Pragma.Dots.Views
             _scannedVersion = version;
             _isScanRequired = false;
             _manager.ClearScanRequest();
+        }
+
+        /// <summary>
+        /// The views match the simulation at <paramref name="version"/>: the last comparison saw that version and nothing asked
+        /// for another since (a catalog rebuilt, the pool swapped, a view destroyed from outside). The update skips the
+        /// comparison then, and <see cref="IsCaughtUp"/> reads the same rule.
+        /// </summary>
+        private bool IsCurrent(uint version)
+        {
+            return !_isScanRequired && !_manager.IsScanRequested && version == _scannedVersion;
         }
 
         /// <summary>A key was written since the last comparison (creations and removals show in the order version).</summary>
@@ -194,6 +224,7 @@ namespace Pragma.Dots.Views
         private void Scan(int lastTick)
         {
             _scanStamp++;
+            _hasUnspawnedViews = false;
             _toSpawn.Clear();
             var entities = _keyQuery.ToEntityArray(Allocator.Temp);
             var keys = _keyQuery.ToComponentDataArray<EntityViewKey>(Allocator.Temp);
@@ -239,6 +270,7 @@ namespace Pragma.Dots.Views
             if (view == null)
             {
                 Debug.LogError($"[Views] The view pool returned nothing for '{prefab.name}' (key '{key}').", prefab);
+                _hasUnspawnedViews = true;
                 return;
             }
             view.Prefab = prefab;
@@ -271,6 +303,7 @@ namespace Pragma.Dots.Views
 
         private void EndSession()
         {
+            _hasUnspawnedViews = false;
             ReleaseAll();
             _manager.DetachAll();
             _manager.SetClient(null);

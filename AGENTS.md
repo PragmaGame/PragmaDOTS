@@ -172,7 +172,7 @@ Copies under long temp paths hit the 260-character limit; map them to a drive le
   the unacknowledged count of a connection and of all of them)
   and sessions over it with loss against plain
   retransmission and a host that leaves, ends the match and waits for its channel to empty, presentation,
-  GameObject views (component and buffer parts, prefabs by key), offline mode and a real Netcode server with two clients
+  GameObject views (component and buffer parts, prefabs by key, whether the views caught up with the session), offline mode and a real Netcode server with two clients
   over reliable RPCs and over the redundant channel (including a command larger than the reliable window, send and
   received requests hidden from the Hierarchy window, 10 % packet loss in Transport's simulator, and the delivery of
   a leave before the worlds close: a host's and a guest's, over both, with loss and in the start countdown).

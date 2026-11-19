@@ -464,6 +464,62 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void IsCaughtUp_FollowsTheSessionStepByStep()
+        {
+            using (var session = new SessionHarness(Settings()))
+            using (var views = new ViewHarness())
+            {
+                var client = AddClient(session);
+                Assert.IsFalse(views.Manager.IsCaughtUp, "no session is shown");
+
+                views.Show(client);
+                views.Run(session, client, 5);
+                Assert.IsNotNull(views.SpawnedView());
+                Assert.IsTrue(views.Manager.IsCaughtUp, "the keyed entity of the current tick has its view");
+
+                // A tick the presentation has not seen yet: its entities may still lack their views.
+                var ticks = client.SimulatedTicks;
+                while (client.SimulatedTicks == ticks)
+                {
+                    session.Step(1 / 60.0);
+                }
+                Assert.IsFalse(views.Manager.IsCaughtUp, "the session stepped after the last update");
+                views.Update();
+                Assert.IsTrue(views.Manager.IsCaughtUp);
+
+                views.ManagerSystem.IsShown = false;
+                Assert.IsFalse(views.Manager.IsCaughtUp, "a hidden world shows nothing");
+                views.ManagerSystem.IsShown = true;
+                views.Update();
+                Assert.IsTrue(views.Manager.IsCaughtUp, "shown again, it spawned the views of the current state");
+
+                // A catalog without the key: until the next update the views may not match it; then nothing needs a view.
+                views.Config.SetBinders();
+                Assert.IsFalse(views.Manager.IsCaughtUp, "the catalog changed since the last update");
+                views.Update();
+                Assert.AreEqual(0, views.Manager.Views.Count);
+                Assert.IsTrue(views.Manager.IsCaughtUp, "an entity no catalog binds needs no view");
+            }
+        }
+
+        [Test]
+        public void IsCaughtUp_StaysFalseWhileThePoolGivesNoView()
+        {
+            using (var session = new SessionHarness(Settings()))
+            using (var views = new ViewHarness())
+            {
+                var client = AddClient(session);
+                views.ManagerSystem.Pool = new EmptyViewPool();
+                views.Show(client);
+                LogAssert.Expect(LogType.Error, new Regex("returned nothing"));
+                views.Run(session, client, 5);
+
+                Assert.AreEqual(0, views.Manager.Views.Count);
+                Assert.IsFalse(views.Manager.IsCaughtUp, "the keyed entity has no view");
+            }
+        }
+
+        [Test]
         public void AttachedViews_DetachAndForceUpdate()
         {
             using (var session = new SessionHarness(Settings()))
@@ -773,6 +829,19 @@ namespace Pragma.Dots.Tests
             Assert.IsFalse(EntityViewKey.TryCreate(new string('x', 30), out _));
             Assert.IsTrue(EntityViewKey.TryCreate(new string('x', 29), out var key));
             Assert.AreEqual(29, key.value.Length);
+        }
+
+        /// <summary>A pool that has no view to give.</summary>
+        private sealed class EmptyViewPool : IEntityViewPool
+        {
+            public EntityView Spawn(EntityView prefab)
+            {
+                return null;
+            }
+
+            public void Release(EntityView view)
+            {
+            }
         }
     }
 }

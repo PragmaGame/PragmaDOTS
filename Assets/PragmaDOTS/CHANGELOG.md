@@ -8,6 +8,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `EntityViewManager.IsCaughtUp` (Views): the views have caught up with the session — every entity of its current tick
+  whose key a catalog binds has its view, and since the manager's last update the simulation has not stepped and the
+  catalog and the pool have not changed. A loading screen waits for it instead of comparing keyed entities with views
+  itself; the manager skips its comparison by the same rule.
 - The redundant channel (Lockstep): `LockstepRedundantChannel`, a reliable, ordered channel over an unreliable datagram
   transport in which every datagram repeats the packets the other side has not acknowledged (each in up to
   `RedundantCopies` datagrams in a row, then after a timeout from the round trip), so a lost datagram is replaced by the

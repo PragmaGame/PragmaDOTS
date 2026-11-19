@@ -34,6 +34,16 @@ namespace Pragma.Dots.Views
         /// <summary>The session shown, or null.</summary>
         public LockstepClient Client { get; private set; }
 
+        /// <summary>
+        /// The views have caught up with the session: every entity of the shown session's current tick whose key a catalog
+        /// binds has its view, as the manager system compared them in its last update, and since then the simulation has not
+        /// stepped and the catalog and the pool have not changed. False without a session, in a hidden world, after a tick
+        /// until the next update, and while the pool failed to give a view. For a loading screen that waits until the first
+        /// state is on screen: read it before the presentation update of a frame, and the views of that state are drawn.
+        /// A view destroyed from outside is noticed on the next update.
+        /// </summary>
+        public bool IsCaughtUp => _system.IsCaughtUp;
+
         internal LockstepSimulation Simulation => Client?.Simulation;
 
         /// <summary>Counts the updates of the manager system, so update systems notice a frame they missed.</summary>
