@@ -602,6 +602,51 @@ namespace Pragma.Dots.Tests
         }
 
         [Test]
+        public void AnEndedClient_WhoseSimulationWaited_PlaysTheFramesItGot()
+        {
+            using (var session = new SessionHarness(Settings(), latency: 0.05, jitter: 0.03))
+            {
+                // The guest's simulation waits for its gate, as for an actor registry still loading.
+                var isGateOpen = false;
+                var options = TestUtility.Options(typeof(TestGameplaySystem));
+                options.CanCreate = () => isGateOpen;
+                var host = session.AddClient();
+                var guest = session.AddClient(options);
+
+                // The host leaves in the start countdown, and the server ends the match once the leave went out.
+                for (var step = 0; step < 500 && host.State != LockstepClientState.Running; step++)
+                {
+                    session.Step(0.01, VaryingInput);
+                }
+                Assert.AreEqual(0, host.ConfirmedTicks, "still in the countdown");
+                var slot = host.LocalSlot;
+                host.Leave();
+                for (var step = 0; step < 500 && !session.Server.IsLeaveSent(slot); step++)
+                {
+                    session.Step(0.01, VaryingInput);
+                }
+                session.Server.EndGame();
+                session.Run(1, VaryingInput);
+
+                Assert.AreEqual(LockstepClientState.Ended, guest.State);
+                Assert.AreEqual(session.Server.ClosedTicks, guest.ConfirmedTicks, "the guest got every frame");
+                Assert.GreaterOrEqual(guest.ConfirmedTicks, 2, "the host's join and its leave on the next tick");
+                Assert.IsNull(guest.Simulation, "the gate still holds the simulation back");
+
+                isGateOpen = true;
+                session.Run(1, VaryingInput);
+
+                Assert.IsNotNull(guest.Simulation, "the simulation comes after the end");
+                Assert.AreEqual(guest.ConfirmedTicks, guest.SimulatedTicks, "and plays every frame the guest got");
+                var entities = guest.Simulation.World.EntityManager;
+                // The last tick may be the one of the leave, which the player entity outlives until the next tick.
+                Assert.AreEqual(1, TestUtility.Count<LockstepPlayer>(entities) - TestUtility.Count<LockstepPlayerLeft>(entities),
+                    "the host's leave among them");
+                Assert.IsEmpty(session.Desyncs);
+            }
+        }
+
+        [Test]
         public void EndGame_DuringTheMatch_LetsEveryClientFinishTheClosedTicks()
         {
             using (var session = new SessionHarness(Settings(), latency: 0.05, jitter: 0.04))

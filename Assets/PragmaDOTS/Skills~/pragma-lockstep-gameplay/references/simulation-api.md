@@ -43,7 +43,7 @@ var buffer = SystemAPI.GetSingleton<LockstepEndSimulationEntityCommandBufferSyst
 
 `LockstepSimulationOptions` (when creating `LockstepSimulation`, `LockstepClient` or `LockstepReplayPlayer`
 yourself): `WorldName`, `AutoDiscoverSystems` (default true), `AdditionalSystems` (`IReadOnlyList<Type>`),
-`Initialize` (`Action<World>`, runs once before tick 0), `CanCreate` (`Func<bool>`, gate before creation).
+`Initialize` (`Action<World>`, runs once before tick 0), `CanCreate` (`Func<bool>`, gate before creation; a client whose match ended while it waited still creates the simulation and plays the frames it got).
 
 ## Singletons of the simulation world
 

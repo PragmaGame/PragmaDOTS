@@ -1577,8 +1577,10 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
   out for its pause.
 - **End.** `RequestEnd` / `server.EndGame(reason)` stops closing ticks and tells everybody;
   `client.EndedEvent` fires, `client.EndReason` says why (`Finished`, or `ServerShutdown` when the server config goes
-  away) and the client finishes simulating the frames it already has. Ending in the lobby tells the players waiting
-  there the same way (they never simulate), and later joins are rejected with `GameEnded`. A client whose connection
+  away) and the client finishes simulating the frames it already has — also a client whose simulation was still held
+  back by its gate (`CanCreate`: an actor registry still loading with `waitForActorRegistry`): it creates the simulation
+  once the gate opens and plays them; a client that got no frame gets no simulation. Ending in the lobby tells the
+  players waiting there the same way (they never simulate), and later joins are rejected with `GameEnded`. A client whose connection
   drops ends with `ConnectionLost` (`client.OnDisconnected()`, which `LockstepNetcodeClientSystem` calls) and also
   simulates the frames it has, such as the last ones of a match the server ended before it closed the connections; the
   Netcode session stays registered until its config is removed or a new connection joins again.
@@ -1593,7 +1595,7 @@ Lobby ──(MinPlayersToStart reached, RequestStart or StartGame)──► Runn
 | `State` | `Idle`, `Joining`, `Lobby`, `Running`, `Ended`, `Rejected` |
 | `LocalSlot`, `JoinTick` | The local player's slot (or -1) and the tick it enters the simulation |
 | `Config` | The `LockstepSessionConfig` sent by the server |
-| `Simulation` | The `LockstepSimulation` (null before the start and on clients that do not simulate) |
+| `Simulation` | The `LockstepSimulation` (null before the start, on clients that do not simulate and while `CanCreate` holds it back, also after the end) |
 | `ConfirmedTicks`, `SimulatedTicks`, `BufferedTicks`, `ServerTicks` | Frame progress; `ServerTicks` is how far the server is, for a loading screen |
 | `InterpolationAlpha` | Blend factor for rendering, in `[0, 1]` |
 | `PlaybackSpeed` | How fast the playout runs: 1 is real time, 0 holds the picture (replays) |
@@ -1781,7 +1783,7 @@ Used when you create a `LockstepClient`, `LockstepSimulation` or `LockstepReplay
 | `AutoDiscoverSystems` | true | Create every system of `LockstepSimulationSystemGroup` |
 | `AdditionalSystems` | none | Extra system types, for example `[DisableAutoCreation]` test systems |
 | `Initialize` | none | Runs once before tick 0 (for example to copy content in); must do the same on every client |
-| `CanCreate` | none | Gate checked before the world is created; frames keep buffering meanwhile |
+| `CanCreate` | none | Gate checked before the world is created; frames keep buffering meanwhile, and a match that ended meanwhile is still played once it opens |
 
 `LockstepClientWorldUtility.CreateSimulationOptions(presentationWorld, waitForActorRegistry)` builds the options the
 built-in systems use: they copy the actor registry and the placed actors of the presentation world

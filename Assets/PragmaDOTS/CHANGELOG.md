@@ -69,6 +69,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A client whose simulation was still held back by `LockstepSimulationOptions.CanCreate` (an actor registry loading
+  with `waitForActorRegistry`) when the match ended never simulated the frames it got, since the simulation was
+  created only while `Running`: a guest still loading its map when its host left in the start countdown showed nothing
+  of the leave. It now creates the simulation once the gate opens and plays them; a client that got no frame gets none.
 - A player that leaves once the match started but before its join reached a frame (by `Leave`, a dropped connection
   or a timeout during the start countdown, or a late joiner before its first tick) is announced like any other: it
   joins in a frame and leaves in the next one. The server forgot it silently, so the others never learned of it, though

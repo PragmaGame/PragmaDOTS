@@ -93,7 +93,11 @@ namespace Pragma.Dots.Lockstep
         public int JoinTick { get; private set; }
         /// <summary>Valid once <see cref="State"/> is <see cref="LockstepClientState.Running"/>.</summary>
         public LockstepSessionConfig Config { get; private set; }
-        /// <summary>The simulation; null before the start and on clients that do not simulate.</summary>
+        /// <summary>
+        /// The simulation; null before the start, on clients that do not simulate and while its gate
+        /// (<see cref="LockstepSimulationOptions.CanCreate"/>) holds it back. A match that ended meanwhile is still played
+        /// from the frames that arrived; one that ended before any frame never gets a simulation.
+        /// </summary>
         public LockstepSimulation Simulation { get; private set; }
         /// <summary>Confirmed frames received, which is also the first tick not yet received.</summary>
         public int ConfirmedTicks => _frames.EndTick;
@@ -340,10 +344,12 @@ namespace Pragma.Dots.Lockstep
             {
                 _inputClock += deltaTime * Config.TickRate * _inputSpeed;
                 SendInputs();
-                if (Simulation == null)
-                {
-                    TryCreateSimulation();
-                }
+            }
+            // The simulation may wait for its gate (CanCreate: an actor registry still loading) past the end of the match: a
+            // client with frames plays them once it can, a client without any has nothing to play.
+            if (Simulation == null && (State == LockstepClientState.Running || (State == LockstepClientState.Ended && ConfirmedTicks > 0)))
+            {
+                TryCreateSimulation();
             }
 
             if (Simulation != null && (State == LockstepClientState.Running || State == LockstepClientState.Ended) && !IsSimulationStopped)
